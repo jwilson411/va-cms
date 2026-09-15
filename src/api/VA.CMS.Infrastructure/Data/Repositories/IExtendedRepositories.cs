@@ -155,6 +155,13 @@ public interface IMediaExtendedRepository
     /// Issue #42 — detail panel usage list.
     /// </summary>
     Task<IEnumerable<MediaUsageDetail>> GetUsageAsync(long mediaAssetId);
+
+    /// <summary>
+    /// Returns enriched usage rows: includes EntryTitle (from FieldsJson), ContentTypeName.
+    /// Issue #44 — 409 conflict body and admin detail links.
+    /// </summary>
+    Task<IEnumerable<MediaUsageWithTitle>> GetUsageWithTitleAsync(long mediaAssetId);
+
     Task<int> SafeDeleteAsync(long assetId);   // 0 = deleted, 1 = blocked
     Task UpsertUsageAsync(long mediaAssetId, long contentEntryId, string fieldName);
     Task DeleteUsageForEntryAsync(long contentEntryId);

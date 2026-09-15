@@ -679,9 +679,18 @@ function MediaDetailPanel({
                     style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}
                     data-testid={`usage-${u.contentEntryId}`}
                   >
-                    <span className="text-bold">{u.slug}</span>
+                    {/* Issue #44: link to content entry edit page with entry title */}
+                    <a
+                      href={`/admin/content/${u.contentEntryId}/edit`}
+                      className="usa-link"
+                      data-testid={`usage-link-${u.contentEntryId}`}
+                    >
+                      {u.entryTitle || u.slug}
+                    </a>
                     <br />
-                    <span className="usa-hint">{u.status} · field: {u.fieldName}</span>
+                    <span className="usa-hint">
+                      {u.contentTypeName} · {u.status} · field: {u.fieldName}
+                    </span>
                   </li>
                 ))}
               </ul>

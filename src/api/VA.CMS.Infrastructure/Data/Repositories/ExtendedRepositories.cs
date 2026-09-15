@@ -714,6 +714,36 @@ public class MediaExtendedRepository : IMediaExtendedRepository
         return results;
     }
 
+    /// <inheritdoc />
+    public async Task<IEnumerable<MediaUsageWithTitle>> GetUsageWithTitleAsync(long mediaAssetId)
+    {
+        // Uses usp_MediaAsset_GetUsageWithTitle (V032) — joins ContentEntry + ContentType
+        // and extracts EntryTitle from FieldsJson for display in 409 body and admin links.
+        var results = new List<MediaUsageWithTitle>();
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_MediaAsset_GetUsageWithTitle @MediaAssetId";
+        cmd.Parameters.AddWithValue("@MediaAssetId", mediaAssetId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new MediaUsageWithTitle
+            {
+                ContentEntryId  = reader.GetInt64(reader.GetOrdinal("ContentEntryId")),
+                FieldName       = reader.GetString(reader.GetOrdinal("FieldName")),
+                Slug            = reader.GetString(reader.GetOrdinal("Slug")),
+                Status          = reader.GetString(reader.GetOrdinal("Status")),
+                ContentTypeId   = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
+                ContentTypeName = reader.GetString(reader.GetOrdinal("ContentTypeName")),
+                EntryTitle      = reader.GetString(reader.GetOrdinal("EntryTitle")),
+                CreatedAt       = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                UpdatedAt       = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            });
+        }
+        return results;
+    }
+
     public async Task<int> SafeDeleteAsync(long assetId)
     {
         await using var conn = new SqlConnection(_db.ConnectionString);

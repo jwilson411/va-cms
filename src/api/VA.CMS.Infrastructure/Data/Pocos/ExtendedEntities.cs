@@ -158,6 +158,28 @@ public class MediaUsageDetail
 }
 
 /// <summary>
+/// Enriched usage row returned by usp_MediaAsset_GetUsageWithTitle —
+/// includes EntryTitle (extracted from FieldsJson) and ContentTypeName.
+/// Issue #44: safe delete 409 body and admin detail links.
+/// </summary>
+public class MediaUsageWithTitle
+{
+    public long   ContentEntryId   { get; set; }
+    public string FieldName        { get; set; } = string.Empty;
+    public string Slug             { get; set; } = string.Empty;
+    public string Status           { get; set; } = string.Empty;
+    public long   ContentTypeId    { get; set; }
+    /// <summary>Human-readable content type display name, e.g. "News Article".</summary>
+    public string ContentTypeName  { get; set; } = string.Empty;
+    /// <summary>
+    /// Best-effort title extracted from FieldsJson "title" key, falls back to Slug.
+    /// </summary>
+    public string EntryTitle       { get; set; } = string.Empty;
+    public DateTime CreatedAt      { get; set; }
+    public DateTime UpdatedAt      { get; set; }
+}
+
+/// <summary>
 /// Result row from usp_Search_FullText (issue #49 — FR-SEARCH-02).
 /// V024 migration adds Title, ContentTypeName, Excerpt (summary or plain-text snippet),
 /// and PublishedAt to satisfy the AC: title, content type, slug, summary excerpt, published date.

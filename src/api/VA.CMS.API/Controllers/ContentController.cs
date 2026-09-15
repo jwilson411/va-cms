@@ -31,19 +31,22 @@ public class ContentController : ControllerBase
     private readonly IMediaAltTextGuardRepository _altTextGuard;
     private readonly IContentVersionRepository _versions;
     private readonly IMarkdownRenderer _renderer;
+    private readonly IMediaExtendedRepository _mediaUsage;
 
     public ContentController(
         IContentEntryRepository entries,
         IRbacService rbac,
         IMediaAltTextGuardRepository altTextGuard,
         IContentVersionRepository versions,
-        IMarkdownRenderer renderer)
+        IMarkdownRenderer renderer,
+        IMediaExtendedRepository mediaUsage)
     {
         _entries      = entries;
         _rbac         = rbac;
         _altTextGuard = altTextGuard;
         _versions     = versions;
         _renderer     = renderer;
+        _mediaUsage   = mediaUsage;
     }
 
     // ── Read ─────────────────────────────────────────────────────────────────
@@ -373,7 +376,51 @@ public class ContentController : ControllerBase
         return NoContent();
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // ── Media usage sync ──────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sync media asset usage for a content entry.
+    /// Called by the admin SPA whenever the field state changes (draft save or publish).
+    ///
+    /// AC (Issue #44 — FR-MEDIA-06):
+    ///   MediaUsage rows created/removed when assets are added/removed from content fields.
+    ///
+    /// Replaces all MediaUsage rows for this entry with the provided list.
+    /// Idempotent: sending the same set twice produces the same result.
+    /// Requires CanWrite.
+    /// </summary>
+    [HttpPost("{id:long}/sync-media-usage")]
+    [Authorize(Policy = CmsRoles.Policies.CanWrite)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SyncMediaUsage(
+        long id,
+        [FromBody] SyncMediaUsageRequest request)
+    {
+        var entry = await _entries.GetByIdAsync(id);
+        if (entry is null) return NotFound();
+
+        // Section-scope enforcement for ContentOwner.
+        if (!_rbac.HasGlobalRole(User,
+                CmsRoles.Editor, CmsRoles.SiteAdmin, CmsRoles.SystemAdmin))
+        {
+            if (!_rbac.IsAuthorizedForSlug(User, entry.Slug, CmsRoles.ContentOwner))
+                return Forbidden("You do not have permission to edit content in this section.");
+        }
+
+        // Clear all existing usage rows for this entry, then re-insert the provided set.
+        // This is a replace-all sync: the caller is authoritative on the current field state.
+        await _mediaUsage.DeleteUsageForEntryAsync(id);
+
+        foreach (var usage in request.Usages ?? [])
+        {
+            if (usage.AssetId > 0 && !string.IsNullOrWhiteSpace(usage.FieldName))
+                await _mediaUsage.UpsertUsageAsync(usage.AssetId, id, usage.FieldName.Trim());
+        }
+
+        return NoContent();
+    }
 
     private ObjectResult Forbidden(string message) =>
         StatusCode(StatusCodes.Status403Forbidden, new { error = message });
@@ -445,8 +492,33 @@ public sealed record ContentPublishBlockedResponse(
     string Error,
     IReadOnlyList<BlockingAssetItem> BlockingAssets);
 
-/// <summary>A single asset that is blocking publish because its alt text is not set.</summary>
+/// <summary>A single asset blocking publish due to missing alt text.</summary>
 public sealed record BlockingAssetItem(long Id, string FileName);
+
+// ── Issue #44: Media usage sync DTOs ─────────────────────────────────────────
+
+/// <summary>
+/// Request body for POST /api/v1/content/{id}/sync-media-usage.
+/// Issue #44 — FR-MEDIA-06: sync media usage rows when content fields change.
+/// </summary>
+public sealed class SyncMediaUsageRequest
+{
+    /// <summary>
+    /// Current set of media asset references in this content entry's fields.
+    /// Each item maps one asset to the field that references it.
+    /// Sending an empty list clears all MediaUsage rows for this entry.
+    /// </summary>
+    public IReadOnlyList<MediaUsageItem>? Usages { get; set; }
+}
+
+/// <summary>A single asset reference in a content entry field.</summary>
+public sealed class MediaUsageItem
+{
+    /// <summary>MediaAsset.Id of the referenced asset.</summary>
+    public long   AssetId   { get; set; }
+    /// <summary>Field name in the content type schema, e.g. "featuredImage".</summary>
+    public string FieldName { get; set; } = string.Empty;
+}
 
 // ── Issue #66: Content entry detail response with markdownBody/renderedBody ───
 

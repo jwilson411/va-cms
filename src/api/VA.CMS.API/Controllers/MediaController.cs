@@ -140,7 +140,7 @@ public class MediaController : ControllerBase
         if (asset is null)
             return NotFound();
 
-        var usages = await _extended.GetUsageAsync(id);
+        var usages = await _extended.GetUsageWithTitleAsync(id);
 
         return Ok(new MediaDetailResponse(
             Id:              asset.Id,
@@ -165,7 +165,9 @@ public class MediaController : ControllerBase
                                  u.FieldName,
                                  u.Slug,
                                  u.Status,
-                                 u.ContentTypeId)).ToList()));
+                                 u.ContentTypeId,
+                                 u.ContentTypeName,
+                                 u.EntryTitle)).ToList()));
     }
 
     // ── Update metadata ───────────────────────────────────────────────────────
@@ -201,13 +203,15 @@ public class MediaController : ControllerBase
 
     /// <summary>
     /// Delete a media asset. Blocked (409) when the asset is referenced by any content entry.
+    /// The 409 body includes the list of content entries (title, slug, status) currently using the asset.
     ///
-    /// AC (Epic #6 exit): Delete blocked when asset is in use.
+    /// AC (Issue #44 — FR-MEDIA-06):
+    ///   DELETE returns 409 with usage list if asset is in use.
     /// </summary>
     [HttpDelete("{id:long}")]
     [Authorize(Policy = CmsRoles.Policies.CanWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(MediaErrorResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(MediaDeleteBlockedResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(MediaErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -217,14 +221,27 @@ public class MediaController : ControllerBase
         if (asset is null)
             return NotFound(new MediaErrorResponse("Media asset not found."));
 
-        var result = await _extended.SafeDeleteAsync(id);
+        // Fetch enriched usage before attempting delete — needed for 409 body.
+        var usages = (await _extended.GetUsageWithTitleAsync(id)).ToList();
 
-        return result switch
+        if (usages.Count > 0)
         {
-            0 => NoContent(),   // deleted
-            1 => Conflict(new MediaErrorResponse("Asset is in use by one or more content entries and cannot be deleted.")),
-            _ => StatusCode(500, new MediaErrorResponse("Unexpected result from safe delete.")),
-        };
+            // Asset is in use — return 409 with the full usage list so callers know
+            // which content entries must be updated before the delete can succeed.
+            return Conflict(new MediaDeleteBlockedResponse(
+                Error: "Asset is in use by one or more content entries and cannot be deleted.",
+                Usages: usages.Select(u => new MediaDeleteBlockedUsage(
+                    u.ContentEntryId,
+                    u.EntryTitle,
+                    u.Slug,
+                    u.Status,
+                    u.FieldName,
+                    u.ContentTypeName)).ToList()));
+        }
+
+        // Asset is not in use — safe to delete.
+        await _extended.SafeDeleteAsync(id);
+        return NoContent();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -298,7 +315,11 @@ public sealed record MediaUsageSummary(
     string  FieldName,
     string  Slug,
     string  Status,
-    long    ContentTypeId);
+    long    ContentTypeId,
+    /// <summary>Human-readable content type display name. Issue #44.</summary>
+    string  ContentTypeName,
+    /// <summary>Best-effort entry title from FieldsJson; falls back to Slug. Issue #44.</summary>
+    string  EntryTitle);
 
 /// <summary>Request body for PATCH /api/v1/media/{id}.</summary>
 public sealed class MediaPatchRequest
@@ -311,3 +332,23 @@ public sealed class MediaPatchRequest
 
 /// <summary>Generic error body.</summary>
 public sealed record MediaErrorResponse(string Error);
+
+// ── Issue #44: Safe delete 409 body ──────────────────────────────────────────
+
+/// <summary>
+/// 409 Conflict body when DELETE /api/v1/media/{id} is blocked because
+/// the asset is referenced by one or more content entries.
+/// AC (Issue #44 — FR-MEDIA-06): response includes the full usage list.
+/// </summary>
+public sealed record MediaDeleteBlockedResponse(
+    string Error,
+    IReadOnlyList<MediaDeleteBlockedUsage> Usages);
+
+/// <summary>A single content entry that is blocking the media asset delete.</summary>
+public sealed record MediaDeleteBlockedUsage(
+    long   ContentEntryId,
+    string EntryTitle,
+    string Slug,
+    string Status,
+    string FieldName,
+    string ContentTypeName);
