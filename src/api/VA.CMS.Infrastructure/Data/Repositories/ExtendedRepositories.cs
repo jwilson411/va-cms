@@ -172,6 +172,9 @@ public class SearchRepository : ISearchRepository
     public async Task<Page<SearchResult>> FullTextSearchAsync(
         string query,
         long? contentTypeId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        long? tagTermId = null,
         int page = 1,
         int pageSize = 25)
     {
@@ -180,9 +183,12 @@ public class SearchRepository : ISearchRepository
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
-            "EXEC usp_Search_FullText @Query, @ContentTypeId, @Page, @PageSize, @TotalRows OUTPUT";
+            "EXEC usp_Search_FullText @Query, @ContentTypeId, @FromDate, @ToDate, @TagTermId, @Page, @PageSize, @TotalRows OUTPUT";
         cmd.Parameters.AddWithValue("@Query", query);
         cmd.Parameters.AddWithValue("@ContentTypeId", (object?)contentTypeId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@FromDate", (object?)fromDate ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ToDate", (object?)toDate ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@TagTermId", (object?)tagTermId ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Page", page);
         cmd.Parameters.AddWithValue("@PageSize", pageSize);
 

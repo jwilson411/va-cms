@@ -7,14 +7,21 @@ namespace VA.CMS.API.Controllers;
 /// <summary>
 /// Full-text search endpoint.
 /// Issue #49 — Epic #8 E-Search — BRD FR-SEARCH-02.
+/// Issue #50 — Epic #8 E-Search — BRD FR-SEARCH-01 (public site integration).
 ///
-///   GET /api/v1/search?q=&amp;type=&amp;page=&amp;pageSize=
+///   GET /api/v1/search?q=&amp;type=&amp;from=&amp;to=&amp;tag=&amp;page=&amp;pageSize=
 ///
 ///   - Public endpoint: no JWT required (search is available to the public site).
 ///   - Delegates to usp_Search_FullText via ISearchRepository.
 ///   - Logs every query (result count + optional userId) via usp_Search_LogQuery.
 ///   - Returns results ordered by FTS rank descending.
 ///   - Each result includes: title, content type, slug, summary excerpt, published date.
+///
+/// Filter parameters (all optional, AND-combined):
+///   type  — ContentTypeId (long)
+///   from  — published on or after this date (ISO 8601, UTC)
+///   to    — published on or before this date (ISO 8601, UTC)
+///   tag   — taxonomy term ID (long)
 /// </summary>
 [ApiController]
 [Route("api/v1/search")]
@@ -34,6 +41,9 @@ public class SearchController : ControllerBase
     /// Parameters:
     ///   q          — required; the search query string.
     ///   type       — optional; filter by ContentTypeId (exact match).
+    ///   from       — optional; ISO 8601 UTC date — only entries published on/after.
+    ///   to         — optional; ISO 8601 UTC date — only entries published on/before.
+    ///   tag        — optional; taxonomy term ID — only entries tagged with this term.
     ///   page       — optional; 1-based page number (default 1).
     ///   pageSize   — optional; results per page, 1–100 (default 25).
     ///
@@ -67,6 +77,9 @@ public class SearchController : ControllerBase
     public async Task<IActionResult> Search(
         [FromQuery] string? q = null,
         [FromQuery] long? type = null,
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] long? tag = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25)
     {
@@ -77,7 +90,14 @@ public class SearchController : ControllerBase
         if (pageSize < 1) pageSize = 1;
         if (pageSize > 100) pageSize = 100;
 
-        var results = await _search.FullTextSearchAsync(q.Trim(), type, page, pageSize);
+        var results = await _search.FullTextSearchAsync(
+            q.Trim(),
+            contentTypeId: type,
+            fromDate: from,
+            toDate: to,
+            tagTermId: tag,
+            page: page,
+            pageSize: pageSize);
 
         // Log every search query for admin analytics (issue #49 / FR-SEARCH-02).
         // Fire-and-forget: we do not await to avoid delaying the HTTP response.
