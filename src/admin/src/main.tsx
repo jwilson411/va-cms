@@ -9,6 +9,7 @@ import { LoginPage } from './pages/LoginPage';
 import { ContentTypeBrowserPage } from './pages/ContentTypeBrowserPage';
 import { ContentEntryListPage } from './features/contentEntries';
 import { MediaLibraryPage } from './features/media';
+import { SearchAnalyticsPage } from './features/searchAnalytics';
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="/admin/media" element={<MediaLibraryPage />} />
                     {/* Issue #29: Admin content entry list (FR-AUTH-01) */}
                     <Route path="/admin/content" element={<ContentEntryListPage />} />
+                    {/* Issue #51: Search analytics full page (FR-SEARCH-06) */}
+                    <Route path="/admin/search/analytics" element={<SearchAnalyticsPage />} />
                     <Route path="*" element={<DashboardPage />} />
                   </Routes>
                 </ProtectedRoute>
