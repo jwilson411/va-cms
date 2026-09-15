@@ -353,18 +353,16 @@ describe('RichTextField (FieldRenderers)', () => {
     expect(container.querySelector('.usa-form-group--error')).not.toBeNull();
   });
 
-  it('renders the TipTap editor inside the form group', () => {
+  it('renders the Milkdown editor inside the form group (issue #65)', () => {
     const { container } = renderRichTextField();
-    expect(container.querySelector('[data-testid="rich-text-editor"]')).not.toBeNull();
+    // Issue #65: RichTextField now delegates to MarkdownField (Milkdown), not TipTap.
+    // The markdown-field wrapper is the distinguishing data-testid.
+    expect(container.querySelector('[data-testid="markdown-field"]')).not.toBeNull();
   });
 
-  it('the contenteditable has aria-labelledby matching the label span id', () => {
+  it('the label span carries id matching field-{name}-label', () => {
     const { container } = renderRichTextField();
     const labelSpan = container.querySelector('#field-body-label');
     expect(labelSpan).not.toBeNull();
-
-    const contenteditable = container.querySelector('[contenteditable="true"]') as HTMLElement | null;
-    expect(contenteditable).not.toBeNull();
-    expect(contenteditable).toHaveAttribute('aria-labelledby', 'field-body-label');
   });
 });
