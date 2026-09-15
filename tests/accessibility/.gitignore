@@ -1,0 +1,12 @@
+# Keep results/ dir tracked but ignore generated test output
+results/*.json
+results/html-report/
+results/test-artifacts/
+
+# Playwright
+test-results/
+playwright-report/
+
+# Node
+node_modules/
+dist/
