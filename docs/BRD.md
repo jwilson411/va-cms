@@ -274,7 +274,15 @@ Build a self-hosted CMS on a modern, VA-familiar stack. File for VA TRM inclusio
 | NFR-OPS-03 | Database migrations shall be idempotent and run automatically on deployment |
 | NFR-OPS-04 | The system shall support blue-green deployments with zero-downtime database migrations |
 | NFR-SCALE-01 | The system shall support horizontal scaling of the web tier behind a load balancer with session affinity or stateless JWT auth |
-| NFR-SCALE-02 | The system shall support content volumes of up to 500,000 entries without degraded search or browse performance |
+**NFR-DB-01** — All database operations shall be executed through stored procedures (`usp_*`). The application service account is granted `EXECUTE` on stored procedures only; direct `SELECT/INSERT/UPDATE/DELETE` on tables is explicitly denied.
+
+**NFR-DB-02** — All tables shall have appropriate non-clustered indexes covering their common filter axes. Filtered indexes shall be used for sparse predicates (scheduled publish, active redirects). See `docs/DATABASE_LAYER.md` for the full index inventory.
+
+**NFR-DB-03** — SQL Server Agent maintenance jobs shall run on schedule: statistics update (daily), index rebuild/reorganize (weekly), audit log archival (monthly), webhook log purge (weekly), search log rollup (daily).
+
+**NFR-DB-04** — The application service account (`vacms_app`) shall be a SQL login with minimum privilege. The `AuditLog` table is write-only via stored procedure; the application service account has no `UPDATE` or `DELETE` permission on audit data.
+
+**NFR-DB-05** — The `AuditLog` table shall be archived after 730 days (2 years) to `AuditLogArchive`. Archived rows are retained per the applicable records retention schedule.
 
 ---
 

@@ -28,6 +28,7 @@ SharePoint 2016 on-prem is aging out. Drupal 11 (the only cleanly TRM-authorized
 ## Quick Links
 
 - [Business Requirements Document](docs/BRD.md)
+- [Database Layer: SPs, Indexes & Hygiene](docs/DATABASE_LAYER.md)
 - [Claude Design Prompt](docs/CLAUDE_DESIGN_PROMPT.md)
 - [Architecture Overview](docs/ARCHITECTURE.md)
 - [Data Model](docs/DATA_MODEL.md)
