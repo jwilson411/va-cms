@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { DashboardPage } from './pages/DashboardPage';
+import { LoginPage } from './pages/LoginPage';
 
 const queryClient = new QueryClient();
 
@@ -14,6 +15,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <BrowserRouter>
           <Routes>
+            {/* Public login page — entry point for the OIDC flow */}
+            <Route path="/login" element={<LoginPage />} />
+
             {/* All admin routes are protected — ProtectedRoute handles the redirect */}
             <Route
               path="/*"
