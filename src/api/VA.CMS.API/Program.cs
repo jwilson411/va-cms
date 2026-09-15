@@ -13,6 +13,7 @@ using VA.CMS.Infrastructure.Data;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.ContentTypes.BuiltIn;
+using VA.CMS.Infrastructure.ContentTypes.CustomFields;
 using VA.CMS.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -222,6 +223,13 @@ builder.Services.AddScoped<ISeedService, DemoSeedService>();
 // Content Type Registry (FR-SCHEMA-01)
 // -----------------------------------------------------------------------
 builder.Services.AddContentType<StandardPageTypeDefinition>();
+
+// -----------------------------------------------------------------------
+// Custom Field Type Plugins (FR-DEV-05 / issue #27)
+// -----------------------------------------------------------------------
+// GeoPoint is the reference implementation; additional plugins follow the
+// same pattern: builder.Services.AddCustomFieldType<MyCustomFieldType>();
+builder.Services.AddCustomFieldType<GeoPointFieldType>();
 
 // -----------------------------------------------------------------------
 // Build

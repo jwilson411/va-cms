@@ -36,6 +36,10 @@ public static class ContentTypeServiceCollectionExtensions
         // Register the field validator (singleton — stateless).
         services.TryAddSingleton<IFieldValidator, FieldValidator>();
 
+        // Ensure the custom field type registry is always available.
+        services.TryAddSingleton<ICustomFieldTypeRegistry>(sp =>
+            new CustomFieldTypeRegistry(sp.GetServices<ICustomFieldType>()));
+
         return services;
     }
 
@@ -50,6 +54,42 @@ public static class ContentTypeServiceCollectionExtensions
 
         // Register the field validator (singleton — stateless).
         services.TryAddSingleton<IFieldValidator, FieldValidator>();
+
+        // Ensure the custom field type registry is present even when no custom
+        // types are registered.
+        services.TryAddSingleton<ICustomFieldTypeRegistry>(sp =>
+            new CustomFieldTypeRegistry(sp.GetServices<ICustomFieldType>()));
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers a custom field type plugin so that:
+    /// <list type="bullet">
+    ///   <item>The type is discoverable via <see cref="ICustomFieldTypeRegistry"/>.</item>
+    ///   <item>The API exposes it in <c>GET /api/v1/admin/custom-field-types</c> so the
+    ///         admin SPA can load and render its paired React component.</item>
+    /// </list>
+    ///
+    /// Call this once per custom type in Program.cs or a module:
+    /// <code>
+    /// builder.Services.AddCustomFieldType&lt;GeoPointFieldType&gt;();
+    /// </code>
+    /// </summary>
+    /// <typeparam name="T">
+    /// A concrete <see cref="ICustomFieldType"/> implementation with a public
+    /// parameterless constructor.
+    /// </typeparam>
+    public static IServiceCollection AddCustomFieldType<T>(this IServiceCollection services)
+        where T : class, ICustomFieldType, new()
+    {
+        // Register the concrete instance as ICustomFieldType so the registry
+        // can collect all of them via IEnumerable<ICustomFieldType>.
+        services.AddSingleton<ICustomFieldType, T>();
+
+        // Ensure the registry itself is registered exactly once.
+        services.TryAddSingleton<ICustomFieldTypeRegistry>(sp =>
+            new CustomFieldTypeRegistry(sp.GetServices<ICustomFieldType>()));
 
         return services;
     }
