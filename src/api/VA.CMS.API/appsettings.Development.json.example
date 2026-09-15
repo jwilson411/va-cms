@@ -9,6 +9,13 @@
   "ConnectionStrings": {
     "DefaultConnection": "Server=localhost,14333;Database=VACMS_Dev;User Id=sa;Password=VaCms_Dev!2026;TrustServerCertificate=True;Connection Timeout=15;"
   },
+  "Auth": {
+    "Mode": "DevBypass",
+    "DevBypassAllowedUsers": [
+      "alice@va.gov",
+      "bob@va.gov"
+    ]
+  },
   "AzureAd": {
     "Instance": "https://login.microsoftonline.com/",
     "TenantId": "YOUR_TENANT_ID",

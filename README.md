@@ -37,6 +37,71 @@ SharePoint 2016 on-prem is aging out. Drupal 11 (the only cleanly TRM-authorized
 - [Content Owner Guide](docs/CONTENT_OWNER_GUIDE.md)
 - [Developer Guide](docs/DEVELOPER_GUIDE.md)
 
+## Local Development Setup
+
+### Authentication: DevBypass mode (no Azure AD required)
+
+Developers can run the full API locally without configuring an Azure AD app registration.
+
+**1. Copy the example settings file:**
+
+```bash
+cp src/api/VA.CMS.API/appsettings.Development.json.example \
+   src/api/VA.CMS.API/appsettings.Development.json
+```
+
+The example file is pre-configured with `Auth:Mode=DevBypass` and two sample UPNs
+(`alice@va.gov`, `bob@va.gov`). Update `Jwt:SigningKey` with any random 32+ character string
+before starting the API. The connection string points to the local Docker SQL Server on port 14333.
+
+**2. Start the local SQL Server container (if not already running):**
+
+```bash
+docker run -d --name va-cms-sqlserver \
+  -e ACCEPT_EULA=Y \
+  -e SA_PASSWORD=VaCms_Dev!2026 \
+  -p 14333:1433 \
+  mcr.microsoft.com/mssql/server:2022-latest
+```
+
+**3. Run the API:**
+
+```bash
+cd src/api
+dotnet run --project VA.CMS.API
+```
+
+DbUp migrations run automatically on startup.
+
+**4. Authenticate using the DevBypass header:**
+
+```bash
+# Obtain a JWT for a sample user
+curl -s -X POST http://localhost:5000/api/auth/dev-login \
+  -H "X-Dev-User: alice@va.gov" | jq .
+
+# Use the returned accessToken on protected endpoints
+curl -s http://localhost:5000/api/v1/admin/health/db \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+You can also pass `X-Dev-User` directly on any API call — the DevBypass middleware
+auto-injects a JWT so you can skip the explicit dev-login step:
+
+```bash
+curl -s http://localhost:5000/api/v1/admin/health/db \
+  -H "X-Dev-User: alice@va.gov"
+```
+
+**Security note:** `Auth:Mode=DevBypass` is hard-blocked in Production — the API refuses to
+start if `ASPNETCORE_ENVIRONMENT=Production` and DevBypass is configured. Never set DevBypass
+in production appsettings.
+
+**CI integration tests:** The CI pipeline passes a fixed `X-Dev-User` header in integration
+test requests. Set `Auth:Mode=DevBypass` and `Auth:DevBypassAllowedUsers` in the test host
+configuration (see `Issue68AcceptanceTests.cs` for the pattern used in this repo's tests).
+
+
 ## Project Status
 
 🟡 **Pre-development** — BRD and backlog complete. Ready for agent build.

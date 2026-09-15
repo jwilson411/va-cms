@@ -46,8 +46,36 @@ if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey))
 // -----------------------------------------------------------------------
 // Authentication
 // -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
+// DevBypass Production guard (AC: refuses to start in Production)
+// -----------------------------------------------------------------------
+if (authOptions.Mode == AuthMode.DevBypass && builder.Environment.IsProduction())
+{
+    throw new InvalidOperationException(
+        "Auth:Mode=DevBypass must not be used in Production. " +
+        "Set Auth:Mode=AzureAd (or WindowsAuth) and configure real AD credentials.");
+}
+
 switch (authOptions.Mode)
 {
+    case AuthMode.DevBypass:
+        // Development-only JWT bypass: no AD required.
+        // The DevBypassMiddleware injects a JWT derived from the X-Dev-User header.
+        // Register JWT bearer so that the middleware-injected tokens are validated
+        // by the standard auth pipeline.
+        builder.Services
+            .AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme    = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme, options =>
+            {
+                var jwtSvc = new JwtService(jwtOptions);
+                options.TokenValidationParameters = jwtSvc.GetValidationParameters();
+            });
+        break;
+
     case AuthMode.WindowsAuth:
         var useFakeNegotiate = builder.Configuration["WINDOWS_AUTH_FAKE_NEGOTIATE"] == "true";
         if (useFakeNegotiate && builder.Environment.IsProduction())
@@ -240,6 +268,12 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 
 app.UseRouting();
+
+// DevBypass: inject a JWT from the X-Dev-User header BEFORE the auth pipeline runs.
+// Must be placed before UseAuthentication so the injected token is visible to JWT bearer.
+// The middleware is a no-op in AzureAd and WindowsAuth modes (guard in Program.cs).
+if (authOptions.Mode == AuthMode.DevBypass)
+    app.UseDevBypassAuth();
 
 app.UseAuthentication();
 app.UseAuthHeaderRedaction();
