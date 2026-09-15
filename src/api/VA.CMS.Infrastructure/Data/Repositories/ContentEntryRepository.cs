@@ -317,6 +317,43 @@ public class ContentEntryRepository : IContentEntryRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    // ── Issue #36: Duplicate entry ────────────────────────────────────────────
+
+    /// <summary>
+    /// Duplicate a content entry.
+    /// SP creates a new Draft with '(Copy)' appended to title, slug cleared,
+    /// all fields copied, media references shared (not re-uploaded).
+    /// Issue #36: BRD FR-AUTH-07.
+    /// </summary>
+    public async Task<(bool Success, long? NewEntryId, string? ErrorMessage)> DuplicateAsync(
+        long sourceEntryId, long actorId)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_ContentEntry_Duplicate @SourceEntryId, @ActorId, @NewEntryId OUTPUT, @Success OUTPUT, @ErrorMessage OUTPUT";
+        cmd.Parameters.AddWithValue("@SourceEntryId", sourceEntryId);
+        cmd.Parameters.AddWithValue("@ActorId",       actorId);
+
+        var newEntryIdParam = cmd.Parameters.Add("@NewEntryId", System.Data.SqlDbType.BigInt);
+        newEntryIdParam.Direction = System.Data.ParameterDirection.Output;
+
+        var successParam = cmd.Parameters.Add("@Success", System.Data.SqlDbType.Bit);
+        successParam.Direction = System.Data.ParameterDirection.Output;
+
+        var errorParam = cmd.Parameters.Add("@ErrorMessage", System.Data.SqlDbType.NVarChar, 500);
+        errorParam.Direction = System.Data.ParameterDirection.Output;
+
+        await cmd.ExecuteNonQueryAsync();
+
+        var success    = successParam.Value is bool b && b;
+        long? newId    = newEntryIdParam.Value == DBNull.Value ? null : (long?)newEntryIdParam.Value;
+        var errorMsg   = errorParam.Value == DBNull.Value ? null : errorParam.Value as string;
+
+        return (success, newId, errorMsg);
+    }
+
     private static void AddNullableParam(
         Microsoft.Data.SqlClient.SqlCommand cmd,
         string name,

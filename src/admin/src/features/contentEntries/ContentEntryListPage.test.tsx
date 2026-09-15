@@ -10,12 +10,14 @@ import type { ContentEntryAdminPageDto, ContentTypeSummaryForPicker } from './ty
 vi.mock('./useContentEntries', () => ({
   useContentEntries:        vi.fn(),
   useContentTypesForPicker: vi.fn(),
+  useDuplicateEntry:        vi.fn(),
 }));
 
-import { useContentEntries, useContentTypesForPicker } from './useContentEntries';
+import { useContentEntries, useContentTypesForPicker, useDuplicateEntry } from './useContentEntries';
 
 const mockUseContentEntries        = useContentEntries        as ReturnType<typeof vi.fn>;
 const mockUseContentTypesForPicker = useContentTypesForPicker as ReturnType<typeof vi.fn>;
+const mockUseDuplicateEntry        = useDuplicateEntry        as ReturnType<typeof vi.fn>;
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -65,6 +67,11 @@ describe('ContentEntryListPage', () => {
     vi.clearAllMocks();
     mockUseContentTypesForPicker.mockReturnValue({
       data: mockTypes, isLoading: false,
+    });
+    mockUseDuplicateEntry.mockReturnValue({
+      mutate:    vi.fn(),
+      isPending: false,
+      isError:   false,
     });
   });
 
