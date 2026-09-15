@@ -8,6 +8,22 @@ public interface IContentVersionRepository
     Task<ContentVersion?> GetByIdAsync(long id);
     Task<Page<ContentVersion>> ListAsync(long contentEntryId, int page, int pageSize);
     Task<long> CreateAsync(ContentVersion version);
+
+    /// <summary>
+    /// List versions with joined author display name (issue #32).
+    /// Returns newest first, paginated.
+    /// </summary>
+    Task<IReadOnlyList<ContentVersionWithAuthor>> ListWithAuthorAsync(long contentEntryId, int page = 1, int pageSize = 25);
+
+    /// <summary>Get a version with joined author display name (issue #32).</summary>
+    Task<ContentVersionWithAuthor?> GetByIdWithAuthorAsync(long versionId);
+
+    /// <summary>
+    /// Restore a prior version by copying its FieldsJson into a new version row.
+    /// History is never modified — restore always appends a new row.
+    /// Returns the new version id (issue #32).
+    /// </summary>
+    Task<long> RestoreAsync(long contentEntryId, long targetVersionId, long actorId);
 }
 
 public interface IMediaAssetRepository
