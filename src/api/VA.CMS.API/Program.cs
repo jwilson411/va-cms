@@ -213,6 +213,9 @@ builder.Services.AddScoped<IAdGroupRoleResolver, AdGroupRoleResolver>();
 // Issue #49: Full-text search repository (FR-SEARCH-02)
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();
 
+// Issue #51: Search analytics repository (FR-SEARCH-06)
+builder.Services.AddScoped<ISearchAnalyticsRepository, SearchAnalyticsRepository>();
+
 // Auth services
 builder.Services.AddSingleton(authOptions);
 builder.Services.AddSingleton(jwtOptions);
