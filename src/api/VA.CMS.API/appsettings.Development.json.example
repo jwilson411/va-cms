@@ -9,8 +9,16 @@
   "ConnectionStrings": {
     "DefaultConnection": "Server=localhost,14333;Database=VACMS_Dev;User Id=sa;Password=VaCms_Dev!2026;TrustServerCertificate=True;Connection Timeout=15;"
   },
-  "Auth": {
-    "Mode": "DevBypass",
-    "DevBypassAllowedUsers": ["alice@va.gov", "bob@va.gov"]
+  "AzureAd": {
+    "Instance": "https://login.microsoftonline.com/",
+    "TenantId": "YOUR_TENANT_ID",
+    "ClientId": "YOUR_CLIENT_ID",
+    "ClientSecret": "YOUR_CLIENT_SECRET_DEV_ONLY",
+    "CallbackPath": "/api/auth/callback"
+  },
+  "Jwt": {
+    "SigningKey": "REPLACE_WITH_32_CHAR_OR_LONGER_SECRET",
+    "Issuer": "va-cms-api",
+    "Audience": "va-cms-spa"
   }
 }
