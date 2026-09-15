@@ -9,10 +9,11 @@ using VA.CMS.Infrastructure.Markdown;
 namespace VA.CMS.API.Controllers;
 
 /// <summary>
-/// Live content preview endpoints — issue #34, BRD FR-AUTH-08.
+/// Live content preview endpoints — issue #34, BRD FR-AUTH-08, and issue #65 FR-AUTH-02.
 ///
 ///   POST /api/v1/content/{id}/preview-token  — Issue a signed preview token (CanRead).
 ///   GET  /api/v1/preview                     — Render preview HTML (token-authenticated, no login required).
+///   POST /api/v1/preview/render              — Render arbitrary Markdown to HTML (CanRead) — issue #65.
 ///
 /// The preview token is a self-contained, HMAC-signed, 60-minute token that encodes
 /// the content entry id.  It does not require a database row and survives API restarts
@@ -21,6 +22,12 @@ namespace VA.CMS.API.Controllers;
 /// The GET /preview endpoint accepts optional `fields` query param (URL-encoded JSON)
 /// containing the current unsaved form state, allowing preview of content that has not
 /// yet been saved to the database (AC 3: reflects current unsaved form state).
+///
+/// POST /api/v1/preview/render (issue #65):
+///   Accepts { markdown: string }, runs it through the same Markdig DisableHtml()
+///   pipeline used at publish time, returns { html: string }.  Used by the Milkdown
+///   editor split-pane preview, debounced 500ms.  No entry id or token required —
+///   just a valid JWT (CanRead) to avoid anonymous abuse.
 /// </summary>
 [ApiController]
 public class PreviewController : ControllerBase
@@ -61,6 +68,33 @@ public class PreviewController : ControllerBase
 
         var token = _tokens.Issue(id);
         return Ok(new PreviewTokenResponse(token, ExpiresInSeconds: 3600));
+    }
+
+    // ── POST /api/v1/preview/render ───────────────────────────────────────────
+
+    /// <summary>
+    /// Render arbitrary Markdown to HTML using the same Markdig DisableHtml() pipeline
+    /// used at publish time.  Issue #65 — Milkdown split-pane live preview.
+    ///
+    /// Called by the admin SPA MarkdownField component, debounced 500ms, as the user
+    /// types in the Milkdown editor.  Returns raw HTML fragment (not a full page).
+    ///
+    /// DisableHtml() is enforced on the server side — raw HTML entries in the Markdown
+    /// source are stripped, matching the publish pipeline exactly.
+    ///
+    /// Requires CanRead — no anonymous access.
+    /// </summary>
+    [HttpPost("api/v1/preview/render")]
+    [Authorize(Policy = CmsRoles.Policies.CanRead)]
+    [ProducesResponseType(typeof(PreviewRenderResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public IActionResult RenderMarkdown([FromBody] PreviewRenderRequest request)
+    {
+        if (request is null || request.Markdown is null)
+            return BadRequest(new { error = "markdown field is required." });
+
+        var html = _markdown.Render(request.Markdown);
+        return Ok(new PreviewRenderResponse(html));
     }
 
     // ── GET /api/v1/preview ───────────────────────────────────────────────────
@@ -323,3 +357,15 @@ public class PreviewController : ControllerBase
 public sealed record PreviewTokenResponse(
     string Token,
     int    ExpiresInSeconds);
+
+/// <summary>
+/// Request body for POST /api/v1/preview/render (issue #65).
+/// Accepts a CommonMark Markdown string to render via Markdig.
+/// </summary>
+public sealed record PreviewRenderRequest(string? Markdown);
+
+/// <summary>
+/// Response from POST /api/v1/preview/render.
+/// Returns sanitised HTML fragment (not a full page) — DisableHtml() applied.
+/// </summary>
+public sealed record PreviewRenderResponse(string Html);

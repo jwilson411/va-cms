@@ -12,6 +12,7 @@
 import React from 'react';
 import type { FieldDefinitionDto, FieldValues } from './formTypes';
 import { RichTextEditor } from './RichTextEditor';
+import { MarkdownField } from './MarkdownField';
 
 export interface FieldRendererProps {
   def: FieldDefinitionDto;
@@ -135,64 +136,22 @@ export function LongTextField({
   );
 }
 
-// ── Rich Text (TipTap WYSIWYG with USWDS-safe toolbar — issue #31) ───────────
+// ── Rich Text (Milkdown WYSIWYG + USWDS split preview — issue #65) ────────────
+//
+// Replaced from TipTap (HTML storage, issue #31) to Milkdown (Markdown storage,
+// issue #65 / BRD FR-AUTH-02).  Stored value is now a CommonMark Markdown string.
+// The live preview pane calls POST /api/v1/preview/render which uses the same
+// Markdig pipeline as publish — eliminating preview/publish drift.
 
-export function RichTextField({
-  def,
-  value,
-  error,
-  onChange,
-  onBlur,
-}: FieldRendererProps): JSX.Element {
-  const labelId  = `field-${def.name}-label`;
-  const errorId  = `field-${def.name}-error`;
-  const hintId   = `field-${def.name}-hint`;
-  const hasHint  = !!def.hint;
-
-  const describedBy = [
-    hasHint  ? hintId  : null,
-    error    ? errorId : null,
-  ]
-    .filter(Boolean)
-    .join(' ') || undefined;
-
+export function RichTextField(props: FieldRendererProps): JSX.Element {
   return (
-    <div className={`usa-form-group${error ? ' usa-form-group--error' : ''}`}>
-      {/*
-       * The label carries its own id (labelId) so the TipTap contenteditable
-       * can reference it via aria-labelledby.
-       * We do NOT use htmlFor here because a contenteditable <div> is
-       * non-labellable per the HTML spec.
-       */}
-      <span id={labelId} className="usa-label" role="presentation">
-        {def.label}
-        {def.required && (
-          <abbr title="required" className="usa-hint usa-hint--required">
-            {' '}*
-          </abbr>
-        )}
-      </span>
-      {hasHint && (
-        <span id={hintId} className="usa-hint">
-          {def.hint}
-        </span>
-      )}
-      {error && (
-        <span id={errorId} className="usa-error-message" role="alert">
-          {error}
-        </span>
-      )}
-      <RichTextEditor
-        editorId={`field-${def.name}`}
-        labelId={labelId}
-        value={typeof value === 'string' ? value : ''}
-        onChange={(html) => onChange(html)}
-        onBlur={() => onBlur(def.name)}
-        ariaDescribedby={describedBy}
-        ariaInvalid={!!error}
-        ariaRequired={def.required}
-      />
-    </div>
+    <MarkdownField
+      def={props.def}
+      value={props.value}
+      error={props.error}
+      onChange={(md) => props.onChange(md)}
+      onBlur={props.onBlur}
+    />
   );
 }
 
