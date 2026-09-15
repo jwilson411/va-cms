@@ -99,15 +99,200 @@ The CMS uses AD as the identity provider. The API issues a JWT — it never stor
 ## Stack Quick Reference
 |---|---|---|
 | API | ASP.NET Core 8 | https://docs.microsoft.com/aspnet/core |
-| ORM | Entity Framework Core 8 | https://docs.microsoft.com/ef/core |
+| ORM | PetaPoco | https://github.com/CollaboratingPlatypus/PetaPoco |
+| Migrations | DbUp | https://dbup.readthedocs.io |
 | GraphQL | Hot Chocolate | https://chillicream.com/docs/hotchocolate |
 | Admin UI | React 18 + TypeScript | https://react.dev |
 | Design System | USWDS 3.x | https://designsystem.digital.gov |
 | Admin State | TanStack Query v5 | https://tanstack.com/query |
-| Rich Text | TipTap | https://tiptap.dev |
+| WYSIWYG | Milkdown | https://milkdown.dev |
+| Markdown | Markdig | https://github.com/xoofx/markdig |
 | Public Site | Next.js 14 (App Router) | https://nextjs.org/docs |
-| Database | SQL Server 2019+ / EF Core | |
-| Auth | Microsoft.Identity.Web | |
+| Database | SQL Server 2019+ | |
+| Auth | Microsoft.Identity.Web (AD → JWT) | |
+
+---
+
+## Data Access: PetaPoco
+
+PetaPoco is a thin micro-ORM — you write real SQL, it maps results to typed POCOs. No change tracking, no lazy loading, no abstraction layered on top of SQL Server that fights you when you need a CTE.
+
+### Setup
+
+```csharp
+// src/api/VA.CMS.Infrastructure/Data/CmsDatabase.cs
+using PetaPoco;
+
+public class CmsDatabase : Database
+{
+    public CmsDatabase(string connectionString)
+        : base(connectionString, DatabaseType.SqlServer2012,
+               System.Data.SqlClient.SqlClientFactory.Instance)
+    { }
+}
+
+// Program.cs
+builder.Services.AddScoped<CmsDatabase>(_ =>
+    new CmsDatabase(configuration.GetConnectionString("DefaultConnection")!));
+```
+
+### POCO mapping
+
+PetaPoco maps column names to property names by convention (case-insensitive). Use `[Column]` and `[TableName]` attributes when names differ:
+
+```csharp
+[TableName("ContentEntry")]
+[PrimaryKey("Id", AutoIncrement = true)]
+public class ContentEntry
+{
+    public long Id { get; set; }
+    public long ContentTypeId { get; set; }
+    public string Slug { get; set; } = "";
+    public string Locale { get; set; } = "en-US";
+    public string Status { get; set; } = "Draft";
+    public long? PublishedVersionId { get; set; }
+    public long OwnerId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+```
+
+### Repository pattern
+
+All queries live in repository classes. No raw DB calls in controllers or domain services.
+
+```csharp
+// src/api/VA.CMS.Infrastructure/Data/Repositories/ContentEntryRepository.cs
+public class ContentEntryRepository : IContentEntryRepository
+{
+    private readonly CmsDatabase _db;
+    public ContentEntryRepository(CmsDatabase db) => _db = db;
+
+    public async Task<ContentEntry?> GetBySlugAsync(string slug, string locale) =>
+        await _db.FirstOrDefaultAsync<ContentEntry>(
+            "WHERE [Slug] = @0 AND [Locale] = @1 AND [Status] = 'Published'",
+            slug, locale);
+
+    public async Task<Page<ContentEntry>> ListAsync(int page, int pageSize, string? status = null)
+    {
+        var sql = Sql.Builder.Append("SELECT * FROM [ContentEntry] WHERE 1=1");
+        if (status is not null)
+            sql.Append("AND [Status] = @0", status);
+        sql.Append("ORDER BY [UpdatedAt] DESC");
+        return await _db.PageAsync<ContentEntry>(page, pageSize, sql);
+    }
+
+    public async Task<long> CreateAsync(ContentEntry entry) =>
+        (long)await _db.InsertAsync(entry);
+
+    public async Task UpdateAsync(ContentEntry entry) =>
+        await _db.UpdateAsync(entry);
+}
+```
+
+### Raw SQL when you need it — just write it
+
+```csharp
+// Full-text search: SQL Server CONTAINSTABLE — not something EF can express
+public async Task<IEnumerable<SearchResult>> SearchAsync(string query, int page, int pageSize)
+{
+    return await _db.QueryAsync<SearchResult>(@"
+        SELECT e.Id, e.Slug, e.ContentTypeId, v.FieldsJson, kt.RANK
+        FROM   [ContentEntry]  e
+        JOIN   [ContentVersion] v  ON v.Id = e.PublishedVersionId
+        JOIN   CONTAINSTABLE([ContentVersion], [FieldsJson], @0) kt ON kt.[KEY] = v.Id
+        WHERE  e.Status = 'Published'
+        ORDER  BY kt.RANK DESC
+        OFFSET @1 ROWS FETCH NEXT @2 ROWS ONLY",
+        query, (page - 1) * pageSize, pageSize);
+}
+```
+
+---
+
+## Database Migrations: DbUp
+
+Schema changes are plain `.sql` files in `/migrations/`. DbUp runs them on API startup, in version order, exactly once per environment. No CLI. No generated C# files. No `update-database` to remember.
+
+### File naming convention
+
+```
+/migrations/
+  V001__initial_schema.sql
+  V002__add_fts_catalog.sql
+  V003__add_webhook_tables.sql
+  V004__add_rendered_fields_column.sql
+```
+
+`V{NNN}__{description}.sql` — double underscore separator, sequential, forward-only. Never edit a shipped script. Always add a new one.
+
+### DbUp wired into startup
+
+```csharp
+// src/api/VA.CMS.API/Program.cs
+var upgrader = DeployChanges.To
+    .SqlDatabase(connectionString)
+    .WithScriptsFromFileSystem(
+        Path.Combine(AppContext.BaseDirectory, "migrations"),
+        new FileSystemScriptOptions { IncludeSubDirectories = false })
+    .WithTransactionPerScript()
+    .LogToConsole()
+    .Build();
+
+var result = upgrader.PerformUpgrade();
+if (!result.Successful)
+{
+    Log.Fatal(result.Error, "Migration failed — aborting startup");
+    return 1; // crash fast, don't run on a broken schema
+}
+```
+
+### Example initial migration
+
+```sql
+-- migrations/V001__initial_schema.sql
+CREATE TABLE [ContentType] (
+    [Id]              BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [Name]            NVARCHAR(100)        NOT NULL,
+    [DisplayName]     NVARCHAR(200)        NOT NULL,
+    [Description]     NVARCHAR(1000)       NULL,
+    [TemplateId]      NVARCHAR(200)        NULL,
+    [IsSystemType]    BIT                  NOT NULL DEFAULT 0,
+    [AllowWorkflow]   BIT                  NOT NULL DEFAULT 1,
+    [FieldSchemaJson] NVARCHAR(MAX)        NOT NULL DEFAULT '[]',
+    [CreatedAt]       DATETIME2            NOT NULL DEFAULT SYSUTCDATETIME(),
+    [UpdatedAt]       DATETIME2            NOT NULL DEFAULT SYSUTCDATETIME()
+);
+CREATE UNIQUE INDEX [UX_ContentType_Name] ON [ContentType] ([Name]);
+
+CREATE TABLE [ContentEntry] (
+    [Id]                 BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [ContentTypeId]      BIGINT               NOT NULL REFERENCES [ContentType]([Id]),
+    [Slug]               NVARCHAR(500)        NOT NULL,
+    [Locale]             NVARCHAR(10)         NOT NULL DEFAULT 'en-US',
+    [Status]             NVARCHAR(20)         NOT NULL DEFAULT 'Draft',
+    [PublishedVersionId] BIGINT               NULL,
+    [ScheduledPublishAt] DATETIME2            NULL,
+    [ScheduledExpireAt]  DATETIME2            NULL,
+    [OwnerId]            BIGINT               NOT NULL,
+    [CreatedAt]          DATETIME2            NOT NULL DEFAULT SYSUTCDATETIME(),
+    [UpdatedAt]          DATETIME2            NOT NULL DEFAULT SYSUTCDATETIME()
+);
+CREATE UNIQUE INDEX [UX_ContentEntry_Slug_Locale] ON [ContentEntry] ([Slug], [Locale]);
+CREATE INDEX [IX_ContentEntry_Status] ON [ContentEntry] ([Status]);
+```
+
+### Adding a new column later
+
+```sql
+-- migrations/V004__add_rendered_fields_column.sql
+ALTER TABLE [ContentVersion]
+    ADD [RenderedFieldsJson] NVARCHAR(MAX) NULL;
+```
+
+Deploy → DbUp runs V004 → done. No ORM regeneration, no model sync step.
+
+---
 
 ## Defining a New Content Type
 
@@ -142,14 +327,17 @@ public class NewsArticleTypeDefinition : ContentTypeDefinitionBase
 builder.Services.AddContentType<NewsArticleTypeDefinition>();
 ```
 
-### 3. Run migrations (if schema changes affect computed columns or FTS)
+### 3. Add a migration script for any new columns or indexes
 
-```bash
-dotnet ef migrations add AddNewsArticleType --project VA.CMS.Infrastructure --startup-project VA.CMS.API
-dotnet ef database update
+```sql
+-- migrations/V010__add_news_article_type.sql
+-- ContentType rows are seeded by the API on startup via the type registry.
+-- This migration adds any DB-level changes required for the new type.
+-- Example: add a computed column for FTS on a new field pattern.
+-- If no schema changes are needed, no migration is required.
 ```
 
-Content types are stored in the `ContentType` table — no migration needed for the type definition itself. EF migrations are only needed for structural DB changes.
+If your content type only uses built-in field types stored in `FieldsJson`, no migration is needed at all. Add a migration only when you need a structural DB change (new table, new column, new index).
 
 ## Adding a Custom Field Type
 

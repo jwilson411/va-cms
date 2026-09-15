@@ -70,7 +70,8 @@ va-cms/
 │   │   │   ├── Workflow/
 │   │   │   └── Audit/
 │   │   ├── VA.CMS.Infrastructure/    # Data access, external services
-│   │   │   ├── Data/                 # EF Core DbContext + migrations
+│   │   │   ├── Data/                 # PetaPoco DB + repository implementations
+│   │   │   ├── Migrations/           # DbUp migration runner (loads from /migrations/)
 │   │   │   ├── Storage/              # File storage adapters
 │   │   │   ├── Search/               # Full-text search impl
 │   │   │   └── Email/
@@ -95,7 +96,10 @@ va-cms/
 ├── cli/                              # vacms CLI (dotnet tool)
 │   └── VA.CMS.CLI/
 │
-├── migrations/                       # EF Core database migrations
+├── migrations/                       # Plain SQL migration scripts (run by DbUp)
+│   ├── V001__initial_schema.sql
+│   ├── V002__add_fts_catalog.sql
+│   └── ...                           # Each file is a forward-only, idempotent SQL script
 ├── docs/                             # Documentation (this folder)
 ├── infra/                            # IIS config, Dockerfiles, deployment scripts
 ├── tests/
@@ -178,7 +182,8 @@ HTML streamed to browser (SSR) or served from ISR cache
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| ORM | Entity Framework Core 8 | Code-first migrations, LINQ, strong typing on MSSQL |
+| ORM | PetaPoco | Thin micro-ORM — write real SQL, get typed results. No magic, no migration drama. |
+| Migrations | DbUp | Plain SQL scripts in `/migrations/`. Versioned, idempotent, run on startup. |
 | GraphQL Server | Hot Chocolate | Best .NET GraphQL library, DataLoader support |
 | Admin state management | TanStack Query (React Query) | Server state management, caching, background sync |
 | Admin routing | React Router v6 | Stable, well-understood in VA dev community |

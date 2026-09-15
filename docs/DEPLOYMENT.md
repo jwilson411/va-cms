@@ -32,9 +32,8 @@ cp src/api/VA.CMS.API/appsettings.Development.json.example \
    src/api/VA.CMS.API/appsettings.Development.json
 # Edit: set ConnectionStrings:DefaultConnection
 
-# 4. Run migrations
-cd src/api
-dotnet ef database update --project VA.CMS.Infrastructure --startup-project VA.CMS.API
+# 4. Migrations run automatically on API startup (DbUp)
+# No separate migration command needed. On first run, all SQL scripts in /migrations/ execute.
 
 # 5. Start API
 dotnet run --project VA.CMS.API
@@ -153,17 +152,11 @@ Jwt__SigningKey=<256-bit-random-key>
 NEXT_PUBLIC_API_URL=https://cms.youragency.va.gov/api/v1
 ```
 
-### 5. Run Migrations in Production
-
-```bash
-# On the web server, from the API publish directory
-dotnet VA.CMS.API.dll migrate
-```
-
-Or via CLI tool:
-```bash
-vacms db migrate --connection "Server=...;Database=VACMS;..."
-```
+# 4. Run migrations in production (DbUp runs automatically on startup)
+# Migrations run automatically when the API starts.
+# Verify the startup logs show "Successfully upgraded" before marking deployment complete.
+# To run manually (dry-run check):
+dotnet VA.CMS.API.dll --check-migrations
 
 ### 6. SSL / TLS
 

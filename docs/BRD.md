@@ -1,11 +1,12 @@
 # Business Requirements Document (BRD)
 ## VA CMS — USWDS-Compliant Content Management System
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Status:** Draft  
 **Owner:** Justin Wilson  
 **Last Updated:** 2026-09-14  
 **Changelog:** v1.1 — Switched rich text storage from HTML to Markdown (DB-safe, portable, renderer-agnostic). Clarified auth chain: AD authentication issues JWT; no separate CMS user database or password.  
+**Changelog:** v1.2 — Replaced Entity Framework Core with PetaPoco micro-ORM. Database schema managed via plain SQL migration scripts (DbUp). Full SQL control, no ORM magic, no migration drama.
 
 ---
 
