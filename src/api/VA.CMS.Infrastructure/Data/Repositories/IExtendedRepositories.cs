@@ -25,7 +25,15 @@ public interface IWorkflowRepository
 public interface INavigationRepository
 {
     Task<IEnumerable<NavigationItem>> GetMenuTreeAsync(string handle);
+    /// <summary>
+    /// Returns the full tree including invisible items — for the admin drag-and-drop editor.
+    /// Issue #46 — FR-NAV-03.
+    /// </summary>
+    Task<IEnumerable<NavigationItem>> GetMenuTreeAdminAsync(string handle);
+    Task<NavigationItem?> GetItemAsync(long id);
     Task<long> UpsertItemAsync(NavigationItem item);
+    Task DeleteItemAsync(long id);
+    Task BulkReorderAsync(long menuId, string itemsJson);
     Task<Redirect?> GetRedirectByPathAsync(string fromPath);
     Task<long> CreateRedirectAsync(Redirect redirect);
 }

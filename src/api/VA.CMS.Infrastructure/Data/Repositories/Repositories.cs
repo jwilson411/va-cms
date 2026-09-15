@@ -397,16 +397,75 @@ public class NavigationMenuRepository : INavigationMenuRepository
         await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "EXEC usp_NavigationMenu_GetByHandle @Handle";
+        cmd.CommandText = "EXEC usp_Navigation_GetMenu @Handle";
         cmd.Parameters.AddWithValue("@Handle", handle);
         await using var reader = await cmd.ExecuteReaderAsync();
         if (!await reader.ReadAsync()) return null;
         return new NavigationMenu
         {
-            Id     = reader.GetInt64(reader.GetOrdinal("Id")),
-            Handle = reader.GetString(reader.GetOrdinal("Handle")),
-            Name   = reader.GetString(reader.GetOrdinal("Name")),
+            Id        = reader.GetInt64(reader.GetOrdinal("Id")),
+            Handle    = reader.GetString(reader.GetOrdinal("Handle")),
+            Name      = reader.GetString(reader.GetOrdinal("Name")),
+            CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
         };
+    }
+
+    public async Task<IReadOnlyList<NavigationMenu>> ListAllAsync()
+    {
+        var results = new List<NavigationMenu>();
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Navigation_ListMenus";
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new NavigationMenu
+            {
+                Id        = reader.GetInt64(reader.GetOrdinal("Id")),
+                Name      = reader.GetString(reader.GetOrdinal("Name")),
+                Handle    = reader.GetString(reader.GetOrdinal("Handle")),
+                CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            });
+        }
+        return results;
+    }
+
+    public async Task<long> CreateAsync(string name, string handle)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Navigation_CreateMenu @Name, @Handle, @NewId OUTPUT";
+        cmd.Parameters.AddWithValue("@Name", name);
+        cmd.Parameters.AddWithValue("@Handle", handle);
+        var outParam = cmd.Parameters.Add("@NewId", System.Data.SqlDbType.BigInt);
+        outParam.Direction = System.Data.ParameterDirection.Output;
+        await cmd.ExecuteNonQueryAsync();
+        return (long)outParam.Value;
+    }
+
+    public async Task UpdateAsync(long id, string name)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Navigation_UpdateMenu @Id, @Name";
+        cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@Name", name);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task DeleteAsync(long id)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Navigation_DeleteMenu @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await cmd.ExecuteNonQueryAsync();
     }
 }
 
