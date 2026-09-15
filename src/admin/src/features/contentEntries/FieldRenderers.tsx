@@ -11,6 +11,7 @@
 
 import React from 'react';
 import type { FieldDefinitionDto, FieldValues } from './formTypes';
+import { RichTextEditor } from './RichTextEditor';
 
 export interface FieldRendererProps {
   def: FieldDefinitionDto;
@@ -134,7 +135,7 @@ export function LongTextField({
   );
 }
 
-// ── Rich Text (Markdown WYSIWYG placeholder — Milkdown wired in later story) ───
+// ── Rich Text (TipTap WYSIWYG with USWDS-safe toolbar — issue #31) ───────────
 
 export function RichTextField({
   def,
@@ -143,10 +144,10 @@ export function RichTextField({
   onChange,
   onBlur,
 }: FieldRendererProps): JSX.Element {
-  const inputId = `field-${def.name}`;
-  const errorId = `field-${def.name}-error`;
-  const hintId  = `field-${def.name}-hint`;
-  const hasHint = !!def.hint;
+  const labelId  = `field-${def.name}-label`;
+  const errorId  = `field-${def.name}-error`;
+  const hintId   = `field-${def.name}-hint`;
+  const hasHint  = !!def.hint;
 
   const describedBy = [
     hasHint  ? hintId  : null,
@@ -157,38 +158,39 @@ export function RichTextField({
 
   return (
     <div className={`usa-form-group${error ? ' usa-form-group--error' : ''}`}>
-      <label className="usa-label" htmlFor={inputId}>
+      {/*
+       * The label carries its own id (labelId) so the TipTap contenteditable
+       * can reference it via aria-labelledby.
+       * We do NOT use htmlFor here because a contenteditable <div> is
+       * non-labellable per the HTML spec.
+       */}
+      <span id={labelId} className="usa-label" role="presentation">
         {def.label}
         {def.required && (
           <abbr title="required" className="usa-hint usa-hint--required">
             {' '}*
           </abbr>
         )}
-      </label>
+      </span>
       {hasHint && (
         <span id={hintId} className="usa-hint">
           {def.hint}
         </span>
       )}
-      <span className="usa-hint">
-        Markdown is supported. Rich text editor available in a later release.
-      </span>
       {error && (
         <span id={errorId} className="usa-error-message" role="alert">
           {error}
         </span>
       )}
-      {/* Fallback to textarea until Milkdown is integrated */}
-      <textarea
-        id={inputId}
-        className={`usa-textarea${error ? ' usa-input--error' : ''}`}
+      <RichTextEditor
+        editorId={`field-${def.name}`}
+        labelId={labelId}
         value={typeof value === 'string' ? value : ''}
-        aria-required={def.required}
-        aria-describedby={describedBy}
-        aria-invalid={!!error}
-        rows={10}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(html) => onChange(html)}
         onBlur={() => onBlur(def.name)}
+        ariaDescribedby={describedBy}
+        ariaInvalid={!!error}
+        ariaRequired={def.required}
       />
     </div>
   );

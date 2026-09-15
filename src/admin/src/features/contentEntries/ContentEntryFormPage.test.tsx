@@ -444,9 +444,12 @@ describe('FieldRenderer', () => {
     expect(container.querySelector('textarea')).not.toBeNull();
   });
 
-  it('renders RichText as <textarea>', () => {
+  it('renders RichText as TipTap editor (data-testid="rich-text-editor")', () => {
     const { container } = renderField({ name: 'body', label: 'Body', type: 'RichText', required: false, maxLength: null });
-    expect(container.querySelector('textarea')).not.toBeNull();
+    // TipTap replaces the textarea placeholder — the editor wrapper must be present
+    expect(container.querySelector('[data-testid="rich-text-editor"]')).not.toBeNull();
+    // The USWDS-safe toolbar must be present
+    expect(container.querySelector('[data-testid="rich-text-toolbar"]')).not.toBeNull();
   });
 
   it('renders Number as <input type="number">', () => {
