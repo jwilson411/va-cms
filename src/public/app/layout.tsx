@@ -14,6 +14,7 @@ import type { Metadata } from 'next';
 import '@uswds/uswds/css/uswds.css';
 import { UswdsHeader } from '@/components/uswds/UswdsHeader';
 import { fetchPrimaryNav } from '@/lib/cms/navigation';
+import { DapScript } from '@/components/analytics/DapScript';
 
 export const metadata: Metadata = {
   title: 'VA CMS Public Site',
@@ -36,6 +37,12 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
+      <head>
+        {/* DAP analytics — issue #60, BRD FR-ANALYTICS-02.
+            Loaded afterInteractive (non-blocking). Agency/sub-agency
+            configured via NEXT_PUBLIC_DAP_AGENCY / NEXT_PUBLIC_DAP_SUBAGENCY. */}
+        <DapScript />
+      </head>
       <body>
         <UswdsHeader
           siteTitle="Department of Veterans Affairs"
