@@ -24,6 +24,13 @@ public interface IContentVersionRepository
     /// Returns the new version id (issue #32).
     /// </summary>
     Task<long> RestoreAsync(long contentEntryId, long targetVersionId, long actorId);
+
+    /// <summary>
+    /// Update the RenderedFieldsJson on an existing ContentVersion.
+    /// Called on publish and version restore to cache rendered HTML.
+    /// Issue #66: BRD FR-AUTH-02a/02b.
+    /// </summary>
+    Task UpdateRenderedFieldsAsync(long versionId, string renderedFieldsJson);
 }
 
 public interface IMediaAssetRepository

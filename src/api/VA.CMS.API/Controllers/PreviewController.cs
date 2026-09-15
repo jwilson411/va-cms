@@ -365,7 +365,8 @@ public sealed record PreviewTokenResponse(
 public sealed record PreviewRenderRequest(string? Markdown);
 
 /// <summary>
-/// Response from POST /api/v1/preview/render.
+/// Response from POST /api/v1/preview/render — issue #66, BRD FR-AUTH-02b.
 /// Returns sanitised HTML fragment (not a full page) — DisableHtml() applied.
+/// Field name is renderedHtml per acceptance criteria.
 /// </summary>
-public sealed record PreviewRenderResponse(string Html);
+public sealed record PreviewRenderResponse(string RenderedHtml);
