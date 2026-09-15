@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
 using VA.CMS.API.Auth;
+using VA.CMS.API.GraphQL;
 using VA.CMS.API.Middleware;
 using VA.CMS.Infrastructure.Data;
 using VA.CMS.Infrastructure.Data.Repositories;
@@ -219,6 +220,9 @@ builder.Services.AddScoped<ISearchAnalyticsRepository, SearchAnalyticsRepository
 // Issue #52: Search pins repository (FR-SEARCH-04)
 builder.Services.AddScoped<ISearchPinRepository, SearchPinRepository>();
 
+// Issue #53: Taxonomy repository (needed for GraphQL)
+builder.Services.AddScoped<ITaxonomyRepository, TaxonomyRepository>();
+
 // Auth services
 builder.Services.AddSingleton(authOptions);
 builder.Services.AddSingleton(jwtOptions);
@@ -267,6 +271,19 @@ builder.Services.AddHostedService<VA.CMS.Infrastructure.Services.ScheduledPublis
 builder.Services.AddContentType<StandardPageTypeDefinition>();
 
 // -----------------------------------------------------------------------
+// Issue #53: Hot Chocolate GraphQL (FR-DEV-02)
+// - Endpoint: /api/graphql
+// - Playground: /api/graphql/ui (Development only)
+// - Types: ContentEntry, MediaAsset, NavigationMenu, TaxonomyTerm
+// - DataLoader prevents N+1 on relation loads
+// -----------------------------------------------------------------------
+builder.Services
+    .AddGraphQLServer()
+    .AddQueryType<Query>()
+    .AddDataLoader<VA.CMS.API.GraphQL.DataLoaders.ContentEntryByIdDataLoader>()
+    .AddDataLoader<VA.CMS.API.GraphQL.DataLoaders.MediaAssetByIdDataLoader>();
+
+// -----------------------------------------------------------------------
 // Custom Field Type Plugins (FR-DEV-05 / issue #27)
 // -----------------------------------------------------------------------
 // GeoPoint is the reference implementation; additional plugins follow the
@@ -285,12 +302,12 @@ var skipMigrations = builder.Configuration["SKIP_MIGRATIONS"] == "true";
 
 if (!skipMigrations)
 {
-var migrationsPath = Path.GetFullPath(
-    Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "migrations"));
+var migrationsPath = System.IO.Path.GetFullPath(
+    System.IO.Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "migrations"));
 
 if (!Directory.Exists(migrationsPath))
-    migrationsPath = Path.GetFullPath(
-        Path.Combine(AppContext.BaseDirectory, "migrations"));
+    migrationsPath = System.IO.Path.GetFullPath(
+        System.IO.Path.Combine(AppContext.BaseDirectory, "migrations"));
 
 EnsureDatabase.For.SqlDatabase(connectionString);
 
@@ -337,6 +354,12 @@ app.UseAuthHeaderRedaction();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Issue #53: GraphQL endpoint + playground
+// Endpoint:  /api/graphql
+// Playground: /api/graphql/ui (Development only — HC disables Banana Cake Pop in non-dev by default)
+app.MapGraphQL("/api/graphql")
+   .AllowAnonymous();   // Auth is enforced at the REST layer; headless consumers use API keys per epic scope
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
    .AllowAnonymous();

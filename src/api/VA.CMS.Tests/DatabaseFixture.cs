@@ -66,11 +66,11 @@ public class DatabaseFixture : IAsyncLifetime
         var candidates = new[]
         {
             // 6 levels up: net8.0 → Release → bin → VA.CMS.Tests → api → src → worktree-root
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "migrations")),
+            IoPath.GetFullPath(IoPath.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "migrations")),
             // 5 levels up (in case of flat layout)
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "migrations")),
+            IoPath.GetFullPath(IoPath.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "migrations")),
             // Adjacent to solution root fallback
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "migrations")),
+            IoPath.GetFullPath(IoPath.Combine(AppContext.BaseDirectory, "..", "..", "..", "migrations")),
         };
 
         foreach (var candidate in candidates)
@@ -83,7 +83,7 @@ public class DatabaseFixture : IAsyncLifetime
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            var migrationsDir = Path.Combine(dir.FullName, "migrations");
+            var migrationsDir = IoPath.Combine(dir.FullName, "migrations");
             if (Directory.Exists(migrationsDir))
                 return migrationsDir;
             dir = dir.Parent;

@@ -17,7 +17,7 @@ public class Issue28AcceptanceTests : IDisposable
 
     public Issue28AcceptanceTests()
     {
-        _tempDir = Path.Combine(Path.GetTempPath(), $"vacms-test-{Guid.NewGuid():N}");
+        _tempDir = IoPath.Combine(IoPath.GetTempPath(), $"vacms-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
 
@@ -42,13 +42,13 @@ public class Issue28AcceptanceTests : IDisposable
     [Fact]
     public void Scaffold_Creates_ContentTypes_Directory_When_Missing()
     {
-        var subDir = Path.Combine(_tempDir, "new-project");
+        var subDir = IoPath.Combine(_tempDir, "new-project");
         // Do not pre-create subDir/ContentTypes — Scaffold should create it.
 
         var path = ScaffoldService.Scaffold("EventListing", subDir);
 
         Assert.True(File.Exists(path));
-        Assert.True(Directory.Exists(Path.Combine(subDir, "ContentTypes")));
+        Assert.True(Directory.Exists(IoPath.Combine(subDir, "ContentTypes")));
     }
 
     // ── Generated file structure ──────────────────────────────────────────────
