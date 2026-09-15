@@ -15,6 +15,7 @@ using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.ContentTypes.BuiltIn;
 using VA.CMS.Infrastructure.ContentTypes.CustomFields;
 using VA.CMS.Infrastructure.Services;
+using VA.CMS.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -215,6 +216,23 @@ builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddSingleton<IRefreshTokenService, InMemoryRefreshTokenService>();
 builder.Services.AddSingleton<IRbacService, RbacService>();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, CmsRoleHandler>();
+
+// -----------------------------------------------------------------------
+// Storage backend (issue #40: BRD FR-MEDIA-07 / FR-SECURITY-06)
+// -----------------------------------------------------------------------
+var storageOptions = builder.Configuration
+    .GetSection(StorageOptions.SectionName)
+    .Get<StorageOptions>() ?? new StorageOptions();
+builder.Services.AddSingleton(storageOptions);
+
+IStorageBackend storageBackend = storageOptions.Backend?.ToLowerInvariant() switch
+{
+    "unc"        => new UncStorageBackend(storageOptions),
+    "azure_blob" => new AzureBlobStorageBackend(storageOptions),
+    _            => new LocalStorageBackend(storageOptions),   // default: local
+};
+builder.Services.AddSingleton<IStorageBackend>(storageBackend);
+builder.Services.AddScoped<IMediaUploadService, MediaUploadService>();
 
 // Preview token service — issue #34 (BRD FR-AUTH-08)
 builder.Services.AddSingleton<IPreviewTokenService, PreviewTokenService>();
