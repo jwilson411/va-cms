@@ -249,6 +249,42 @@ public class ContentController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Set or clear scheduled publish/expire times for a content entry.
+    /// Issue #35: BRD FR-AUTH-04.
+    /// Content owner can set a 'Publish at' datetime on a draft (AC1).
+    /// Content owner can set an 'Expire at' datetime on a published entry (AC3).
+    /// Requires CanWrite.
+    /// </summary>
+    [HttpPatch("{id:long}/schedule")]
+    [Authorize(Policy = CmsRoles.Policies.CanWrite)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SetSchedule(long id, [FromBody] ContentEntryScheduleRequest request)
+    {
+        var entry = await _entries.GetByIdAsync(id);
+        if (entry is null) return NotFound();
+
+        // Section-scope enforcement for ContentOwner.
+        if (!_rbac.HasGlobalRole(User,
+                CmsRoles.Editor, CmsRoles.SiteAdmin, CmsRoles.SystemAdmin))
+        {
+            if (!_rbac.IsAuthorizedForSlug(User, entry.Slug, CmsRoles.ContentOwner))
+                return Forbidden("You do not have permission to schedule content in this section.");
+        }
+
+        var actorId = _rbac.GetUserId(User) ?? 0;
+        var (success, errorMsg) = await _entries.SetScheduleAsync(
+            id, request.ScheduledPublishAt, request.ScheduledExpireAt, actorId);
+
+        if (!success)
+            return BadRequest(new { error = errorMsg ?? "Schedule update failed." });
+
+        return NoContent();
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private ObjectResult Forbidden(string message) =>
@@ -265,5 +301,14 @@ public sealed record ContentEntryCreateRequest(
 public sealed record ContentEntryUpdateRequest();   // fields TBD in content-model story
 
 public sealed record ContentEntryUpdateSlugRequest(string Slug);
+
+/// <summary>
+/// Request body for PATCH /api/v1/content/{id}/schedule.
+/// Issue #35: BRD FR-AUTH-04.
+/// Both fields are optional — null clears the value; omitting a field leaves it unchanged.
+/// </summary>
+public sealed record ContentEntryScheduleRequest(
+    DateTime? ScheduledPublishAt,
+    DateTime? ScheduledExpireAt);
 
 public sealed record ContentEntryCreateResponse(long Id);

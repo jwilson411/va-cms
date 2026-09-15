@@ -35,4 +35,42 @@ public interface IContentEntryRepository
     /// Issue #33: FR-NAV-05.
     /// </summary>
     Task<(bool Success, string? ErrorMessage)> UpdateSlugAsync(long id, string newSlug, long actorId);
+
+    /// <summary>
+    /// Set or clear the scheduled publish/expire times for a content entry.
+    /// Issue #35: FR-AUTH-04 scheduled publish and expiry.
+    /// </summary>
+    Task<(bool Success, string? ErrorMessage)> SetScheduleAsync(
+        long id,
+        DateTime? scheduledPublishAt,
+        DateTime? scheduledExpireAt,
+        long actorId);
+
+    /// <summary>
+    /// Returns content entries that are Approved, have ScheduledPublishAt set,
+    /// and that time has passed. Used by the background scheduler.
+    /// Issue #35.
+    /// </summary>
+    Task<IList<ContentEntry>> GetScheduledForPublishAsync();
+
+    /// <summary>
+    /// Returns content entries that are Published, have ScheduledExpireAt set,
+    /// and that time has passed. Used by the background scheduler.
+    /// Issue #35.
+    /// </summary>
+    Task<IList<ContentEntry>> GetScheduledForExpiryAsync();
+
+    /// <summary>
+    /// Publish a content entry: sets Status = 'Published', clears ScheduledPublishAt.
+    /// Called by the background scheduler after the scheduled time passes.
+    /// Issue #35.
+    /// </summary>
+    Task PublishScheduledAsync(long id, long systemActorId);
+
+    /// <summary>
+    /// Unpublish (expire) a content entry: sets Status = 'Approved', clears ScheduledExpireAt.
+    /// Called by the background scheduler after the expiry time passes.
+    /// Issue #35.
+    /// </summary>
+    Task ExpireScheduledAsync(long id, long systemActorId);
 }

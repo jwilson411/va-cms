@@ -49,6 +49,8 @@ public class ContentEntryRepository : IContentEntryRepository
             Locale = reader.GetString(reader.GetOrdinal("Locale")),
             Status = reader.GetString(reader.GetOrdinal("Status")),
             PublishedVersionId = reader.IsDBNull(reader.GetOrdinal("PublishedVersionId")) ? null : reader.GetInt64(reader.GetOrdinal("PublishedVersionId")),
+            ScheduledPublishAt = reader.IsDBNull(reader.GetOrdinal("ScheduledPublishAt")) ? null : reader.GetDateTime(reader.GetOrdinal("ScheduledPublishAt")),
+            ScheduledExpireAt  = reader.IsDBNull(reader.GetOrdinal("ScheduledExpireAt"))  ? null : reader.GetDateTime(reader.GetOrdinal("ScheduledExpireAt")),
             OwnerId = reader.GetInt64(reader.GetOrdinal("OwnerId")),
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
@@ -215,6 +217,104 @@ public class ContentEntryRepository : IContentEntryRepository
         var success = successParam.Value is bool b && b;
         var error   = errorParam.Value == DBNull.Value ? null : errorParam.Value as string;
         return (success, error);
+    }
+
+    // ── Issue #35: Scheduled publish / expiry ────────────────────────────────
+
+    public async Task<(bool Success, string? ErrorMessage)> SetScheduleAsync(
+        long id,
+        DateTime? scheduledPublishAt,
+        DateTime? scheduledExpireAt,
+        long actorId)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_ContentEntry_SetSchedule @Id, @ScheduledPublishAt, @ScheduledExpireAt, @ActorId, @Success OUTPUT, @ErrorMessage OUTPUT";
+        cmd.Parameters.AddWithValue("@Id", id);
+        AddNullableParam(cmd, "@ScheduledPublishAt", System.Data.SqlDbType.DateTime2, scheduledPublishAt);
+        AddNullableParam(cmd, "@ScheduledExpireAt",  System.Data.SqlDbType.DateTime2, scheduledExpireAt);
+        cmd.Parameters.AddWithValue("@ActorId", actorId);
+
+        var successParam = cmd.Parameters.Add("@Success", System.Data.SqlDbType.Bit);
+        successParam.Direction = System.Data.ParameterDirection.Output;
+
+        var errorParam = cmd.Parameters.Add("@ErrorMessage", System.Data.SqlDbType.NVarChar, 500);
+        errorParam.Direction = System.Data.ParameterDirection.Output;
+
+        await cmd.ExecuteNonQueryAsync();
+
+        var success = successParam.Value is bool b && b;
+        var error   = errorParam.Value == DBNull.Value ? null : errorParam.Value as string;
+        return (success, error);
+    }
+
+    public async Task<IList<ContentEntry>> GetScheduledForPublishAsync()
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_ContentEntry_GetScheduledForPublish";
+        var results = new List<ContentEntry>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new ContentEntry
+            {
+                Id            = reader.GetInt64(reader.GetOrdinal("Id")),
+                ContentTypeId = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
+                Slug          = reader.GetString(reader.GetOrdinal("Slug")),
+                Locale        = reader.GetString(reader.GetOrdinal("Locale")),
+                Status        = "Approved",
+            });
+        }
+        return results;
+    }
+
+    public async Task<IList<ContentEntry>> GetScheduledForExpiryAsync()
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_ContentEntry_GetScheduledForExpiry";
+        var results = new List<ContentEntry>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new ContentEntry
+            {
+                Id            = reader.GetInt64(reader.GetOrdinal("Id")),
+                ContentTypeId = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
+                Slug          = reader.GetString(reader.GetOrdinal("Slug")),
+                Locale        = reader.GetString(reader.GetOrdinal("Locale")),
+                Status        = "Published",
+            });
+        }
+        return results;
+    }
+
+    public async Task PublishScheduledAsync(long id, long systemActorId)
+    {
+        // Use dedicated scheduler SP (V019) — bypasses usp_Workflow_Transition which
+        // requires a ContentVersionId from a user-driven action.
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_ContentEntry_PublishScheduled @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task ExpireScheduledAsync(long id, long systemActorId)
+    {
+        // Use dedicated scheduler SP (V019) — bypasses usp_Workflow_Transition.
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_ContentEntry_ExpireScheduled @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private static void AddNullableParam(
