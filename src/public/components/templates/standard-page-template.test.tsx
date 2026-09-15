@@ -280,4 +280,33 @@ describe('StandardPageTemplate', () => {
     const criticalViolations = results.violations.filter((v) => v.impact === 'critical');
     expect(criticalViolations).toHaveLength(0);
   });
+
+  // AC: Tests fail CI if any critical OR serious violation found
+  it('passes axe-core with zero serious violations (minimal)', async () => {
+    const { container } = render(<StandardPageTemplate {...baseProps} />);
+    const results = await axe(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'best-practice'] },
+    });
+    const seriousViolations = results.violations.filter((v) => v.impact === 'serious');
+    expect(seriousViolations).toHaveLength(0);
+  });
+
+  it('passes axe-core with zero serious violations (with breadcrumb + in-page nav)', async () => {
+    const breadcrumbs = [
+      { label: 'Home', href: '/' },
+      { label: 'About VA History' },
+    ];
+    const { container } = render(
+      <StandardPageTemplate
+        {...baseProps}
+        breadcrumbs={breadcrumbs}
+        sections={threeSection}
+      />,
+    );
+    const results = await axe(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'best-practice'] },
+    });
+    const seriousViolations = results.violations.filter((v) => v.impact === 'serious');
+    expect(seriousViolations).toHaveLength(0);
+  });
 });
