@@ -11,6 +11,8 @@ using VA.CMS.API.Auth;
 using VA.CMS.API.Middleware;
 using VA.CMS.Infrastructure.Data;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.ContentTypes;
+using VA.CMS.Infrastructure.ContentTypes.BuiltIn;
 using VA.CMS.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -215,6 +217,11 @@ builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationH
 
 // Seed (demo)
 builder.Services.AddScoped<ISeedService, DemoSeedService>();
+
+// -----------------------------------------------------------------------
+// Content Type Registry (FR-SCHEMA-01)
+// -----------------------------------------------------------------------
+builder.Services.AddContentType<StandardPageTypeDefinition>();
 
 // -----------------------------------------------------------------------
 // Build
