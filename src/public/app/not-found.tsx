@@ -1,0 +1,29 @@
+/**
+ * app/not-found.tsx — Next.js 14 App Router global 404 page.
+ *
+ * Issue #61 — BRD FR-ERR-01
+ * AC: 404 page uses USWDS Alert (info) and suggests search or home link.
+ * AC: Includes Banner and Identifier.
+ * AC: Passes axe-core with zero critical violations.
+ *
+ * Called automatically by Next.js when notFound() is thrown from any
+ * route in the app directory, or when no matching route is found.
+ *
+ * Fetches CMS-managed navigation for the header; falls back to empty
+ * array if the API is unavailable so the page still renders.
+ */
+
+import type { Metadata } from 'next';
+import { fetchPrimaryNav } from '@/lib/cms/navigation';
+import { NotFoundTemplate } from '@/components/templates/NotFoundTemplate';
+
+export const metadata: Metadata = {
+  title: 'Page Not Found | Department of Veterans Affairs',
+};
+
+export default async function NotFoundPage(): Promise<React.ReactElement> {
+  // Fetch CMS navigation — fall back to empty array if API is unavailable.
+  const navigation = await fetchPrimaryNav().catch(() => []);
+
+  return <NotFoundTemplate navigation={navigation} />;
+}
