@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+    <PackageReference Include="Markdig" Version="0.37.0" />
     <PackageReference Include="PetaPoco" Version="5.1.304" />
     <PackageReference Include="PetaPoco.Compiled" Version="6.0.683" />
   </ItemGroup>
