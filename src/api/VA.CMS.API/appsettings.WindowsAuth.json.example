@@ -1,0 +1,19 @@
+{
+  "Auth": {
+    "Mode": "WindowsAuth"
+  },
+  "Jwt": {
+    "SigningKey": "<set-via-environment-variable-or-secrets>",
+    "Issuer": "va-cms-api",
+    "Audience": "va-cms-spa"
+  },
+  "ConnectionStrings": {
+    "DefaultConnection": "<sql-server-connection-string>"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  }
+}
