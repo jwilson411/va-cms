@@ -233,7 +233,30 @@ public class UserRepository : IUserRepository
         await cmd.ExecuteNonQueryAsync();
         return (long)outParam.Value;
     }
+
+    public async Task<IEnumerable<UserRoleAssignment>> GetRolesAsync(long userId)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_User_GetRoles @UserId";
+        cmd.Parameters.AddWithValue("@UserId", userId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        var results = new List<UserRoleAssignment>();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new UserRoleAssignment
+            {
+                RoleId           = reader.GetInt64(reader.GetOrdinal("RoleId")),
+                RoleName         = reader.GetString(reader.GetOrdinal("RoleName")),
+                SectionId        = reader.IsDBNull(reader.GetOrdinal("SectionId")) ? null : reader.GetInt64(reader.GetOrdinal("SectionId")),
+                SectionSlugPrefix = reader.IsDBNull(reader.GetOrdinal("SectionSlugPrefix")) ? null : reader.GetString(reader.GetOrdinal("SectionSlugPrefix")),
+            });
+        }
+        return results;
+    }
 }
+
 
 /// <summary>
 /// NavigationMenu repository. All access via EXEC usp_Navigation_* stored procedures.

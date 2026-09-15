@@ -23,6 +23,7 @@ public interface IUserRepository
     Task<User?> GetByIdAsync(long id);
     Task<User?> GetByExternalIdAsync(string externalId);
     Task<long> UpsertAsync(string externalId, string email, string displayName);
+    Task<IEnumerable<UserRoleAssignment>> GetRolesAsync(long userId);
 }
 
 public interface INavigationMenuRepository
