@@ -1,0 +1,37 @@
+{
+  "name": "va-cms-public",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:a11y": "playwright test tests/accessibility"
+  },
+  "dependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@uswds/uswds": "^3.8.2",
+    "next": "14.2.29",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^20.17.10",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^2.1.9",
+    "axe-core": "^4.10.2",
+    "jest-axe": "^9.0.0",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9"
+  }
+}
