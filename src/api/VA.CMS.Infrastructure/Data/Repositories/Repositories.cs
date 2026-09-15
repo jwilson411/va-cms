@@ -75,6 +75,67 @@ public class ContentVersionRepository : IContentVersionRepository
         await cmd.ExecuteNonQueryAsync();
         return (long)outParam.Value;
     }
+
+    // ── Issue #32: author-joined list / get / restore ─────────────────────────
+
+    public async Task<IReadOnlyList<ContentVersionWithAuthor>> ListWithAuthorAsync(
+        long contentEntryId, int page = 1, int pageSize = 25)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_ContentVersion_List @ContentEntryId, @Page, @PageSize";
+        cmd.Parameters.AddWithValue("@ContentEntryId", contentEntryId);
+        cmd.Parameters.AddWithValue("@Page", page);
+        cmd.Parameters.AddWithValue("@PageSize", pageSize);
+        var results = new List<ContentVersionWithAuthor>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add(MapVersionWithAuthor(reader));
+        return results;
+    }
+
+    public async Task<ContentVersionWithAuthor?> GetByIdWithAuthorAsync(long versionId)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_ContentVersion_GetById @Id";
+        cmd.Parameters.AddWithValue("@Id", versionId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+        return MapVersionWithAuthor(reader);
+    }
+
+    public async Task<long> RestoreAsync(long contentEntryId, long targetVersionId, long actorId)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_ContentVersion_Restore @ContentEntryId, @TargetVersionId, @ActorId, NULL, @NewVersionId OUTPUT";
+        cmd.Parameters.AddWithValue("@ContentEntryId", contentEntryId);
+        cmd.Parameters.AddWithValue("@TargetVersionId", targetVersionId);
+        cmd.Parameters.AddWithValue("@ActorId", actorId);
+        var outParam = cmd.Parameters.Add("@NewVersionId", System.Data.SqlDbType.BigInt);
+        outParam.Direction = System.Data.ParameterDirection.Output;
+        await cmd.ExecuteNonQueryAsync();
+        return (long)outParam.Value;
+    }
+
+    private static ContentVersionWithAuthor MapVersionWithAuthor(Microsoft.Data.SqlClient.SqlDataReader r) => new()
+    {
+        Id             = r.GetInt64(r.GetOrdinal("Id")),
+        ContentEntryId = r.GetInt64(r.GetOrdinal("ContentEntryId")),
+        VersionNumber  = r.GetInt32(r.GetOrdinal("VersionNumber")),
+        FieldsJson     = r.GetString(r.GetOrdinal("FieldsJson")),
+        RenderedFieldsJson = r.IsDBNull(r.GetOrdinal("RenderedFieldsJson")) ? null : r.GetString(r.GetOrdinal("RenderedFieldsJson")),
+        Status         = r.GetString(r.GetOrdinal("Status")),
+        AuthorId       = r.GetInt64(r.GetOrdinal("AuthorId")),
+        AuthorName     = r.GetString(r.GetOrdinal("AuthorName")),
+        ChangeNote     = r.IsDBNull(r.GetOrdinal("ChangeNote")) ? null : r.GetString(r.GetOrdinal("ChangeNote")),
+        CreatedAt      = r.GetDateTime(r.GetOrdinal("CreatedAt")),
+    };
 }
 
 /// <summary>
