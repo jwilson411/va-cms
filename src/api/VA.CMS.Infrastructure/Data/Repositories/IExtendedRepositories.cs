@@ -69,8 +69,25 @@ public interface ITaxonomyRepository
 
 public interface IWebhookRepository
 {
+    /// <summary>Get all active webhook targets subscribed to the given event (for fanout delivery).</summary>
     Task<IEnumerable<Webhook>> GetActiveForEventAsync(string eventName);
+
+    /// <summary>Log a delivery attempt. Returns the new delivery row Id.</summary>
     Task<long> CreateDeliveryAsync(WebhookDelivery delivery);
+
+    // ── Issue #54: registration CRUD ──────────────────────────────────────────
+
+    /// <summary>Register a new webhook. Returns the new row Id.</summary>
+    Task<long> CreateAsync(string name, string url, string secret, string eventsJson, long createdById);
+
+    /// <summary>List all webhooks (active and inactive). Secret is not returned in list rows.</summary>
+    Task<IReadOnlyList<Webhook>> ListAllAsync();
+
+    /// <summary>Get a single webhook including its secret (for admin / signing).</summary>
+    Task<Webhook?> GetByIdAsync(long id);
+
+    /// <summary>Soft-delete a webhook (sets IsActive = 0).</summary>
+    Task DeleteAsync(long id);
 }
 
 // ── Extended User ─────────────────────────────────────────────────────────────

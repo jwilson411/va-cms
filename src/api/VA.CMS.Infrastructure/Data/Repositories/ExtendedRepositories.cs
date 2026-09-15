@@ -365,6 +365,88 @@ public class WebhookRepository : IWebhookRepository
         await cmd.ExecuteNonQueryAsync();
         return (long)outParam.Value;
     }
+
+    // ── Issue #54: registration CRUD ─────────────────────────────────────────
+
+    /// <inheritdoc />
+    public async Task<long> CreateAsync(string name, string url, string secret,
+        string eventsJson, long createdById)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_Webhook_Create @Name, @Url, @Secret, @EventsJson, @CreatedById, @NewId OUTPUT";
+        cmd.Parameters.AddWithValue("@Name", name);
+        cmd.Parameters.AddWithValue("@Url", url);
+        cmd.Parameters.AddWithValue("@Secret", secret);
+        cmd.Parameters.AddWithValue("@EventsJson", eventsJson);
+        cmd.Parameters.AddWithValue("@CreatedById", createdById);
+        var outParam = cmd.Parameters.Add("@NewId", System.Data.SqlDbType.BigInt);
+        outParam.Direction = System.Data.ParameterDirection.Output;
+        await cmd.ExecuteNonQueryAsync();
+        return (long)outParam.Value;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<Webhook>> ListAllAsync()
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Webhook_List";
+        var results = new List<Webhook>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new Webhook
+            {
+                Id          = reader.GetInt64(reader.GetOrdinal("Id")),
+                Name        = reader.GetString(reader.GetOrdinal("Name")),
+                Url         = reader.GetString(reader.GetOrdinal("Url")),
+                Secret      = null, // never returned in list
+                EventsJson  = reader.GetString(reader.GetOrdinal("EventsJson")),
+                IsActive    = reader.GetBoolean(reader.GetOrdinal("IsActive")),
+                CreatedById = reader.GetInt64(reader.GetOrdinal("CreatedById")),
+                CreatedAt   = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            });
+        }
+        return results;
+    }
+
+    /// <inheritdoc />
+    public async Task<Webhook?> GetByIdAsync(long id)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Webhook_GetById @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+        return new Webhook
+        {
+            Id          = reader.GetInt64(reader.GetOrdinal("Id")),
+            Name        = reader.GetString(reader.GetOrdinal("Name")),
+            Url         = reader.GetString(reader.GetOrdinal("Url")),
+            Secret      = reader.GetString(reader.GetOrdinal("Secret")),
+            EventsJson  = reader.GetString(reader.GetOrdinal("EventsJson")),
+            IsActive    = reader.GetBoolean(reader.GetOrdinal("IsActive")),
+            CreatedById = reader.GetInt64(reader.GetOrdinal("CreatedById")),
+            CreatedAt   = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteAsync(long id)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Webhook_Delete @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await cmd.ExecuteNonQueryAsync();
+    }
 }
 
 // ── Extended User ─────────────────────────────────────────────────────────────

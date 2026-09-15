@@ -98,12 +98,24 @@ public class TaxonomyTerm
 public class Webhook
 {
     public long Id { get; set; }
+    /// <summary>Human-readable label for this webhook. Issue #54.</summary>
+    public string Name { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
     public string? Secret { get; set; }
     public string EventsJson { get; set; } = "[]";
     public bool IsActive { get; set; } = true;
+    /// <summary>FK → User who registered this webhook. Issue #54.</summary>
+    public long CreatedById { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>Lightweight projection returned by usp_Webhook_GetActiveForEvent (issue #54).</summary>
+public class WebhookDeliveryTarget
+{
+    public long Id { get; set; }
+    public string Url { get; set; } = string.Empty;
+    public string Secret { get; set; } = string.Empty;
 }
 
 [TableName("WebhookDelivery")]
