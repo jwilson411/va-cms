@@ -536,6 +536,23 @@ internal sealed class Issue23ContentEntryStub : IContentEntryRepository
 
     public Task<(bool Success, string? ErrorMessage)> UpdateSlugAsync(long id, string newSlug, long actorId)
         => Task.FromResult((true, (string?)null));
+
+    // Issue #35 stub implementations
+    public Task<(bool Success, string? ErrorMessage)> SetScheduleAsync(
+        long id, DateTime? scheduledPublishAt, DateTime? scheduledExpireAt, long actorId)
+        => Task.FromResult((true, (string?)null));
+
+    public Task<IList<ContentEntry>> GetScheduledForPublishAsync()
+        => Task.FromResult<IList<ContentEntry>>(new List<ContentEntry>());
+
+    public Task<IList<ContentEntry>> GetScheduledForExpiryAsync()
+        => Task.FromResult<IList<ContentEntry>>(new List<ContentEntry>());
+
+    public Task PublishScheduledAsync(long id, long systemActorId)
+        => Task.CompletedTask;
+
+    public Task ExpireScheduledAsync(long id, long systemActorId)
+        => Task.CompletedTask;
 }
 
 internal sealed class Issue23UserRoleStub : IUserRoleRepository

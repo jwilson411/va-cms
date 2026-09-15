@@ -226,6 +226,9 @@ builder.Services.AddSingleton<VA.CMS.Infrastructure.Markdown.IUswdsMarkdownRende
 // Seed (demo)
 builder.Services.AddScoped<ISeedService, DemoSeedService>();
 
+// Issue #35: Scheduled publish / expiry background worker (BRD FR-AUTH-04)
+builder.Services.AddHostedService<VA.CMS.Infrastructure.Services.ScheduledPublishWorker>();
+
 // -----------------------------------------------------------------------
 // Content Type Registry (FR-SCHEMA-01)
 // -----------------------------------------------------------------------
