@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
+import { ContentTypeBrowserPage } from './pages/ContentTypeBrowserPage';
 
 const queryClient = new QueryClient();
 
@@ -23,7 +24,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               path="/*"
               element={
                 <ProtectedRoute>
-                  <DashboardPage />
+                  <Routes>
+                    {/* Issue #26: Admin content type browser (FR-SCHEMA-06) */}
+                    <Route path="/admin/content-types" element={<ContentTypeBrowserPage />} />
+                    <Route path="*" element={<DashboardPage />} />
+                  </Routes>
                 </ProtectedRoute>
               }
             />
