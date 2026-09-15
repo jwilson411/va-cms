@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 
@@ -6,11 +8,11 @@ namespace VA.CMS.API.Controllers.Admin;
 
 /// <summary>
 /// GET /api/v1/admin/health/db — Returns combined database health metrics.
-/// Requires SystemAdmin role (auth middleware enforces this in production;
-/// DevBypass mode accepts any X-Dev-User header).
+/// Requires Developer or SystemAdmin role (story #23 CanDevelop policy).
 /// </summary>
 [ApiController]
 [Route("api/v1/admin/health")]
+[Authorize(Policy = CmsRoles.Policies.CanDevelop)]
 public class DbHealthController : ControllerBase
 {
     private readonly IDbMonitorRepository _monitor;

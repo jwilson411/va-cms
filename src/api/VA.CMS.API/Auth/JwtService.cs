@@ -47,9 +47,18 @@ public sealed class JwtService : IJwtService
         foreach (var r in roles)
         {
             // Emit role claims; include section scope when present.
-            var roleClaim = r.SectionId.HasValue
-                ? $"{r.RoleName}:section:{r.SectionId}"
-                : r.RoleName;
+            // Format for scoped roles: "{RoleName}:section:{SectionId}:prefix:{SlugPrefix}"
+            // The slug prefix is needed by RbacService to enforce section-scoped ContentOwner access.
+            string roleClaim;
+            if (r.SectionId.HasValue)
+            {
+                var prefix = r.SectionSlugPrefix ?? string.Empty;
+                roleClaim = $"{r.RoleName}:section:{r.SectionId}:prefix:{prefix}";
+            }
+            else
+            {
+                roleClaim = r.RoleName;
+            }
             claims.Add(new Claim(ClaimTypes.Role, roleClaim));
         }
 

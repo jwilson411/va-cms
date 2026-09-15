@@ -140,6 +140,66 @@ builder.Services.AddAuthorization(options =>
     options.FallbackPolicy = new AuthorizationPolicyBuilder()
         .RequireAuthenticatedUser()
         .Build();
+
+    // RBAC policies (story #23, BRD FR-USERS-03/04).
+    // Policy = minimum required role; higher roles satisfy lower-tier policies.
+    // CmsRoleRequirement (not built-in RequireRole) handles both global and section-scoped claims.
+    var allRoles = new[]
+    {
+        VA.CMS.API.Auth.CmsRoles.ContentOwner,
+        VA.CMS.API.Auth.CmsRoles.Editor,
+        VA.CMS.API.Auth.CmsRoles.SiteAdmin,
+        VA.CMS.API.Auth.CmsRoles.Developer,
+        VA.CMS.API.Auth.CmsRoles.SystemAdmin,
+        VA.CMS.API.Auth.CmsRoles.ReadOnly,
+    };
+
+    // AnyRole: any authenticated CMS role
+    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.AnyRole, p =>
+        p.RequireAuthenticatedUser()
+         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(allRoles)));
+
+    // CanRead: all roles may read
+    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanRead, p =>
+        p.RequireAuthenticatedUser()
+         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(allRoles)));
+
+    // CanWrite: ContentOwner (section-scoped check in service layer), Editor, SiteAdmin, SystemAdmin
+    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanWrite, p =>
+        p.RequireAuthenticatedUser()
+         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
+             VA.CMS.API.Auth.CmsRoles.ContentOwner,
+             VA.CMS.API.Auth.CmsRoles.Editor,
+             VA.CMS.API.Auth.CmsRoles.SiteAdmin,
+             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
+
+    // CanPublish: Editor, SiteAdmin, SystemAdmin
+    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanPublish, p =>
+        p.RequireAuthenticatedUser()
+         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
+             VA.CMS.API.Auth.CmsRoles.Editor,
+             VA.CMS.API.Auth.CmsRoles.SiteAdmin,
+             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
+
+    // CanManageSite: SiteAdmin, SystemAdmin
+    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanManageSite, p =>
+        p.RequireAuthenticatedUser()
+         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
+             VA.CMS.API.Auth.CmsRoles.SiteAdmin,
+             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
+
+    // CanDevelop: Developer, SystemAdmin
+    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanDevelop, p =>
+        p.RequireAuthenticatedUser()
+         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
+             VA.CMS.API.Auth.CmsRoles.Developer,
+             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
+
+    // CanAdminSystem: SystemAdmin only
+    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanAdminSystem, p =>
+        p.RequireAuthenticatedUser()
+         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
+             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
 });
 
 // -----------------------------------------------------------------------
@@ -164,6 +224,9 @@ builder.Services.AddSingleton(authOptions);
 builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddSingleton<IRefreshTokenService, InMemoryRefreshTokenService>();
+builder.Services.AddSingleton<IRbacService, RbacService>();
+// Register the CmsRoleHandler for CmsRoleRequirement (handles global + scoped claims).
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, CmsRoleHandler>();
 
 // Seed (demo)
 builder.Services.AddScoped<ISeedService, DemoSeedService>();

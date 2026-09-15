@@ -10,4 +10,6 @@ public interface IContentEntryRepository
     Task<Page<ContentEntry>> ListAsync(int page, int pageSize, string? status = null, long? contentTypeId = null);
     Task<long> CreateAsync(ContentEntry entry);
     Task UpdateAsync(ContentEntry entry);
+    /// <summary>Soft-archive a content entry (story #23: section-scope enforced by controller).</summary>
+    Task ArchiveAsync(long id, long actorId);
 }

@@ -98,4 +98,11 @@ public class ContentEntryRepository : IContentEntryRepository
             "EXEC usp_ContentEntry_UpdateStatus @0, @1, @2",
             entry.Id, entry.Status, entry.PublishedVersionId);
     }
+
+    public async Task ArchiveAsync(long id, long actorId)
+    {
+        await _db.ExecuteAsync(
+            "EXEC usp_ContentEntry_Archive @0, @1",
+            id, actorId);
+    }
 }
