@@ -8,6 +8,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { ContentTypeBrowserPage } from './pages/ContentTypeBrowserPage';
 import { ContentEntryListPage } from './features/contentEntries';
+import { MediaLibraryPage } from './features/media';
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                   <Routes>
                     {/* Issue #26: Admin content type browser (FR-SCHEMA-06) */}
                     <Route path="/admin/content-types" element={<ContentTypeBrowserPage />} />
+                    {/* Issue #42: Media library browser */}
+                    <Route path="/admin/media" element={<MediaLibraryPage />} />
                     {/* Issue #29: Admin content entry list (FR-AUTH-01) */}
                     <Route path="/admin/content" element={<ContentEntryListPage />} />
                     <Route path="*" element={<DashboardPage />} />

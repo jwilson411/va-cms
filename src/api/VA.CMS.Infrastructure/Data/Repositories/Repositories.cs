@@ -182,16 +182,55 @@ public class MediaAssetRepository : IMediaAssetRepository
     public async Task<Page<MediaAsset>> ListAsync(int page, int pageSize,
         string? mimeTypePrefix = null, string? searchTerm = null)
     {
-        var items = await _db.FetchAsync<MediaAsset>(
-            "EXEC usp_MediaAsset_List @0, @1, @2, @3, NULL",
-            (object?)mimeTypePrefix, (object?)searchTerm, page, pageSize);
+        // Use ADO.NET directly — PetaPoco's FetchAsync wraps SP in a SELECT COUNT(*)
+        // sub-query that breaks the OFFSET/FETCH paging inside the SP.
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_MediaAsset_List @MimeTypePrefix, @SearchTerm, @Page, @PageSize, @TotalRows OUTPUT";
+        cmd.Parameters.AddWithValue("@MimeTypePrefix", (object?)mimeTypePrefix ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@SearchTerm",     (object?)searchTerm     ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Page",     page);
+        cmd.Parameters.AddWithValue("@PageSize",  pageSize);
+        var totalRowsParam = cmd.Parameters.Add("@TotalRows", System.Data.SqlDbType.Int);
+        totalRowsParam.Direction = System.Data.ParameterDirection.Output;
+
+        var items = new List<MediaAsset>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            items.Add(new MediaAsset
+            {
+                Id             = reader.GetInt64(reader.GetOrdinal("Id")),
+                FileName       = reader.GetString(reader.GetOrdinal("FileName")),
+                StoragePath    = reader.GetString(reader.GetOrdinal("StoragePath")),
+                StorageBackend = reader.GetString(reader.GetOrdinal("StorageBackend")),
+                MimeType       = reader.GetString(reader.GetOrdinal("MimeType")),
+                FileSizeBytes  = reader.GetInt64(reader.GetOrdinal("FileSizeBytes")),
+                AltText        = reader.IsDBNull(reader.GetOrdinal("AltText"))        ? null : reader.GetString(reader.GetOrdinal("AltText")),
+                Title          = reader.IsDBNull(reader.GetOrdinal("Title"))          ? null : reader.GetString(reader.GetOrdinal("Title")),
+                Description    = reader.IsDBNull(reader.GetOrdinal("Description"))    ? null : reader.GetString(reader.GetOrdinal("Description")),
+                Tags           = reader.IsDBNull(reader.GetOrdinal("Tags"))           ? null : reader.GetString(reader.GetOrdinal("Tags")),
+                Width          = reader.IsDBNull(reader.GetOrdinal("Width"))          ? null : reader.GetInt32(reader.GetOrdinal("Width")),
+                Height         = reader.IsDBNull(reader.GetOrdinal("Height"))         ? null : reader.GetInt32(reader.GetOrdinal("Height")),
+                UploadedById   = reader.GetInt64(reader.GetOrdinal("UploadedById")),
+                IsVirusScanPassed = reader.IsDBNull(reader.GetOrdinal("IsVirusScanPassed")) ? null : reader.GetBoolean(reader.GetOrdinal("IsVirusScanPassed")),
+                WebPStoragePath = reader.IsDBNull(reader.GetOrdinal("WebPStoragePath")) ? null : reader.GetString(reader.GetOrdinal("WebPStoragePath")),
+                CreatedAt      = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                UpdatedAt      = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            });
+        }
+        // Read OUTPUT param after reader is consumed
+        await reader.CloseAsync();
+        var totalRows = totalRowsParam.Value == DBNull.Value ? items.Count : (int)totalRowsParam.Value;
 
         return new Page<MediaAsset>
         {
-            CurrentPage = page,
+            CurrentPage  = page,
             ItemsPerPage = pageSize,
-            Items = items,
-            TotalItems = items.Count,
+            Items        = items,
+            TotalItems   = totalRows,
         };
     }
 

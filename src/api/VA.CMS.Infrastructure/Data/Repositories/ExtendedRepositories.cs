@@ -443,10 +443,30 @@ public class MediaExtendedRepository : IMediaExtendedRepository
             assetId, passed);
     }
 
-    public async Task<IEnumerable<MediaUsage>> GetUsageAsync(long mediaAssetId)
+    public async Task<IEnumerable<MediaUsageDetail>> GetUsageAsync(long mediaAssetId)
     {
-        return await _db.FetchAsync<MediaUsage>(
-            "EXEC usp_MediaAsset_GetUsage @0", mediaAssetId);
+        // Use ADO.NET — the SP joins ContentEntry and returns Slug, Status, ContentTypeId
+        // which are not columns on the MediaUsage table; PetaPoco's table-name mapping
+        // would fail. Map manually.
+        var results = new List<MediaUsageDetail>();
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_MediaAsset_GetUsage @MediaAssetId";
+        cmd.Parameters.AddWithValue("@MediaAssetId", mediaAssetId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new MediaUsageDetail
+            {
+                ContentEntryId = reader.GetInt64(reader.GetOrdinal("ContentEntryId")),
+                FieldName      = reader.GetString(reader.GetOrdinal("FieldName")),
+                Slug           = reader.GetString(reader.GetOrdinal("Slug")),
+                Status         = reader.GetString(reader.GetOrdinal("Status")),
+                ContentTypeId  = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
+            });
+        }
+        return results;
     }
 
     public async Task<int> SafeDeleteAsync(long assetId)
