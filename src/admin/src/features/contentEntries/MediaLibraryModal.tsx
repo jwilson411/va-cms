@@ -1,13 +1,21 @@
 /**
- * MediaLibraryModal — opens a USWDS dialog for selecting media assets (issue #31).
+ * MediaLibraryModal — USWDS-compliant dialog for selecting media assets (issue #31).
  *
  * AC: "Media insertion opens media library modal"
  *
- * This is a functional stub that renders a USWDS modal dialog with a placeholder
- * media asset list. A future story (#65 or #66) will wire in the live media API.
+ * Keyboard accessibility (issue #64):
+ *   - Focus is trapped inside the dialog while open (WCAG 2.1 SC 2.1.2).
+ *   - First focusable element receives focus on open.
+ *   - Escape closes the dialog and restores focus to the trigger element.
+ *   - Tab / Shift+Tab cycle within the modal.
+ *   - Focus is restored to the element that opened the modal on close.
+ *
+ * USWDS Modal pattern:
+ *   https://designsystem.digital.gov/components/modal/
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 export interface MediaLibraryModalProps {
   /**
@@ -29,30 +37,21 @@ const PLACEHOLDER_ASSETS = [
 
 /**
  * USWDS-compliant modal dialog for selecting a media asset from the library.
- * Traps focus while open. Closes on Escape key or overlay click.
+ *
+ * Focus is trapped inside the dialog via the useFocusTrap hook, which:
+ *   - Focuses the first interactive element on open.
+ *   - Cycles Tab / Shift+Tab within the dialog.
+ *   - Calls onClose when Escape is pressed.
+ *   - Restores the previously-focused element on unmount.
  */
 export function MediaLibraryModal({
   onSelect,
   onClose,
 }: MediaLibraryModalProps): JSX.Element {
-  const firstFocusRef = useRef<HTMLButtonElement | null>(null);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Focus the first focusable element on mount
-  useEffect(() => {
-    firstFocusRef.current?.focus();
-  }, []);
-
-  // Close on Escape key
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  // Trap focus inside the dialog; Escape closes it.
+  useFocusTrap(dialogRef, { onEscape: onClose });
 
   return (
     <>
@@ -90,7 +89,6 @@ export function MediaLibraryModal({
               {PLACEHOLDER_ASSETS.map((asset) => (
                 <li key={asset.id} className="va-cms-media-asset">
                   <button
-                    ref={asset.id === '1' ? firstFocusRef : undefined}
                     type="button"
                     className="usa-button usa-button--outline va-cms-media-asset__btn"
                     onClick={() => onSelect(asset.url, asset.altText)}
@@ -104,6 +102,8 @@ export function MediaLibraryModal({
             </ul>
           </div>
 
+          {/* Close button — always last in DOM so Shift+Tab from the first asset
+              wraps here, and Tab from this button wraps to the first asset. */}
           <button
             type="button"
             className="usa-button usa-modal__close"
