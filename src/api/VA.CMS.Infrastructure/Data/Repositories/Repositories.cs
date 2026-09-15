@@ -88,9 +88,33 @@ public class MediaAssetRepository : IMediaAssetRepository
 
     public async Task<MediaAsset?> GetByIdAsync(long id)
     {
-        var results = await _db.FetchAsync<MediaAsset>(
-            Sql.Builder.Append("SELECT * FROM [MediaAsset] WHERE [Id] = @0", id));
-        return results.FirstOrDefault();
+        // All DB access via EXEC usp_* — no raw DML (NFR-DB-01)
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_MediaAsset_GetById @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+        return new MediaAsset
+        {
+            Id             = reader.GetInt64(reader.GetOrdinal("Id")),
+            FileName       = reader.GetString(reader.GetOrdinal("FileName")),
+            StoragePath    = reader.GetString(reader.GetOrdinal("StoragePath")),
+            StorageBackend = reader.GetString(reader.GetOrdinal("StorageBackend")),
+            MimeType       = reader.GetString(reader.GetOrdinal("MimeType")),
+            FileSizeBytes  = reader.GetInt64(reader.GetOrdinal("FileSizeBytes")),
+            Width          = reader.IsDBNull(reader.GetOrdinal("Width"))  ? null : reader.GetInt32(reader.GetOrdinal("Width")),
+            Height         = reader.IsDBNull(reader.GetOrdinal("Height")) ? null : reader.GetInt32(reader.GetOrdinal("Height")),
+            UploadedById   = reader.GetInt64(reader.GetOrdinal("UploadedById")),
+            IsVirusScanPassed = reader.IsDBNull(reader.GetOrdinal("IsVirusScanPassed")) ? null : reader.GetBoolean(reader.GetOrdinal("IsVirusScanPassed")),
+            AltText        = reader.IsDBNull(reader.GetOrdinal("AltText"))        ? null : reader.GetString(reader.GetOrdinal("AltText")),
+            Title          = reader.IsDBNull(reader.GetOrdinal("Title"))          ? null : reader.GetString(reader.GetOrdinal("Title")),
+            Description    = reader.IsDBNull(reader.GetOrdinal("Description"))    ? null : reader.GetString(reader.GetOrdinal("Description")),
+            Tags           = reader.IsDBNull(reader.GetOrdinal("Tags"))           ? null : reader.GetString(reader.GetOrdinal("Tags")),
+            CreatedAt      = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            UpdatedAt      = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+        };
     }
 
     public async Task<Page<MediaAsset>> ListAsync(int page, int pageSize,
@@ -172,9 +196,25 @@ public class UserRepository : IUserRepository
 
     public async Task<User?> GetByExternalIdAsync(string externalId)
     {
-        return await _db.FirstOrDefaultAsync<User>(
-            Sql.Builder
-                .Append("SELECT * FROM [User] WHERE [ExternalId] = @0", externalId));
+        // All DB access via EXEC usp_* — no raw DML (NFR-DB-01)
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_User_GetByExternalId @ExternalId";
+        cmd.Parameters.AddWithValue("@ExternalId", externalId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+        return new User
+        {
+            Id          = reader.GetInt64(reader.GetOrdinal("Id")),
+            ExternalId  = reader.GetString(reader.GetOrdinal("ExternalId")),
+            Email       = reader.GetString(reader.GetOrdinal("Email")),
+            DisplayName = reader.GetString(reader.GetOrdinal("DisplayName")),
+            IsActive    = reader.GetBoolean(reader.GetOrdinal("IsActive")),
+            LastLoginAt = reader.IsDBNull(reader.GetOrdinal("LastLoginAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastLoginAt")),
+            CreatedAt   = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+            UpdatedAt   = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+        };
     }
 
     public async Task<long> UpsertAsync(string externalId, string email, string displayName)
@@ -206,9 +246,20 @@ public class NavigationMenuRepository : INavigationMenuRepository
 
     public async Task<NavigationMenu?> GetByHandleAsync(string handle)
     {
-        return await _db.FirstOrDefaultAsync<NavigationMenu>(
-            Sql.Builder
-                .Append("SELECT * FROM [NavigationMenu] WHERE [Handle] = @0", handle));
+        // All DB access via EXEC usp_* — no raw DML (NFR-DB-01)
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_NavigationMenu_GetByHandle @Handle";
+        cmd.Parameters.AddWithValue("@Handle", handle);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+        return new NavigationMenu
+        {
+            Id     = reader.GetInt64(reader.GetOrdinal("Id")),
+            Handle = reader.GetString(reader.GetOrdinal("Handle")),
+            Name   = reader.GetString(reader.GetOrdinal("Name")),
+        };
     }
 }
 
