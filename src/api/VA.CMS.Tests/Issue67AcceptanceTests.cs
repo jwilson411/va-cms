@@ -454,4 +454,15 @@ public class Issue67AuditLogStub : IAuditLogRepository
         string? action = null, DateTime? fromDate = null, DateTime? toDate = null,
         int page = 1, int pageSize = 50)
         => Task.FromResult<IEnumerable<AuditLog>>(Array.Empty<AuditLog>());
+
+    public Task<AuditLogPage> ListPagedAsync(
+        long? actorId = null, string? action = null, string? entityType = null,
+        DateTime? fromDate = null, DateTime? toDate = null,
+        int page = 1, int pageSize = 50)
+        => Task.FromResult(new AuditLogPage { Items = [], TotalItems = 0, Page = page, PageSize = pageSize });
+
+    public Task<IReadOnlyList<AuditLogRow>> ExportAsync(
+        long? actorId = null, string? action = null, string? entityType = null,
+        DateTime? fromDate = null, DateTime? toDate = null)
+        => Task.FromResult<IReadOnlyList<AuditLogRow>>(Array.Empty<AuditLogRow>());
 }

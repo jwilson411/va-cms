@@ -11,6 +11,7 @@ import { ContentEntryListPage } from './features/contentEntries';
 import { MediaLibraryPage } from './features/media';
 import { SearchAnalyticsPage } from './features/searchAnalytics';
 import { UserListPage, UserDetailPage } from './features/users';
+import { AuditLogPage } from './features/audit';
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     {/* Issue #56: User directory and role assignment admin UI (FR-USERS-03/04) */}
                     <Route path="/admin/users" element={<UserListPage />} />
                     <Route path="/admin/users/:userId" element={<UserDetailPage />} />
+                    {/* Issue #57: Audit log viewer (FR-USERS-06) */}
+                    <Route path="/admin/audit" element={<AuditLogPage />} />
                     <Route path="*" element={<DashboardPage />} />
                   </Routes>
                 </ProtectedRoute>

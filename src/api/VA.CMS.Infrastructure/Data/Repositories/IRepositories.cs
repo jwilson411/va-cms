@@ -57,4 +57,21 @@ public interface IAuditLogRepository
     Task WriteAsync(long? actorId, string entityType, long entityId, string action, string? diffJson = null);
     Task<IEnumerable<AuditLog>> ListAsync(long? actorId = null, string? entityType = null, string? action = null,
         DateTime? fromDate = null, DateTime? toDate = null, int page = 1, int pageSize = 50);
+
+    /// <summary>
+    /// Paged audit log with total count, filtered by any combination of actor, action, entity type,
+    /// and date range. Returns newest first. Issue #57 — BRD FR-USERS-06.
+    /// </summary>
+    Task<AuditLogPage> ListPagedAsync(
+        long? actorId = null, string? action = null, string? entityType = null,
+        DateTime? fromDate = null, DateTime? toDate = null,
+        int page = 1, int pageSize = 50);
+
+    /// <summary>
+    /// Same filters as ListPagedAsync but returns up to 1000 rows without paging for CSV export.
+    /// Issue #57 — BRD FR-USERS-06.
+    /// </summary>
+    Task<IReadOnlyList<AuditLogRow>> ExportAsync(
+        long? actorId = null, string? action = null, string? entityType = null,
+        DateTime? fromDate = null, DateTime? toDate = null);
 }
