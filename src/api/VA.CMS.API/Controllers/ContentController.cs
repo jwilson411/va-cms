@@ -27,11 +27,16 @@ public class ContentController : ControllerBase
 {
     private readonly IContentEntryRepository _entries;
     private readonly IRbacService _rbac;
+    private readonly IMediaAltTextGuardRepository _altTextGuard;
 
-    public ContentController(IContentEntryRepository entries, IRbacService rbac)
+    public ContentController(
+        IContentEntryRepository entries,
+        IRbacService rbac,
+        IMediaAltTextGuardRepository altTextGuard)
     {
-        _entries = entries;
-        _rbac    = rbac;
+        _entries      = entries;
+        _rbac         = rbac;
+        _altTextGuard = altTextGuard;
     }
 
     // ── Read ─────────────────────────────────────────────────────────────────
@@ -188,16 +193,32 @@ public class ContentController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Direct publish. Requires CanPublish.</summary>
+    /// <summary>
+    /// Direct publish. Requires CanPublish.
+    /// Issue #43 — FR-MEDIA-05: blocks publish if any referenced image asset lacks alt text.
+    /// </summary>
     [HttpPost("{id:long}/publish")]
     [Authorize(Policy = CmsRoles.Policies.CanPublish)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ContentPublishBlockedResponse), StatusCodes.Status422UnprocessableEntity)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Publish(long id)
     {
         var entry = await _entries.GetByIdAsync(id);
         if (entry is null) return NotFound();
+
+        // Alt text guard: block publish if any referenced image lacks alt text.
+        var missingAltText = await _altTextGuard.GetMissingAltTextAsync(id);
+        if (missingAltText.Count > 0)
+        {
+            return UnprocessableEntity(new ContentPublishBlockedResponse(
+                Error: "One or more images referenced by this content are missing alt text and cannot be used in published content.",
+                BlockingAssets: missingAltText
+                    .Select(a => new BlockingAssetItem(a.Id, a.FileName))
+                    .ToList()));
+        }
+
         return NoContent();
     }
 
@@ -352,3 +373,17 @@ public sealed record ContentEntryCreateResponse(long Id);
 
 /// <summary>Response body for POST /api/v1/content/{id}/duplicate. Issue #36.</summary>
 public sealed record ContentEntryDuplicateResponse(long NewEntryId);
+
+// ── Issue #43: Alt text enforcement DTOs ──────────────────────────────────────
+
+/// <summary>
+/// Response body when POST /api/v1/content/{id}/publish is blocked due to missing alt text.
+/// Issue #43 — FR-MEDIA-05.
+/// </summary>
+public sealed record ContentPublishBlockedResponse(
+    string Error,
+    IReadOnlyList<BlockingAssetItem> BlockingAssets);
+
+/// <summary>A single asset that is blocking publish because its alt text is not set.</summary>
+public sealed record BlockingAssetItem(long Id, string FileName);
+

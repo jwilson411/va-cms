@@ -19,14 +19,17 @@ import type { MediaListDto, MediaDetailDto, MediaAssetSummary } from './mediaTyp
 // ── Mock hooks ─────────────────────────────────────────────────────────────────
 
 vi.mock('./useMediaAssets', () => ({
-  useMediaAssets: vi.fn(),
-  useMediaDetail: vi.fn(),
+  useMediaAssets:         vi.fn(),
+  useMediaDetail:         vi.fn(),
+  useUpdateMediaMetadata: vi.fn(),
 }));
 
-import { useMediaAssets, useMediaDetail } from './useMediaAssets';
+import { useMediaAssets, useMediaDetail, useUpdateMediaMetadata } from './useMediaAssets';
 
-const mockUseMediaAssets = useMediaAssets as ReturnType<typeof vi.fn>;
-const mockUseMediaDetail = useMediaDetail as ReturnType<typeof vi.fn>;
+const mockUseMediaAssets         = useMediaAssets         as ReturnType<typeof vi.fn>;
+const mockUseMediaDetail         = useMediaDetail         as ReturnType<typeof vi.fn>;
+// Suppress the "unused variable" ts/lint warning — the mock is needed so the import is resolved.
+const _mockUseUpdateMediaMetadata = useUpdateMediaMetadata as ReturnType<typeof vi.fn>;
 
 // ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -109,6 +112,11 @@ describe('MediaLibraryPage', () => {
     mockUseMediaDetail.mockReturnValue({
       data:      undefined,
       isLoading: false,
+    });
+    // Provide a default no-op mutation return so MediaDetailPanel doesn't throw
+    _mockUseUpdateMediaMetadata.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue(undefined),
+      isPending:   false,
     });
   });
 

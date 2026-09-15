@@ -635,6 +635,40 @@ public class RoleRepository : IRoleRepository
     }
 }
 
+// ── Alt Text Guard ────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Checks whether all image assets referenced by a content entry have alt text set.
+/// Issue #43 — FR-MEDIA-05. Uses usp_MediaAsset_GetMissingAltTextForEntry.
+/// </summary>
+public class MediaAltTextGuardRepository : IMediaAltTextGuardRepository
+{
+    private readonly CmsDatabase _db;
+
+    public MediaAltTextGuardRepository(CmsDatabase db) => _db = db;
+
+    public async Task<IReadOnlyList<MissingAltTextAsset>> GetMissingAltTextAsync(long contentEntryId)
+    {
+        var results = new List<MissingAltTextAsset>();
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_MediaAsset_GetMissingAltTextForEntry @ContentEntryId";
+        cmd.Parameters.AddWithValue("@ContentEntryId", contentEntryId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new MissingAltTextAsset
+            {
+                Id       = reader.GetInt64(reader.GetOrdinal("Id")),
+                FileName = reader.GetString(reader.GetOrdinal("FileName")),
+                MimeType = reader.GetString(reader.GetOrdinal("MimeType")),
+            });
+        }
+        return results;
+    }
+}
+
 // ── Extended Media ────────────────────────────────────────────────────────────
 
 /// <summary>
