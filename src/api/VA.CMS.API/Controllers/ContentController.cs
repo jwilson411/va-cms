@@ -214,6 +214,41 @@ public class ContentController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Update a content entry's slug.
+    /// Validates uniqueness within locale; creates a 301 redirect if the entry is Published.
+    /// Issue #33: FR-NAV-05.
+    /// </summary>
+    [HttpPatch("{id:long}/slug")]
+    [Authorize(Policy = CmsRoles.Policies.CanWrite)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateSlug(long id, [FromBody] ContentEntryUpdateSlugRequest request)
+    {
+        var entry = await _entries.GetByIdAsync(id);
+        if (entry is null) return NotFound();
+
+        if (!_rbac.HasGlobalRole(User,
+                CmsRoles.Editor, CmsRoles.SiteAdmin, CmsRoles.SystemAdmin))
+        {
+            if (!_rbac.IsAuthorizedForSlug(User, entry.Slug, CmsRoles.ContentOwner))
+                return Forbidden("You do not have permission to edit content in this section.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Slug))
+            return BadRequest(new { error = "Slug must not be empty." });
+
+        var actorId = _rbac.GetUserId(User) ?? 0;
+        var (success, errorMsg) = await _entries.UpdateSlugAsync(id, request.Slug.Trim(), actorId);
+
+        if (!success)
+            return BadRequest(new { error = errorMsg ?? "Slug update failed." });
+
+        return NoContent();
+    }
+
     // ── Private helpers ───────────────────────────────────────────────────────
 
     private ObjectResult Forbidden(string message) =>
@@ -228,5 +263,7 @@ public sealed record ContentEntryCreateRequest(
     string? Locale = null);
 
 public sealed record ContentEntryUpdateRequest();   // fields TBD in content-model story
+
+public sealed record ContentEntryUpdateSlugRequest(string Slug);
 
 public sealed record ContentEntryCreateResponse(long Id);

@@ -65,6 +65,7 @@ function makeFormHookResult(overrides: Partial<ReturnType<typeof useContentEntry
     validateOnBlur: vi.fn(),
     slug: 'my-slug',
     setSlug: vi.fn(),
+    slugError: null,
     isSaving: false,
     saveError: null,
     lastSavedAt: null,

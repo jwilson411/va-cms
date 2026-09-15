@@ -7,11 +7,13 @@
  *  - Required fields marked with asterisk
  *  - Inline validation fires on blur
  *  - Auto-save fires every 60 seconds and shows 'Last saved at HH:MM' indicator
+ *  - Issue #33: Slug auto-populates from title; editable; shows URL preview; duplicate error surfaced
  */
 
 import React from 'react';
 import { useContentEntryForm } from './useContentEntryForm';
 import { FieldRenderer } from './FieldRenderers';
+import { SlugField } from './SlugField';
 
 export interface ContentEntryFormPageProps {
   /**
@@ -60,6 +62,7 @@ export function ContentEntryFormPage({
     validateOnBlur,
     slug,
     setSlug,
+    slugError,
     isSaving,
     saveError,
     lastSavedAt,
@@ -148,42 +151,14 @@ export function ContentEntryFormPage({
           }}
           aria-label={`${heading} form`}
         >
-          {/* Slug field — always present */}
-          <div className={`usa-form-group${validationErrors['slug'] ? ' usa-form-group--error' : ''}`}>
-            <label className="usa-label" htmlFor="field-slug">
-              URL slug
-              <abbr title="required" className="usa-hint usa-hint--required">
-                {' '}*
-              </abbr>
-            </label>
-            <span className="usa-hint">
-              The URL path segment for this content entry. Auto-generated from the title.
-            </span>
-            {validationErrors['slug'] && (
-              <span
-                id="field-slug-error"
-                className="usa-error-message"
-                role="alert"
-              >
-                {validationErrors['slug']}
-              </span>
-            )}
-            <input
-              id="field-slug"
-              type="text"
-              className={`usa-input${validationErrors['slug'] ? ' usa-input--error' : ''}`}
-              value={slug}
-              aria-required
-              aria-describedby={validationErrors['slug'] ? 'field-slug-error' : undefined}
-              aria-invalid={!!validationErrors['slug']}
-              onChange={(e) => setSlug(e.target.value)}
-              onBlur={() => {
-                if (!slug) {
-                  // Manual blur validation for slug
-                }
-              }}
-            />
-          </div>
+          {/* ── Slug field — auto-generated from title, editable, shows URL preview ── */}
+          {/* Issue #33: FR-NAV-05 */}
+          <SlugField
+            value={slug}
+            onChange={setSlug}
+            error={slugError ?? validationErrors['slug']}
+            disabled={isSaving}
+          />
 
           {/* Dynamic field renderers from content type schema */}
           {fieldDefs.map((def) => (

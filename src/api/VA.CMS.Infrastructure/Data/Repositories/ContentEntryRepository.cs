@@ -184,6 +184,39 @@ public class ContentEntryRepository : IContentEntryRepository
         };
     }
 
+    /// <summary>
+    /// Update the slug for a content entry (issue #33, FR-NAV-05).
+    /// Calls usp_ContentEntry_UpdateSlug which:
+    ///   - Validates uniqueness within locale (returns error if duplicate)
+    ///   - Creates a 301 Redirect if the entry is Published and the slug changes
+    ///   - Updates ContentEntry.Slug
+    ///   - Audit logs the change
+    /// </summary>
+    public async Task<(bool Success, string? ErrorMessage)> UpdateSlugAsync(
+        long id, string newSlug, long actorId)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_ContentEntry_UpdateSlug @Id, @NewSlug, @ActorId, @Success OUTPUT, @ErrorMessage OUTPUT";
+        cmd.Parameters.AddWithValue("@Id",      id);
+        cmd.Parameters.AddWithValue("@NewSlug", newSlug);
+        cmd.Parameters.AddWithValue("@ActorId", actorId);
+
+        var successParam = cmd.Parameters.Add("@Success", System.Data.SqlDbType.Bit);
+        successParam.Direction = System.Data.ParameterDirection.Output;
+
+        var errorParam = cmd.Parameters.Add("@ErrorMessage", System.Data.SqlDbType.NVarChar, 500);
+        errorParam.Direction = System.Data.ParameterDirection.Output;
+
+        await cmd.ExecuteNonQueryAsync();
+
+        var success = successParam.Value is bool b && b;
+        var error   = errorParam.Value == DBNull.Value ? null : errorParam.Value as string;
+        return (success, error);
+    }
+
     private static void AddNullableParam(
         Microsoft.Data.SqlClient.SqlCommand cmd,
         string name,
