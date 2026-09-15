@@ -131,6 +131,20 @@ public class MediaUsage
     public DateTime CreatedAt { get; set; }
 }
 
+/// <summary>
+/// Extended MediaUsage row returned by usp_MediaAsset_GetUsage —
+/// joins ContentEntry to expose Slug, Status, ContentTypeId.
+/// Issue #42: usage list in media library detail panel.
+/// </summary>
+public class MediaUsageDetail
+{
+    public long   ContentEntryId { get; set; }
+    public string FieldName      { get; set; } = string.Empty;
+    public string Slug           { get; set; } = string.Empty;
+    public string Status         { get; set; } = string.Empty;
+    public long   ContentTypeId  { get; set; }
+}
+
 /// <summary>Result row from usp_Search_FullText.</summary>
 public class SearchResult
 {

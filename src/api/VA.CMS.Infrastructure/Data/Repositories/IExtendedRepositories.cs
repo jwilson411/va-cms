@@ -79,7 +79,11 @@ public interface IUserRoleRepository
 public interface IMediaExtendedRepository
 {
     Task SetVirusScanResultAsync(long assetId, bool passed);
-    Task<IEnumerable<MediaUsage>> GetUsageAsync(long mediaAssetId);
+    /// <summary>
+    /// Returns usage rows joined with ContentEntry columns (Slug, Status, ContentTypeId).
+    /// Issue #42 — detail panel usage list.
+    /// </summary>
+    Task<IEnumerable<MediaUsageDetail>> GetUsageAsync(long mediaAssetId);
     Task<int> SafeDeleteAsync(long assetId);   // 0 = deleted, 1 = blocked
     Task UpsertUsageAsync(long mediaAssetId, long contentEntryId, string fieldName);
     Task DeleteUsageForEntryAsync(long contentEntryId);
