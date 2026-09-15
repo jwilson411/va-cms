@@ -427,4 +427,78 @@ public class AuditLogRepository : IAuditLogRepository
             (object?)actorId, (object?)entityType, (object?)action,
             (object?)fromDate, (object?)toDate, page, pageSize);
     }
+
+    public async Task<AuditLogPage> ListPagedAsync(
+        long? actorId = null, string? action = null, string? entityType = null,
+        DateTime? fromDate = null, DateTime? toDate = null,
+        int page = 1, int pageSize = 50)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_AuditLog_ListPaged " +
+            "@ActorId, @Action, @EntityType, @FromDate, @ToDate, @Page, @PageSize, @TotalRows OUTPUT";
+        cmd.Parameters.AddWithValue("@ActorId",     (object?)actorId    ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Action",      (object?)action     ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@EntityType",  (object?)entityType ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@FromDate",    (object?)fromDate   ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ToDate",      (object?)toDate     ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Page",        page);
+        cmd.Parameters.AddWithValue("@PageSize",    pageSize);
+
+        var totalRowsParam = cmd.Parameters.Add("@TotalRows", System.Data.SqlDbType.Int);
+        totalRowsParam.Direction = System.Data.ParameterDirection.Output;
+
+        var items = new List<AuditLogRow>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            items.Add(MapAuditLogRow(reader));
+        await reader.CloseAsync();
+
+        var total = totalRowsParam.Value == DBNull.Value ? items.Count : (int)totalRowsParam.Value;
+        return new AuditLogPage
+        {
+            Items      = items,
+            TotalItems = total,
+            Page       = page,
+            PageSize   = pageSize,
+        };
+    }
+
+    public async Task<IReadOnlyList<AuditLogRow>> ExportAsync(
+        long? actorId = null, string? action = null, string? entityType = null,
+        DateTime? fromDate = null, DateTime? toDate = null)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_AuditLog_ExportCsv @ActorId, @Action, @EntityType, @FromDate, @ToDate";
+        cmd.Parameters.AddWithValue("@ActorId",    (object?)actorId    ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Action",     (object?)action     ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@EntityType", (object?)entityType ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@FromDate",   (object?)fromDate   ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@ToDate",     (object?)toDate     ?? DBNull.Value);
+
+        var items = new List<AuditLogRow>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            items.Add(MapAuditLogRow(reader));
+        return items;
+    }
+
+    private static AuditLogRow MapAuditLogRow(Microsoft.Data.SqlClient.SqlDataReader r) => new()
+    {
+        Id               = r.GetInt64(r.GetOrdinal("Id")),
+        ActorId          = r.IsDBNull(r.GetOrdinal("ActorId"))          ? null : r.GetInt64(r.GetOrdinal("ActorId")),
+        ActorEmail       = r.IsDBNull(r.GetOrdinal("ActorEmail"))       ? null : r.GetString(r.GetOrdinal("ActorEmail")),
+        ActorDisplayName = r.IsDBNull(r.GetOrdinal("ActorDisplayName")) ? null : r.GetString(r.GetOrdinal("ActorDisplayName")),
+        EntityType       = r.GetString(r.GetOrdinal("EntityType")),
+        EntityId         = r.GetString(r.GetOrdinal("EntityId")),
+        Action           = r.GetString(r.GetOrdinal("Action")),
+        DiffJson         = r.IsDBNull(r.GetOrdinal("DiffJson"))         ? null : r.GetString(r.GetOrdinal("DiffJson")),
+        CreatedAt        = r.GetDateTime(r.GetOrdinal("CreatedAt")),
+    };
 }
+
