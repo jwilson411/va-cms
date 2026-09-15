@@ -145,15 +145,36 @@ public class MediaUsageDetail
     public long   ContentTypeId  { get; set; }
 }
 
-/// <summary>Result row from usp_Search_FullText.</summary>
+/// <summary>
+/// Result row from usp_Search_FullText (issue #49 — FR-SEARCH-02).
+/// V024 migration adds Title, ContentTypeName, Excerpt (summary or plain-text snippet),
+/// and PublishedAt to satisfy the AC: title, content type, slug, summary excerpt, published date.
+/// </summary>
 public class SearchResult
 {
     public long Id { get; set; }
+
+    /// <summary>Value of the 'title' field from FieldsJson. Null when the content type has no title field.</summary>
+    public string? Title { get; set; }
+
     public string Slug { get; set; } = string.Empty;
+
     public long ContentTypeId { get; set; }
+
+    /// <summary>Human-readable content type name (e.g. "News Article").</summary>
+    public string ContentTypeName { get; set; } = string.Empty;
+
     public string Locale { get; set; } = "en-US";
-    public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Summary excerpt — 'summary' field from FieldsJson when present,
+    /// otherwise the first 300 chars of extracted plain text.
+    /// </summary>
     public string? Excerpt { get; set; }
+
+    /// <summary>UpdatedAt of the ContentEntry at the time it was last published.</summary>
+    public DateTime PublishedAt { get; set; }
+
     public int Rank { get; set; }
 }
 

@@ -193,16 +193,23 @@ public class SearchRepository : ISearchRepository
         await using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
+            // V024: SP now returns Title, ContentTypeName, Excerpt (summary|plain), PublishedAt.
+            var ordTitle           = reader.GetOrdinal("Title");
+            var ordContentTypeName = reader.GetOrdinal("ContentTypeName");
+            var ordExcerpt         = reader.GetOrdinal("Excerpt");
+            var ordPublishedAt     = reader.GetOrdinal("PublishedAt");
+
             results.Add(new SearchResult
             {
-                Id = reader.GetInt64(reader.GetOrdinal("Id")),
-                Slug = reader.GetString(reader.GetOrdinal("Slug")),
-                ContentTypeId = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
-                Locale = reader.GetString(reader.GetOrdinal("Locale")),
-                UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
-                Excerpt = reader.IsDBNull(reader.GetOrdinal("Excerpt"))
-                    ? null : reader.GetString(reader.GetOrdinal("Excerpt")),
-                Rank = reader.GetInt32(reader.GetOrdinal("RANK")),
+                Id              = reader.GetInt64(reader.GetOrdinal("Id")),
+                Title           = reader.IsDBNull(ordTitle)           ? null : reader.GetString(ordTitle),
+                Slug            = reader.GetString(reader.GetOrdinal("Slug")),
+                ContentTypeId   = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
+                ContentTypeName = reader.IsDBNull(ordContentTypeName) ? string.Empty : reader.GetString(ordContentTypeName),
+                Locale          = reader.GetString(reader.GetOrdinal("Locale")),
+                Excerpt         = reader.IsDBNull(ordExcerpt)         ? null : reader.GetString(ordExcerpt),
+                PublishedAt     = reader.GetDateTime(ordPublishedAt),
+                Rank            = reader.GetInt32(reader.GetOrdinal("RANK")),
             });
         }
         await reader.CloseAsync();
