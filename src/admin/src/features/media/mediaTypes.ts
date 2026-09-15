@@ -28,11 +28,15 @@ export interface MediaListDto {
 
 /** Usage record within the detail response. */
 export interface MediaUsageSummary {
-  contentEntryId: number;
-  fieldName:      string;
-  slug:           string;
-  status:         string;
-  contentTypeId:  number;
+  contentEntryId:  number;
+  fieldName:       string;
+  slug:            string;
+  status:          string;
+  contentTypeId:   number;
+  /** Human-readable content type display name — e.g. "News Article". Issue #44. */
+  contentTypeName: string;
+  /** Best-effort entry title extracted from FieldsJson; falls back to slug. Issue #44. */
+  entryTitle:      string;
 }
 
 /** Detail response from GET /api/v1/media/{id}. */
