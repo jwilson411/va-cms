@@ -14,3 +14,6 @@ export type { UswdsHeaderProps, NavItem } from './UswdsHeader';
 
 export { UswdsFooter } from './UswdsFooter';
 export type { UswdsFooterProps, FooterNavColumn } from './UswdsFooter';
+
+export { UswdsTable } from './UswdsTable';
+export type { UswdsTableProps } from './UswdsTable';
