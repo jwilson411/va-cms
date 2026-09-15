@@ -256,6 +256,8 @@ builder.Services.AddScoped<IContentEntryRepository, ContentEntryRepository>();
 builder.Services.AddScoped<IContentVersionRepository, ContentVersionRepository>();
 builder.Services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IUserRoleRepository, UserRoleRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>();
 builder.Services.AddScoped<INavigationRepository, NavigationRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();

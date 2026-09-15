@@ -513,9 +513,125 @@ public class UserRoleRepository : IUserRoleRepository
         int page = 1,
         int pageSize = 50)
     {
-        return await _db.FetchAsync<User>(
-            "EXEC usp_User_List @0, @1, @2, @3",
-            (object?)searchTerm, isActive, page, pageSize);
+        // Use ADO.NET directly — PetaPoco wraps SP in a SELECT subquery that
+        // conflicts with the OFFSET/FETCH paging and WHERE clause inside the SP.
+        var results = new List<User>();
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_User_List @SearchTerm, @IsActive, @Page, @PageSize";
+        cmd.Parameters.AddWithValue("@SearchTerm", (object?)searchTerm ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@IsActive", isActive ? 1 : 0);
+        cmd.Parameters.AddWithValue("@Page", page);
+        cmd.Parameters.AddWithValue("@PageSize", pageSize);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new User
+            {
+                Id          = reader.GetInt64(reader.GetOrdinal("Id")),
+                ExternalId  = reader.GetString(reader.GetOrdinal("ExternalId")),
+                Email       = reader.GetString(reader.GetOrdinal("Email")),
+                DisplayName = reader.GetString(reader.GetOrdinal("DisplayName")),
+                IsActive    = reader.GetBoolean(reader.GetOrdinal("IsActive")),
+                LastLoginAt = reader.IsDBNull(reader.GetOrdinal("LastLoginAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastLoginAt")),
+                CreatedAt   = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+                UpdatedAt   = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+            });
+        }
+        return results;
+    }
+
+    public async Task<UserDetail?> GetDetailAsync(long userId)
+    {
+        // SP returns a single user row with RolesJson (FOR JSON PATH).
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_User_GetDetail @Id";
+        cmd.Parameters.AddWithValue("@Id", userId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+
+        var detail = new UserDetail
+        {
+            Id          = reader.GetInt64(reader.GetOrdinal("Id")),
+            Email       = reader.GetString(reader.GetOrdinal("Email")),
+            DisplayName = reader.GetString(reader.GetOrdinal("DisplayName")),
+            IsActive    = reader.GetBoolean(reader.GetOrdinal("IsActive")),
+            LastLoginAt = reader.IsDBNull(reader.GetOrdinal("LastLoginAt")) ? null : reader.GetDateTime(reader.GetOrdinal("LastLoginAt")),
+            CreatedAt   = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+        };
+
+        // Deserialize embedded RolesJson column
+        var rolesJson = reader.IsDBNull(reader.GetOrdinal("RolesJson"))
+            ? null : reader.GetString(reader.GetOrdinal("RolesJson"));
+
+        if (!string.IsNullOrEmpty(rolesJson))
+        {
+            var roles = System.Text.Json.JsonSerializer.Deserialize<List<UserRoleDetail>>(
+                rolesJson,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            detail.Roles = roles ?? [];
+        }
+
+        return detail;
+    }
+}
+
+// ── Role / Section lookup ─────────────────────────────────────────────────────
+
+/// <summary>
+/// Role and section lookup repository. All DB access via EXEC usp_Role_* / usp_ContentSection_* SPs.
+/// Issue #56: user directory role assignment dropdowns.
+/// </summary>
+public class RoleRepository : IRoleRepository
+{
+    private readonly CmsDatabase _db;
+
+    public RoleRepository(CmsDatabase db) => _db = db;
+
+    public async Task<IEnumerable<RoleRow>> ListAllAsync()
+    {
+        var results = new List<RoleRow>();
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Role_List";
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new RoleRow
+            {
+                Id           = reader.GetInt64(reader.GetOrdinal("Id")),
+                Name         = reader.GetString(reader.GetOrdinal("Name")),
+                DisplayName  = reader.GetString(reader.GetOrdinal("DisplayName")),
+                IsSystemRole = reader.GetBoolean(reader.GetOrdinal("IsSystemRole")),
+            });
+        }
+        return results;
+    }
+
+    public async Task<IEnumerable<ContentSectionRow>> ListSectionsAsync()
+    {
+        var results = new List<ContentSectionRow>();
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_ContentSection_List";
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new ContentSectionRow
+            {
+                Id             = reader.GetInt64(reader.GetOrdinal("Id")),
+                Name           = reader.GetString(reader.GetOrdinal("Name")),
+                SlugPrefix     = reader.GetString(reader.GetOrdinal("SlugPrefix")),
+                ParentSectionId = reader.IsDBNull(reader.GetOrdinal("ParentSectionId"))
+                    ? null : reader.GetInt64(reader.GetOrdinal("ParentSectionId")),
+            });
+        }
+        return results;
     }
 }
 

@@ -103,6 +103,20 @@ public interface IUserRoleRepository
         bool isActive = true,
         int page = 1,
         int pageSize = 50);
+
+    /// <summary>
+    /// Get a single user with embedded role assignments (issue #56).
+    /// Returns null when not found.
+    /// </summary>
+    Task<UserDetail?> GetDetailAsync(long userId);
+}
+
+// ── Role / Section lookup ─────────────────────────────────────────────────────
+
+public interface IRoleRepository
+{
+    Task<IEnumerable<RoleRow>> ListAllAsync();
+    Task<IEnumerable<ContentSectionRow>> ListSectionsAsync();
 }
 
 // ── Extended Media ────────────────────────────────────────────────────────────

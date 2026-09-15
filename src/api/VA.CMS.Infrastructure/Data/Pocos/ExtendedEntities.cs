@@ -190,6 +190,47 @@ public class SearchResult
     public int Rank { get; set; }
 }
 
+/// <summary>User detail projection with embedded roles (issue #56).</summary>
+public class UserDetail
+{
+    public long Id { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public bool IsActive { get; set; }
+    public DateTime? LastLoginAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public IReadOnlyList<UserRoleDetail> Roles { get; set; } = [];
+}
+
+/// <summary>Individual role assignment in UserDetail.</summary>
+public class UserRoleDetail
+{
+    public long RoleId { get; set; }
+    public string RoleName { get; set; } = string.Empty;
+    public string RoleDisplayName { get; set; } = string.Empty;
+    public long? SectionId { get; set; }
+    public string? SectionName { get; set; }
+    public string? SectionSlugPrefix { get; set; }
+}
+
+/// <summary>Row returned by usp_Role_List (issue #56).</summary>
+public class RoleRow
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public bool IsSystemRole { get; set; }
+}
+
+/// <summary>Row returned by usp_ContentSection_List (issue #56).</summary>
+public class ContentSectionRow
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string SlugPrefix { get; set; } = string.Empty;
+    public long? ParentSectionId { get; set; }
+}
+
 /// <summary>Result row from usp_User_GetRoles.</summary>
 public class UserRoleAssignment
 {

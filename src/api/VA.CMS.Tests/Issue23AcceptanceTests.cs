@@ -577,6 +577,9 @@ internal sealed class Issue23UserRoleStub : IUserRoleRepository
     public Task<IEnumerable<User>> ListAsync(
         string? searchTerm = null, bool isActive = true, int page = 1, int pageSize = 50)
         => Task.FromResult<IEnumerable<User>>(Array.Empty<User>());
+
+    public Task<UserDetail?> GetDetailAsync(long userId)
+        => Task.FromResult<UserDetail?>(null);
 }
 
 internal sealed class Issue23DbMonitorStub : IDbMonitorRepository
