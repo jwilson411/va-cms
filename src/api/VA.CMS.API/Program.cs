@@ -216,6 +216,13 @@ builder.Services.AddSingleton<IRefreshTokenService, InMemoryRefreshTokenService>
 builder.Services.AddSingleton<IRbacService, RbacService>();
 builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, CmsRoleHandler>();
 
+// Preview token service — issue #34 (BRD FR-AUTH-08)
+builder.Services.AddSingleton<IPreviewTokenService, PreviewTokenService>();
+
+// Markdown renderer (shared by preview and publish pipelines)
+builder.Services.AddSingleton<VA.CMS.Infrastructure.Markdown.IUswdsMarkdownRenderer,
+    VA.CMS.Infrastructure.Markdown.UswdsMarkdownRenderer>();
+
 // Seed (demo)
 builder.Services.AddScoped<ISeedService, DemoSeedService>();
 

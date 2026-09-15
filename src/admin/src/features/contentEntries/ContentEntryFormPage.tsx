@@ -14,6 +14,7 @@ import React from 'react';
 import { useContentEntryForm } from './useContentEntryForm';
 import { FieldRenderer } from './FieldRenderers';
 import { SlugField } from './SlugField';
+import { PreviewButton } from './PreviewButton';
 
 export interface ContentEntryFormPageProps {
   /**
@@ -172,7 +173,7 @@ export function ContentEntryFormPage({
             />
           ))}
 
-          {/* ── Form actions ─────────────────────────────────────────── */}
+          {/* ── Form actions ─────────────────────────────────────── */}
           <div className="usa-form-group">
             <button
               type="submit"
@@ -182,6 +183,14 @@ export function ContentEntryFormPage({
             >
               {isSaving ? 'Saving…' : isEditMode ? 'Save changes' : 'Create entry'}
             </button>
+
+            {/* ── Preview button — issue #34, BRD FR-AUTH-08 ──────────── */}
+            {/* Passes current (possibly unsaved) field values for live preview (AC3) */}
+            <PreviewButton
+              entryId={entryId}
+              fieldValues={fieldValues}
+              isSaving={isSaving}
+            />
 
             {onCancel && (
               <button
