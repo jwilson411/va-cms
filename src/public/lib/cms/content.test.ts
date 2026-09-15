@@ -3,11 +3,13 @@
  *
  * Tests for CMS content fetching utilities.
  * Issue #58 — Standard Page template.
+ * Issue #59 — News Article template.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   fetchStandardPage,
+  fetchNewsArticle,
   extractH2Sections,
   injectH2Ids,
 } from './content';
@@ -171,5 +173,98 @@ describe('fetchStandardPage', () => {
 
     const result = await fetchStandardPage('test-page');
     expect(result).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchNewsArticle
+// ---------------------------------------------------------------------------
+
+describe('fetchNewsArticle', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('returns null on 404 response', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    } as Response);
+
+    const result = await fetchNewsArticle('nonexistent-article');
+    expect(result).toBeNull();
+  });
+
+  it('returns null on network error', async () => {
+    global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'));
+
+    const result = await fetchNewsArticle('test-article');
+    expect(result).toBeNull();
+  });
+
+  it('returns the parsed content entry on success', async () => {
+    const mockEntry = {
+      id: 2,
+      contentTypeId: 2,
+      contentTypeName: 'news_article',
+      slug: 'va-expands-services',
+      locale: 'en-US',
+      status: 'Published',
+      fields: {
+        title: 'VA Expands Services',
+        summary: 'A summary.',
+        body: '## Overview\n\nContent.',
+        renderedBody: '<h2>Overview</h2><p>Content.</p>',
+        author: 'Jane Smith',
+        publishDate: '2026-09-15T00:00:00Z',
+        featuredImage: {
+          storageUrl: '/media/hero.jpg',
+          altText: 'A VA facility',
+        },
+        topics: [
+          { slug: 'mental-health', name: 'Mental Health' },
+        ],
+      },
+      publishedAt: '2026-09-15T00:00:00Z',
+    };
+
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => mockEntry,
+    } as unknown as Response);
+
+    const result = await fetchNewsArticle('va-expands-services');
+    expect(result).not.toBeNull();
+    expect(result?.fields.title).toBe('VA Expands Services');
+    expect(result?.fields.author).toBe('Jane Smith');
+    expect(result?.fields.featuredImage?.altText).toBe('A VA facility');
+    expect(result?.fields.topics).toHaveLength(1);
+  });
+
+  it('returns null on non-404 error status', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+    } as Response);
+
+    const result = await fetchNewsArticle('test-article');
+    expect(result).toBeNull();
+  });
+
+  it('uses ?type=news_article query parameter in the request URL', async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      json: async () => ({}),
+    } as Response);
+
+    await fetchNewsArticle('my-article');
+
+    const calledUrl = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(calledUrl).toContain('type=news_article');
+    expect(calledUrl).toContain('my-article');
   });
 });
