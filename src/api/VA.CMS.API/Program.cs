@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using VA.CMS.API.Auth;
 using VA.CMS.API.GraphQL;
 using VA.CMS.API.Middleware;
@@ -195,6 +196,58 @@ builder.Services.AddAuthorization(options =>
 // -----------------------------------------------------------------------
 builder.Services.AddControllers();
 
+// -----------------------------------------------------------------------
+// OpenAPI / Swagger (Issue #55 — BRD FR-DEV-01)
+// -----------------------------------------------------------------------
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title       = "VA CMS REST API",
+        Version     = "v1",
+        Description = "Headless content management API for VA CMS. " +
+                      "BRD FR-DEV-01: OpenAPI 3.0 spec auto-generated from controllers.",
+        Contact = new OpenApiContact
+        {
+            Name  = "VA CMS Team",
+            Email = "cms@va.gov",
+        },
+    });
+
+    // JWT Bearer security scheme so Swagger UI can authenticate
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name         = "Authorization",
+        Type         = SecuritySchemeType.Http,
+        Scheme       = "bearer",
+        BearerFormat = "JWT",
+        In           = ParameterLocation.Header,
+        Description  = "Enter your JWT access token (issued by /api/auth/login).",
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id   = "Bearer",
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+
+    // Include XML doc comments from controllers (all documented with <summary> tags)
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = System.IO.Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (System.IO.File.Exists(xmlPath))
+        options.IncludeXmlComments(xmlPath);
+});
+
 // PetaPoco database
 builder.Services.AddScoped<CmsDatabase>(_ => new CmsDatabase(connectionString));
 
@@ -347,6 +400,23 @@ Console.ResetColor();
 // -----------------------------------------------------------------------
 if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
+
+// -----------------------------------------------------------------------
+// Swagger UI — accessible at /swagger in Development (AC: Issue #55)
+// -----------------------------------------------------------------------
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger(c =>
+    {
+        c.RouteTemplate = "swagger/{documentName}/swagger.json";
+    });
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "VA CMS REST API v1");
+        c.RoutePrefix = "swagger";
+        c.DocumentTitle = "VA CMS API";
+    });
+}
 
 app.UseRouting();
 
