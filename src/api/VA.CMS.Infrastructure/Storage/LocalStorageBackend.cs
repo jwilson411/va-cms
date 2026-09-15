@@ -39,6 +39,15 @@ public class LocalStorageBackend : IStorageBackend
         return storagePath;
     }
 
+    /// <inheritdoc />
+    public Task DeleteAsync(string storagePath, CancellationToken ct = default)
+    {
+        var fullPath = Path.Combine(_options.LocalRootPath, storagePath);
+        if (File.Exists(fullPath))
+            File.Delete(fullPath);
+        return Task.CompletedTask;
+    }
+
     private static void EnsureDirectory(string fullPath)
     {
         var dir = Path.GetDirectoryName(fullPath)

@@ -75,7 +75,7 @@ public class Issue40AcceptanceTests(DatabaseFixture fixture)
     private IMediaAssetRepository AssetRepo() => new MediaAssetRepository(fixture.CreateDb());
 
     private MediaUploadService MakeService() =>
-        new MediaUploadService(new InMemoryStorageBackend(), AssetRepo(), new NoOpImageProcessingService());
+        new MediaUploadService(new InMemoryStorageBackend(), AssetRepo(), new NoOpImageProcessingService(), new NoOpVirusScanService(), new MediaExtendedRepository(fixture.CreateDb()));
 
     private async Task<long> SeedUserAsync() =>
         await TestSeeder.UpsertUserAsync(fixture.ConnectionString);
@@ -196,7 +196,7 @@ public class Issue40AcceptanceTests(DatabaseFixture fixture)
     {
         var userId  = await SeedUserAsync();
         var unc     = new UncStorageBackend(new StorageOptions { UncRootPath = string.Empty });
-        var service = new MediaUploadService(unc, AssetRepo(), new NoOpImageProcessingService());
+        var service = new MediaUploadService(unc, AssetRepo(), new NoOpImageProcessingService(), new NoOpVirusScanService(), new MediaExtendedRepository(fixture.CreateDb()));
 
         var pngBytes = MinimalPng();
         var file     = MakeFormFile(pngBytes, "test.png", "image/png");
@@ -215,7 +215,7 @@ public class Issue40AcceptanceTests(DatabaseFixture fixture)
     {
         var userId  = await SeedUserAsync();
         var azure   = new AzureBlobStorageBackend(new StorageOptions());
-        var service = new MediaUploadService(azure, AssetRepo(), new NoOpImageProcessingService());
+        var service = new MediaUploadService(azure, AssetRepo(), new NoOpImageProcessingService(), new NoOpVirusScanService(), new MediaExtendedRepository(fixture.CreateDb()));
 
         var pngBytes = MinimalPng();
         var file     = MakeFormFile(pngBytes, "img.png", "image/png");
@@ -268,6 +268,12 @@ internal class InMemoryStorageBackend : IStorageBackend
     {
         _files[storagePath] = bytes;
         return Task.FromResult(storagePath);
+    }
+
+    public Task DeleteAsync(string storagePath, CancellationToken ct = default)
+    {
+        _files.Remove(storagePath);
+        return Task.CompletedTask;
     }
 
     public byte[]? GetBytes(string storagePath) =>

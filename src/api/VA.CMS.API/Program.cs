@@ -233,6 +233,9 @@ IStorageBackend storageBackend = storageOptions.Backend?.ToLowerInvariant() swit
 };
 builder.Services.AddSingleton<IStorageBackend>(storageBackend);
 builder.Services.AddSingleton<IImageProcessingService, ImageProcessingService>();
+// Issue #45: virus scan hook — default no-op; VA teams replace with real AV implementation via DI
+builder.Services.AddSingleton<IVirusScanService, NoOpVirusScanService>();
+builder.Services.AddScoped<IMediaExtendedRepository, MediaExtendedRepository>();
 builder.Services.AddScoped<IMediaUploadService, MediaUploadService>();
 
 // Preview token service — issue #34 (BRD FR-AUTH-08)
