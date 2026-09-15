@@ -27,4 +27,12 @@ public interface IContentEntryRepository
         string   sortDir       = "DESC",
         int      page          = 1,
         int      pageSize      = 25);
+
+    /// <summary>
+    /// Update the slug for a content entry.
+    /// Validates uniqueness; creates a 301 redirect if the entry is Published.
+    /// Returns (success, errorMessage). On success errorMessage is null.
+    /// Issue #33: FR-NAV-05.
+    /// </summary>
+    Task<(bool Success, string? ErrorMessage)> UpdateSlugAsync(long id, string newSlug, long actorId);
 }

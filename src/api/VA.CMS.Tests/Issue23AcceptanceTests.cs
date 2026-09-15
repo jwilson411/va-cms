@@ -533,6 +533,9 @@ internal sealed class Issue23ContentEntryStub : IContentEntryRepository
             Page      = page,
             PageSize  = pageSize,
         });
+
+    public Task<(bool Success, string? ErrorMessage)> UpdateSlugAsync(long id, string newSlug, long actorId)
+        => Task.FromResult((true, (string?)null));
 }
 
 internal sealed class Issue23UserRoleStub : IUserRoleRepository

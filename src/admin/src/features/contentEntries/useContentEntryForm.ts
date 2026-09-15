@@ -106,6 +106,11 @@ export interface UseContentEntryFormResult {
   /** Slug state (derived from title if creating) */
   slug: string;
   setSlug: (s: string) => void;
+  /**
+   * Slug-specific error message (e.g. duplicate slug returned by the API — issue #33).
+   * Distinct from validationErrors['slug'] which covers client-side empty validation.
+   */
+  slugError: string | null;
 
   /** Save state */
   isSaving: boolean;
@@ -184,6 +189,8 @@ export function useContentEntryForm({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [saveResult, setSaveResult] = useState<SaveResult | null>(null);
+  // Issue #33: slug-specific error (e.g. duplicate slug returned by API)
+  const [slugError, setSlugError] = useState<string | null>(null);
 
   // Track whether the entry has been saved at least once (for auto-save logic)
   const savedEntryIdRef = useRef<number | undefined>(entryId);
@@ -228,6 +235,17 @@ export function useContentEntryForm({
     [],
   );
 
+  // ── Slug setter: also clears slug error (issue #33) ────────────────────────
+  const slugRef = useRef(slug);
+  slugRef.current = slug;
+  const setSlugClearError = useCallback(
+    (newSlug: string) => {
+      setSlug(newSlug);
+      setSlugError(null);
+    },
+    [setSlug],
+  );
+
   // ── Inline validation on blur ────────────────────────────────────────────────
   const validateOnBlur = useCallback(
     (fieldName: string) => {
@@ -270,6 +288,15 @@ export function useContentEntryForm({
     },
   });
 
+  // Issue #33: mutation to update the slug via PATCH /api/v1/content/{id}/slug
+  const updateSlugMutation = useMutation<void, Error, { slug: string }>({
+    mutationFn: ({ slug: newSlug }) =>
+      patchJson<void>(
+        `${CONTENT_API}/${savedEntryIdRef.current}/slug`,
+        { slug: newSlug },
+      ),
+  });
+
   const createMutation = useMutation<{ id: number }, Error, ContentEntryCreateBody>({
     mutationFn: (body) => postJson<{ id: number }>(CONTENT_API, body),
     onSuccess: (data) => {
@@ -294,6 +321,7 @@ export function useContentEntryForm({
 
       setIsSaving(true);
       setSaveError(null);
+      setSlugError(null);
 
       try {
         const body: ContentEntryUpdateBody = {
@@ -301,8 +329,26 @@ export function useContentEntryForm({
         };
 
         if (savedEntryIdRef.current !== undefined) {
-          // Edit mode — PATCH
+          // Edit mode — PATCH fields
           await updateMutation.mutateAsync(body);
+
+          // Issue #33: if slug changed from what was loaded, PATCH /slug as well.
+          // The existingEntry.slug is the server-side canonical value; slugRef.current is what the user has.
+          const serverSlug = existingEntry?.slug ?? '';
+          const currentSlug = slugRef.current;
+          if (currentSlug && currentSlug !== serverSlug) {
+            try {
+              await updateSlugMutation.mutateAsync({ slug: currentSlug });
+            } catch (slugErr) {
+              // Surface the slug error distinctly so the SlugField can show it
+              const msg =
+                slugErr instanceof Error ? slugErr.message : 'Slug update failed.';
+              setSlugError(msg);
+              // Don't surface as a generic saveError — the field-level error is enough
+              setSaveResult({ ok: false, error: msg });
+              return;
+            }
+          }
         } else {
           // Create mode — POST
           // contentTypeId not available in this hook; caller must handle create
@@ -320,7 +366,7 @@ export function useContentEntryForm({
         setIsSaving(false);
       }
     },
-    [validateAll, updateMutation],
+    [validateAll, updateMutation, updateSlugMutation, existingEntry],
   );
 
   // ── Auto-save every 60 seconds (edit mode only) ──────────────────────────────
@@ -350,7 +396,8 @@ export function useContentEntryForm({
     validationErrors,
     validateOnBlur,
     slug,
-    setSlug,
+    setSlug: setSlugClearError,
+    slugError,
     isSaving,
     saveError,
     lastSavedAt,
