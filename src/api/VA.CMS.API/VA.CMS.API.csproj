@@ -10,4 +10,8 @@
     <PackageReference Include="dbup-sqlserver" Version="7.2.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\VA.CMS.Infrastructure\VA.CMS.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>
