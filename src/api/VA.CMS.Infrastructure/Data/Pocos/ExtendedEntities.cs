@@ -261,3 +261,21 @@ public class UserRoleAssignment
     public long? SectionId { get; set; }
     public string? SectionSlugPrefix { get; set; }
 }
+
+/// <summary>
+/// Enriched redirect row returned by usp_Redirect_List / usp_Redirect_GetById.
+/// Includes creator display name and email for the admin management table.
+/// Issue #48 — BRD FR-NAV-06.
+/// </summary>
+public class RedirectAdminRow
+{
+    public long     Id                    { get; set; }
+    public string   FromPath              { get; set; } = string.Empty;
+    public string   ToPath                { get; set; } = string.Empty;
+    public int      StatusCode            { get; set; } = 301;
+    public bool     IsActive              { get; set; } = true;
+    public long     CreatedById           { get; set; }
+    public string?  CreatedByEmail        { get; set; }
+    public string?  CreatedByDisplayName  { get; set; }
+    public DateTime CreatedAt             { get; set; }
+}

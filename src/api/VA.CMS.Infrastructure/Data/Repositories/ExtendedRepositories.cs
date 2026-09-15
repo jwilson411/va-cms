@@ -234,6 +234,88 @@ public class NavigationRepository : INavigationRepository
         await cmd.ExecuteNonQueryAsync();
         return (long)outParam.Value;
     }
+
+    // ── Redirect admin management (Issue #48 — FR-NAV-06) ───────────────────
+
+    public async Task<(IReadOnlyList<RedirectAdminRow> Rows, int TotalRows)> ListRedirectsAsync(
+        bool? isActive = null,
+        int page = 1,
+        int pageSize = 50)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Redirect_List @IsActive, @Page, @PageSize, @TotalRows OUTPUT";
+        cmd.Parameters.AddWithValue("@IsActive", isActive.HasValue ? (object)isActive.Value : DBNull.Value);
+        cmd.Parameters.AddWithValue("@Page", page);
+        cmd.Parameters.AddWithValue("@PageSize", pageSize);
+        var totalParam = cmd.Parameters.Add("@TotalRows", System.Data.SqlDbType.Int);
+        totalParam.Direction = System.Data.ParameterDirection.Output;
+
+        var rows = new List<RedirectAdminRow>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            rows.Add(MapRedirectAdminRow(reader));
+        }
+
+        await reader.CloseAsync();
+        var total = totalParam.Value == DBNull.Value ? 0 : (int)totalParam.Value;
+        return (rows, total);
+    }
+
+    public async Task<RedirectAdminRow?> GetRedirectByIdAsync(long id)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Redirect_GetById @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+        return MapRedirectAdminRow(reader);
+    }
+
+    public async Task UpdateRedirectAsync(long id, string fromPath, string toPath, int statusCode)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Redirect_Update @Id, @FromPath, @ToPath, @StatusCode";
+        cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@FromPath", fromPath);
+        cmd.Parameters.AddWithValue("@ToPath", toPath);
+        cmd.Parameters.AddWithValue("@StatusCode", statusCode);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task DeactivateRedirectAsync(long id)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Redirect_Deactivate @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private static RedirectAdminRow MapRedirectAdminRow(Microsoft.Data.SqlClient.SqlDataReader reader)
+    {
+        return new RedirectAdminRow
+        {
+            Id                   = reader.GetInt64(reader.GetOrdinal("Id")),
+            FromPath             = reader.GetString(reader.GetOrdinal("FromPath")),
+            ToPath               = reader.GetString(reader.GetOrdinal("ToPath")),
+            StatusCode           = reader.GetInt32(reader.GetOrdinal("StatusCode")),
+            IsActive             = reader.GetBoolean(reader.GetOrdinal("IsActive")),
+            CreatedById          = reader.GetInt64(reader.GetOrdinal("CreatedById")),
+            CreatedByEmail       = reader.IsDBNull(reader.GetOrdinal("CreatedByEmail"))
+                ? null : reader.GetString(reader.GetOrdinal("CreatedByEmail")),
+            CreatedByDisplayName = reader.IsDBNull(reader.GetOrdinal("CreatedByDisplayName"))
+                ? null : reader.GetString(reader.GetOrdinal("CreatedByDisplayName")),
+            CreatedAt            = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
+        };
+    }
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
