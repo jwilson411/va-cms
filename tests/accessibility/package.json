@@ -1,0 +1,20 @@
+{
+  "name": "va-cms-a11y-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "axe-core Playwright accessibility tests for VA CMS admin screens (Section 508 / WCAG 2.1 AA)",
+  "scripts": {
+    "test:a11y": "playwright test",
+    "test:a11y:report": "playwright test --reporter=html",
+    "install-browsers": "playwright install chromium"
+  },
+  "dependencies": {
+    "@axe-core/playwright": "^4.10.1",
+    "@playwright/test": "^1.47.2",
+    "axe-core": "^4.10.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "typescript": "^7.0.2"
+  }
+}
