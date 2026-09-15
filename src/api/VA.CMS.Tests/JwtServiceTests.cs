@@ -89,7 +89,8 @@ public class JwtServiceTests
         Assert.NotNull(principal);
 
         var roles = principal!.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
-        Assert.Contains("ContentOwner:section:7", roles);
+        // New claim format includes slug prefix: "ContentOwner:section:7:prefix:hr/"
+        Assert.Contains(roles, r => r.StartsWith("ContentOwner:section:7:prefix:"));
     }
 
     [Fact]
