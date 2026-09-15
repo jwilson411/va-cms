@@ -62,6 +62,84 @@ public class NavigationRepository : INavigationRepository
 
     public NavigationRepository(CmsDatabase db) => _db = db;
 
+    public async Task<IEnumerable<NavigationItem>> GetMenuTreeAdminAsync(string handle)
+    {
+        var results = new List<NavigationItem>();
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Navigation_GetMenuTreeAdmin @Handle";
+        cmd.Parameters.AddWithValue("@Handle", handle);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new NavigationItem
+            {
+                Id             = reader.GetInt64(reader.GetOrdinal("Id")),
+                MenuId         = reader.GetInt64(reader.GetOrdinal("MenuId")),
+                ParentItemId   = reader.IsDBNull(reader.GetOrdinal("ParentItemId"))
+                    ? null : reader.GetInt64(reader.GetOrdinal("ParentItemId")),
+                Label          = reader.GetString(reader.GetOrdinal("Label")),
+                Url            = reader.IsDBNull(reader.GetOrdinal("Url"))
+                    ? null : reader.GetString(reader.GetOrdinal("Url")),
+                ContentEntryId = reader.IsDBNull(reader.GetOrdinal("ContentEntryId"))
+                    ? null : reader.GetInt64(reader.GetOrdinal("ContentEntryId")),
+                Target         = reader.GetString(reader.GetOrdinal("Target")),
+                SortOrder      = reader.GetInt32(reader.GetOrdinal("SortOrder")),
+                IsVisible      = reader.GetBoolean(reader.GetOrdinal("IsVisible")),
+                Depth          = reader.GetInt32(reader.GetOrdinal("Depth")),
+            });
+        }
+        return results;
+    }
+
+    public async Task<NavigationItem?> GetItemAsync(long id)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Navigation_GetItem @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+        return new NavigationItem
+        {
+            Id             = reader.GetInt64(reader.GetOrdinal("Id")),
+            MenuId         = reader.GetInt64(reader.GetOrdinal("MenuId")),
+            ParentItemId   = reader.IsDBNull(reader.GetOrdinal("ParentItemId"))
+                ? null : reader.GetInt64(reader.GetOrdinal("ParentItemId")),
+            Label          = reader.GetString(reader.GetOrdinal("Label")),
+            Url            = reader.IsDBNull(reader.GetOrdinal("Url"))
+                ? null : reader.GetString(reader.GetOrdinal("Url")),
+            ContentEntryId = reader.IsDBNull(reader.GetOrdinal("ContentEntryId"))
+                ? null : reader.GetInt64(reader.GetOrdinal("ContentEntryId")),
+            Target         = reader.GetString(reader.GetOrdinal("Target")),
+            SortOrder      = reader.GetInt32(reader.GetOrdinal("SortOrder")),
+            IsVisible      = reader.GetBoolean(reader.GetOrdinal("IsVisible")),
+        };
+    }
+
+    public async Task DeleteItemAsync(long id)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Navigation_DeleteItem @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task BulkReorderAsync(long menuId, string itemsJson)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Navigation_BulkReorder @MenuId, @ItemsJson";
+        cmd.Parameters.AddWithValue("@MenuId", menuId);
+        cmd.Parameters.AddWithValue("@ItemsJson", itemsJson);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     public async Task<IEnumerable<NavigationItem>> GetMenuTreeAsync(string handle)
     {
         // Use ADO.NET reader directly — the SP returns a Depth computed column

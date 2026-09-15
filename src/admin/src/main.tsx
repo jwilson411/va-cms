@@ -12,6 +12,7 @@ import { MediaLibraryPage } from './features/media';
 import { SearchAnalyticsPage } from './features/searchAnalytics';
 import { UserListPage, UserDetailPage } from './features/users';
 import { AuditLogPage } from './features/audit';
+import { NavigationEditorPage } from './features/navigation';
 
 const queryClient = new QueryClient();
 
@@ -43,6 +44,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="/admin/users/:userId" element={<UserDetailPage />} />
                     {/* Issue #57: Audit log viewer (FR-USERS-06) */}
                     <Route path="/admin/audit" element={<AuditLogPage />} />
+                    {/* Issue #46: Navigation menu CRUD and drag-and-drop editor (FR-NAV-01, FR-NAV-03) */}
+                    <Route path="/admin/navigation" element={<NavigationEditorPage />} />
                     <Route path="*" element={<DashboardPage />} />
                   </Routes>
                 </ProtectedRoute>

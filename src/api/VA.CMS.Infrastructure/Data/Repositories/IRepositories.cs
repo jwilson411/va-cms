@@ -57,6 +57,14 @@ public interface IUserRepository
 public interface INavigationMenuRepository
 {
     Task<NavigationMenu?> GetByHandleAsync(string handle);
+    /// <summary>List all menus. Issue #46 — FR-NAV-01.</summary>
+    Task<IReadOnlyList<NavigationMenu>> ListAllAsync();
+    /// <summary>Create a menu. Returns new Id. Issue #46 — FR-NAV-01.</summary>
+    Task<long> CreateAsync(string name, string handle);
+    /// <summary>Rename a menu. Issue #46 — FR-NAV-01.</summary>
+    Task UpdateAsync(long id, string name);
+    /// <summary>Delete a menu and cascade-delete its items. Issue #46 — FR-NAV-01.</summary>
+    Task DeleteAsync(long id);
 }
 
 public interface IAuditLogRepository

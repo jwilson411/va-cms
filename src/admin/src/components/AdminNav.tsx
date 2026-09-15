@@ -31,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Users', to: '/admin/users', ariaLabel: 'User directory' },
   { label: 'Audit Log', to: '/admin/audit' },
   { label: 'Search Analytics', to: '/admin/search/analytics' },
+  { label: 'Navigation', to: '/admin/navigation', ariaLabel: 'Navigation menu editor' },
 ];
 
 /**
