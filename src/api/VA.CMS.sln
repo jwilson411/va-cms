@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VA.CMS.Infrastructure", "VA
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VA.CMS.Tests", "VA.CMS.Tests\VA.CMS.Tests.csproj", "{2CEF77C0-9C56-4905-A59F-D51F0D5D1D10}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VA.CMS.CLI", "VA.CMS.CLI\VA.CMS.CLI.csproj", "{7C59B5D8-0420-4456-AE84-D3C3BF24346D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,5 +32,9 @@ Global
 		{2CEF77C0-9C56-4905-A59F-D51F0D5D1D10}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2CEF77C0-9C56-4905-A59F-D51F0D5D1D10}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2CEF77C0-9C56-4905-A59F-D51F0D5D1D10}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7C59B5D8-0420-4456-AE84-D3C3BF24346D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C59B5D8-0420-4456-AE84-D3C3BF24346D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7C59B5D8-0420-4456-AE84-D3C3BF24346D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7C59B5D8-0420-4456-AE84-D3C3BF24346D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
