@@ -68,6 +68,11 @@ public class MediaAsset
     public string? Tags { get; set; }
     public long UploadedById { get; set; }
     public bool? IsVirusScanPassed { get; set; }
+    /// <summary>
+    /// Storage path of the generated WebP variant. NULL for non-image assets or
+    /// when WebP generation was skipped. Issue #41 — FR-MEDIA-02.
+    /// </summary>
+    public string? WebPStoragePath { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

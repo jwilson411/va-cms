@@ -15,6 +15,7 @@
     <PackageReference Include="Markdig" Version="0.37.0" />
     <PackageReference Include="PetaPoco" Version="5.1.304" />
     <PackageReference Include="PetaPoco.Compiled" Version="6.0.683" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.8" />
   </ItemGroup>
 
 </Project>

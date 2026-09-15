@@ -8,7 +8,9 @@ namespace VA.CMS.Infrastructure.Storage;
 /// Media upload service.
 /// Validates the upload, delegates storage to the configured IStorageBackend,
 /// then creates a MediaAsset row via the repository.
-/// BRD FR-MEDIA-01, FR-MEDIA-07, FR-SECURITY-06.
+/// For image files (JPEG, PNG, WebP), also resizes to max 1920px wide and
+/// generates a WebP variant stored alongside the original.
+/// BRD FR-MEDIA-01, FR-MEDIA-02, FR-MEDIA-07, FR-SECURITY-06.
 /// </summary>
 public interface IMediaUploadService
 {
@@ -27,11 +29,16 @@ public class MediaUploadService : IMediaUploadService
 {
     private readonly IStorageBackend _storage;
     private readonly IMediaAssetRepository _assets;
+    private readonly IImageProcessingService _imaging;
 
-    public MediaUploadService(IStorageBackend storage, IMediaAssetRepository assets)
+    public MediaUploadService(
+        IStorageBackend storage,
+        IMediaAssetRepository assets,
+        IImageProcessingService imaging)
     {
         _storage = storage;
         _assets  = assets;
+        _imaging = imaging;
     }
 
     public async Task<(MediaAsset? Asset, string? Error)> UploadAsync(
@@ -56,7 +63,8 @@ public class MediaUploadService : IMediaUploadService
         var ext        = Path.GetExtension(file.FileName)?.TrimStart('.').ToLowerInvariant() ?? string.Empty;
         var safeExt    = string.IsNullOrWhiteSpace(ext) ? "bin" : ext;
         var datePath   = DateTime.UtcNow.ToString("yyyy/MM");
-        var uniqueName = $"{Guid.NewGuid():N}.{safeExt}";
+        var guid       = Guid.NewGuid().ToString("N");
+        var uniqueName = $"{guid}.{safeExt}";
         var storagePath = $"{datePath}/{uniqueName}";
 
         // 5. Read image dimensions (only for image MIME types, best-effort)
@@ -68,7 +76,7 @@ public class MediaUploadService : IMediaUploadService
             (width, height) = TryReadImageDimensions(file);
         }
 
-        // 6. Save file to backend (BRD FR-SECURITY-06: stored outside web root)
+        // 6. Save original file to backend (BRD FR-SECURITY-06: stored outside web root)
         string savedPath;
         try
         {
@@ -95,7 +103,58 @@ public class MediaUploadService : IMediaUploadService
         var id = await _assets.CreateAsync(asset);
         asset.Id = id;
 
+        // 8. Image processing: resize + WebP conversion (BRD FR-MEDIA-02)
+        //    Non-image files skip this step silently.
+        if (_imaging.ShouldProcess(mimeType))
+        {
+            await ProcessImageAsync(file, asset, guid, datePath, ct);
+        }
+
         return (asset, null);
+    }
+
+    // ── Image processing ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reads the upload into memory, generates a WebP variant, saves it alongside
+    /// the original, and updates the MediaAsset row with the WebP path.
+    ///
+    /// Failures are non-fatal: the original upload already succeeded.
+    /// WebP path stays NULL if processing fails.
+    /// </summary>
+    private async Task ProcessImageAsync(
+        IFormFile file,
+        MediaAsset asset,
+        string guid,
+        string datePath,
+        CancellationToken ct)
+    {
+        try
+        {
+            // Read the upload into a byte array (we need it twice: once for ImageSharp, done)
+            byte[] imageBytes;
+            using (var ms = new MemoryStream())
+            {
+                await file.CopyToAsync(ms, ct);
+                imageBytes = ms.ToArray();
+            }
+
+            // Generate WebP (also applies resize if width > 1920px)
+            var webPBytes = await _imaging.GenerateWebPAsync(imageBytes, ct);
+
+            // Store the WebP variant: same directory as original, .webp extension
+            var webPPath = $"{datePath}/{guid}.webp";
+            await _storage.SaveBytesAsync(webPBytes, webPPath, ct);
+
+            // Record WebP path in DB via SP
+            await _assets.UpdateWebPPathAsync(asset.Id, webPPath);
+            asset.WebPStoragePath = webPPath;
+        }
+        catch
+        {
+            // Non-fatal: original upload succeeded, WebP generation failed.
+            // WebPStoragePath remains NULL; serve layer falls back to original.
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

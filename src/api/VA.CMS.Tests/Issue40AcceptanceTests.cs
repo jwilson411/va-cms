@@ -75,7 +75,7 @@ public class Issue40AcceptanceTests(DatabaseFixture fixture)
     private IMediaAssetRepository AssetRepo() => new MediaAssetRepository(fixture.CreateDb());
 
     private MediaUploadService MakeService() =>
-        new MediaUploadService(new InMemoryStorageBackend(), AssetRepo());
+        new MediaUploadService(new InMemoryStorageBackend(), AssetRepo(), new NoOpImageProcessingService());
 
     private async Task<long> SeedUserAsync() =>
         await TestSeeder.UpsertUserAsync(fixture.ConnectionString);
@@ -196,7 +196,7 @@ public class Issue40AcceptanceTests(DatabaseFixture fixture)
     {
         var userId  = await SeedUserAsync();
         var unc     = new UncStorageBackend(new StorageOptions { UncRootPath = string.Empty });
-        var service = new MediaUploadService(unc, AssetRepo());
+        var service = new MediaUploadService(unc, AssetRepo(), new NoOpImageProcessingService());
 
         var pngBytes = MinimalPng();
         var file     = MakeFormFile(pngBytes, "test.png", "image/png");
@@ -215,7 +215,7 @@ public class Issue40AcceptanceTests(DatabaseFixture fixture)
     {
         var userId  = await SeedUserAsync();
         var azure   = new AzureBlobStorageBackend(new StorageOptions());
-        var service = new MediaUploadService(azure, AssetRepo());
+        var service = new MediaUploadService(azure, AssetRepo(), new NoOpImageProcessingService());
 
         var pngBytes = MinimalPng();
         var file     = MakeFormFile(pngBytes, "img.png", "image/png");
@@ -264,6 +264,24 @@ internal class InMemoryStorageBackend : IStorageBackend
         return storagePath;
     }
 
+    public Task<string> SaveBytesAsync(byte[] bytes, string storagePath, CancellationToken ct = default)
+    {
+        _files[storagePath] = bytes;
+        return Task.FromResult(storagePath);
+    }
+
     public byte[]? GetBytes(string storagePath) =>
         _files.TryGetValue(storagePath, out var b) ? b : null;
+}
+
+/// <summary>
+/// No-op imaging service for tests that don't need WebP processing.
+/// ShouldProcess always returns false so the image pipeline is bypassed entirely.
+/// </summary>
+internal class NoOpImageProcessingService : IImageProcessingService
+{
+    public bool ShouldProcess(string mimeType) => false;
+
+    public Task<byte[]> GenerateWebPAsync(byte[] imageBytes, CancellationToken ct = default)
+        => Task.FromResult(Array.Empty<byte>());
 }

@@ -64,7 +64,8 @@ public class MediaController : ControllerBase
             MimeType:      asset.MimeType,
             FileSizeBytes: asset.FileSizeBytes,
             Width:         asset.Width,
-            Height:        asset.Height);
+            Height:        asset.Height,
+            WebPStoragePath: asset.WebPStoragePath);
 
         return CreatedAtAction(nameof(Upload), new { id = asset.Id }, response);
     }
@@ -76,6 +77,8 @@ public class MediaController : ControllerBase
 /// Response body for a successful media upload.
 /// Contains the MediaAsset row's key fields. AltText is empty on upload;
 /// callers must PATCH /api/v1/media/{id} to set it before referencing in content.
+/// WebPStoragePath is populated for JPEG/PNG/WebP uploads (null for other types).
+/// Issue #41 — FR-MEDIA-02.
 /// </summary>
 public sealed record MediaUploadResponse(
     long    Id,
@@ -85,7 +88,8 @@ public sealed record MediaUploadResponse(
     string  MimeType,
     long    FileSizeBytes,
     int?    Width,
-    int?    Height);
+    int?    Height,
+    string? WebPStoragePath);
 
 /// <summary>Response body for a 400 error.</summary>
 public sealed record MediaUploadErrorResponse(string Error);

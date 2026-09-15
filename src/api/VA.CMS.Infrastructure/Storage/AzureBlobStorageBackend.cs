@@ -30,4 +30,12 @@ public class AzureBlobStorageBackend : IStorageBackend
             "Azure Blob Storage backend is not yet implemented. " +
             "Set Storage:Backend to 'local' or 'unc' for now.");
     }
+
+    /// <inheritdoc />
+    public Task<string> SaveBytesAsync(byte[] bytes, string storagePath, CancellationToken ct = default)
+    {
+        throw new NotImplementedException(
+            "Azure Blob Storage backend is not yet implemented. " +
+            "Set Storage:Backend to 'local' or 'unc' for now.");
+    }
 }

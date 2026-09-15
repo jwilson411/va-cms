@@ -32,6 +32,11 @@ public interface IMediaAssetRepository
     Task<Page<MediaAsset>> ListAsync(int page, int pageSize, string? mimeTypePrefix = null, string? searchTerm = null);
     Task<long> CreateAsync(MediaAsset asset);
     Task UpdateAsync(MediaAsset asset);
+    /// <summary>
+    /// Records the WebP storage path for an asset after image processing.
+    /// Calls usp_MediaAsset_UpdateWebPPath. Issue #41 — FR-MEDIA-02.
+    /// </summary>
+    Task UpdateWebPPathAsync(long id, string webPStoragePath);
 }
 
 public interface IUserRepository

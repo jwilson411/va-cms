@@ -21,14 +21,28 @@ public class LocalStorageBackend : IStorageBackend
     public async Task<string> SaveAsync(IFormFile file, string storagePath, CancellationToken ct = default)
     {
         var fullPath = Path.Combine(_options.LocalRootPath, storagePath);
-        var dir = Path.GetDirectoryName(fullPath)
-            ?? throw new InvalidOperationException($"Cannot determine directory for path: {fullPath}");
-
-        Directory.CreateDirectory(dir);
+        EnsureDirectory(fullPath);
 
         await using var fs = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None);
         await file.CopyToAsync(fs, ct);
 
         return storagePath;
+    }
+
+    /// <inheritdoc />
+    public async Task<string> SaveBytesAsync(byte[] bytes, string storagePath, CancellationToken ct = default)
+    {
+        var fullPath = Path.Combine(_options.LocalRootPath, storagePath);
+        EnsureDirectory(fullPath);
+
+        await File.WriteAllBytesAsync(fullPath, bytes, ct);
+        return storagePath;
+    }
+
+    private static void EnsureDirectory(string fullPath)
+    {
+        var dir = Path.GetDirectoryName(fullPath)
+            ?? throw new InvalidOperationException($"Cannot determine directory for path: {fullPath}");
+        Directory.CreateDirectory(dir);
     }
 }
