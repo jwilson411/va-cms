@@ -216,6 +216,9 @@ builder.Services.AddScoped<ISearchRepository, SearchRepository>();
 // Issue #51: Search analytics repository (FR-SEARCH-06)
 builder.Services.AddScoped<ISearchAnalyticsRepository, SearchAnalyticsRepository>();
 
+// Issue #52: Search pins repository (FR-SEARCH-04)
+builder.Services.AddScoped<ISearchPinRepository, SearchPinRepository>();
+
 // Auth services
 builder.Services.AddSingleton(authOptions);
 builder.Services.AddSingleton(jwtOptions);
