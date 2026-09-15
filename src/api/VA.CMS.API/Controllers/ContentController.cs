@@ -250,6 +250,43 @@ public class ContentController : ControllerBase
     }
 
     /// <summary>
+    /// Duplicate a content entry (issue #36, BRD FR-AUTH-07).
+    /// Creates a new Draft with '(Copy)' appended to title, slug cleared,
+    /// all field values copied, media references shared (not re-uploaded).
+    /// Requires CanWrite.
+    /// </summary>
+    [HttpPost("{id:long}/duplicate")]
+    [Authorize(Policy = CmsRoles.Policies.CanWrite)]
+    [ProducesResponseType(typeof(ContentEntryDuplicateResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Duplicate(long id)
+    {
+        var entry = await _entries.GetByIdAsync(id);
+        if (entry is null) return NotFound();
+
+        // Section-scope enforcement for ContentOwner.
+        if (!_rbac.HasGlobalRole(User,
+                CmsRoles.Editor, CmsRoles.SiteAdmin, CmsRoles.SystemAdmin))
+        {
+            if (!_rbac.IsAuthorizedForSlug(User, entry.Slug, CmsRoles.ContentOwner))
+                return Forbidden("You do not have permission to duplicate content in this section.");
+        }
+
+        var actorId = _rbac.GetUserId(User) ?? 0;
+        var (success, newEntryId, errorMsg) = await _entries.DuplicateAsync(id, actorId);
+
+        if (!success)
+            return BadRequest(new { error = errorMsg ?? "Duplicate failed." });
+
+        return CreatedAtAction(
+            nameof(GetById),
+            new { id = newEntryId },
+            new ContentEntryDuplicateResponse(newEntryId!.Value));
+    }
+
+    /// <summary>
     /// Set or clear scheduled publish/expire times for a content entry.
     /// Issue #35: BRD FR-AUTH-04.
     /// Content owner can set a 'Publish at' datetime on a draft (AC1).
@@ -312,3 +349,6 @@ public sealed record ContentEntryScheduleRequest(
     DateTime? ScheduledExpireAt);
 
 public sealed record ContentEntryCreateResponse(long Id);
+
+/// <summary>Response body for POST /api/v1/content/{id}/duplicate. Issue #36.</summary>
+public sealed record ContentEntryDuplicateResponse(long NewEntryId);

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useContentEntries, useContentTypesForPicker } from './useContentEntries';
+import { useContentEntries, useContentTypesForPicker, useDuplicateEntry } from './useContentEntries';
 import type {
   ContentEntryListFilters,
   SortBy,
@@ -149,6 +149,21 @@ export function ContentEntryListPage(): JSX.Element {
 
   // Modal state
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Duplicate mutation state
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const duplicateMutation = useDuplicateEntry();
+
+  const handleDuplicate = useCallback((entryId: number, entryTitle: string) => {
+    setDuplicateError(null);
+    duplicateMutation.mutate(entryId, {
+      onError: (err) => {
+        setDuplicateError(
+          err instanceof Error ? err.message : 'Failed to duplicate entry.',
+        );
+      },
+    });
+  }, [duplicateMutation]);
 
   // Queries
   const { data, isLoading, isError, error } = useContentEntries({
@@ -303,16 +318,26 @@ export function ContentEntryListPage(): JSX.Element {
           </div>
         </fieldset>
 
-        {/* ── Loading / error states ─────────────────────────────────────── */}
+        {/* ── Loading / error states ─────────────────────────────────── */}
         {isLoading && <p>Loading content entries…</p>}
 
-        {isError && (
+        {(isError || duplicateError) && (
           <div className="usa-alert usa-alert--error" role="alert">
             <div className="usa-alert__body">
-              <h2 className="usa-alert__heading">Error loading content entries</h2>
-              <p className="usa-alert__text">
-                {error instanceof Error ? error.message : 'An unexpected error occurred.'}
-              </p>
+              {isError && (
+                <>
+                  <h2 className="usa-alert__heading">Error loading content entries</h2>
+                  <p className="usa-alert__text">
+                    {error instanceof Error ? error.message : 'An unexpected error occurred.'}
+                  </p>
+                </>
+              )}
+              {duplicateError && !isError && (
+                <>
+                  <h2 className="usa-alert__heading">Duplicate failed</h2>
+                  <p className="usa-alert__text">{duplicateError}</p>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -382,6 +407,16 @@ export function ContentEntryListPage(): JSX.Element {
                             aria-label={`Edit ${row.title}`}
                           >
                             Edit
+                          </button>
+                          {' '}
+                          <button
+                            type="button"
+                            className="usa-button usa-button--unstyled"
+                            aria-label={`Duplicate ${row.title}`}
+                            disabled={duplicateMutation.isPending}
+                            onClick={() => handleDuplicate(row.id, row.title)}
+                          >
+                            Duplicate
                           </button>
                         </td>
                       </tr>

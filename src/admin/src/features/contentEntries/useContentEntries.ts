@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   ContentEntryAdminPageDto,
   ContentEntryListFilters,
@@ -61,5 +61,41 @@ export function useContentTypesForPicker() {
     queryKey: ['content-types-picker'],
     queryFn:  () => fetchJson<ContentTypeSummaryForPicker[]>(CONTENT_TYPES_API),
     staleTime: 60_000,
+  });
+}
+
+export interface DuplicateEntryResponse {
+  newEntryId: number;
+}
+
+/**
+ * Mutation: POST /api/v1/content/{id}/duplicate
+ * Issue #36: BRD FR-AUTH-07.
+ * On success, invalidates the content-entries cache so the list refreshes.
+ */
+export function useDuplicateEntry() {
+  const queryClient = useQueryClient();
+
+  return useMutation<DuplicateEntryResponse, Error, number>({
+    mutationFn: async (entryId: number) => {
+      const res = await fetch(`/api/v1/content/${entryId}/duplicate`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        let message = `HTTP ${res.status}`;
+        try {
+          const body = await res.json() as { error?: string };
+          if (body.error) message = body.error;
+        } catch { /* ignore */ }
+        throw new Error(message);
+      }
+      return res.json() as Promise<DuplicateEntryResponse>;
+    },
+    onSuccess: () => {
+      // Invalidate list query so the new duplicate appears
+      void queryClient.invalidateQueries({ queryKey: ['content-entries'] });
+    },
   });
 }

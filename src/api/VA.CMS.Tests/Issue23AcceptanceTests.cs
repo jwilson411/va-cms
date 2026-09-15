@@ -553,6 +553,11 @@ internal sealed class Issue23ContentEntryStub : IContentEntryRepository
 
     public Task ExpireScheduledAsync(long id, long systemActorId)
         => Task.CompletedTask;
+
+    // Issue #36 stub implementation
+    public Task<(bool Success, long? NewEntryId, string? ErrorMessage)> DuplicateAsync(
+        long sourceEntryId, long actorId)
+        => Task.FromResult((true, (long?)99L, (string?)null));
 }
 
 internal sealed class Issue23UserRoleStub : IUserRoleRepository

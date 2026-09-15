@@ -73,4 +73,14 @@ public interface IContentEntryRepository
     /// Issue #35.
     /// </summary>
     Task ExpireScheduledAsync(long id, long systemActorId);
+
+    /// <summary>
+    /// Duplicate a content entry: creates a new Draft with '(Copy)' appended to title,
+    /// slug cleared (must be set before publish), all field values copied,
+    /// and media references shared (not re-uploaded).
+    /// Issue #36: BRD FR-AUTH-07.
+    /// Returns (success, newEntryId, errorMessage). On success errorMessage is null.
+    /// </summary>
+    Task<(bool Success, long? NewEntryId, string? ErrorMessage)> DuplicateAsync(
+        long sourceEntryId, long actorId);
 }
