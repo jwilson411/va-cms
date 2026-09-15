@@ -380,4 +380,23 @@ describe('NewsArticleTemplate — accessibility', () => {
     const criticalViolations = results.violations.filter((v) => v.impact === 'critical');
     expect(criticalViolations).toHaveLength(0);
   });
+
+  // AC: Tests fail CI if any critical OR serious violation found
+  it('passes axe-core with zero serious violations (minimal props)', async () => {
+    const { container } = render(<NewsArticleTemplate {...baseProps} />);
+    const results = await axe(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'best-practice'] },
+    });
+    const seriousViolations = results.violations.filter((v) => v.impact === 'serious');
+    expect(seriousViolations).toHaveLength(0);
+  });
+
+  it('passes axe-core with zero serious violations (full props)', async () => {
+    const { container } = render(<NewsArticleTemplate {...fullProps} />);
+    const results = await axe(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'best-practice'] },
+    });
+    const seriousViolations = results.violations.filter((v) => v.impact === 'serious');
+    expect(seriousViolations).toHaveLength(0);
+  });
 });
