@@ -7,17 +7,17 @@ namespace VA.CMS.Infrastructure.Storage;
 /// <summary>
 /// Media upload service.
 /// Validates the upload, delegates storage to the configured IStorageBackend,
-/// then creates a MediaAsset row via the repository.
+/// runs the virus scan hook, then creates a MediaAsset row via the repository.
 /// For image files (JPEG, PNG, WebP), also resizes to max 1920px wide and
 /// generates a WebP variant stored alongside the original.
-/// BRD FR-MEDIA-01, FR-MEDIA-02, FR-MEDIA-07, FR-SECURITY-06.
+/// BRD FR-MEDIA-01, FR-MEDIA-02, FR-MEDIA-04, FR-MEDIA-07, FR-SECURITY-06.
 /// </summary>
 public interface IMediaUploadService
 {
     /// <summary>
-    /// Validate, store, and record a file upload.
+    /// Validate, store, scan, and record a file upload.
     /// Returns the created MediaAsset on success.
-    /// Returns an error message string on validation or storage failure.
+    /// Returns an error message string on validation, storage, or scan failure.
     /// </summary>
     Task<(MediaAsset? Asset, string? Error)> UploadAsync(
         IFormFile file,
@@ -30,15 +30,21 @@ public class MediaUploadService : IMediaUploadService
     private readonly IStorageBackend _storage;
     private readonly IMediaAssetRepository _assets;
     private readonly IImageProcessingService _imaging;
+    private readonly IVirusScanService _virusScan;
+    private readonly IMediaExtendedRepository _mediaExtended;
 
     public MediaUploadService(
         IStorageBackend storage,
         IMediaAssetRepository assets,
-        IImageProcessingService imaging)
+        IImageProcessingService imaging,
+        IVirusScanService virusScan,
+        IMediaExtendedRepository mediaExtended)
     {
-        _storage = storage;
-        _assets  = assets;
-        _imaging = imaging;
+        _storage       = storage;
+        _assets        = assets;
+        _imaging       = imaging;
+        _virusScan     = virusScan;
+        _mediaExtended = mediaExtended;
     }
 
     public async Task<(MediaAsset? Asset, string? Error)> UploadAsync(
@@ -87,7 +93,49 @@ public class MediaUploadService : IMediaUploadService
             return (null, $"Storage error: {ex.Message}");
         }
 
-        // 7. Create MediaAsset row via stored procedure (EXEC usp_MediaAsset_Create)
+        // 7. Virus scan (BRD FR-MEDIA-04 — Issue #45)
+        //    Scan the saved file from the storage backend by re-opening the upload stream.
+        //    If the scan fails (virus detected): record IsVirusScanPassed=0, delete from storage, reject.
+        bool scanPassed;
+        try
+        {
+            using var scanStream = file.OpenReadStream();
+            scanPassed = await _virusScan.ScanAsync(scanStream, ct);
+        }
+        catch (Exception ex)
+        {
+            // Scan itself threw — treat as scan failure for safety
+            await _storage.DeleteAsync(savedPath, ct);
+            return (null, $"Virus scan error: {ex.Message}");
+        }
+
+        if (!scanPassed)
+        {
+            // File is infected: delete from storage, create the DB row with IsVirusScanPassed=0
+            // so the rejection is auditable, then return error.
+            await _storage.DeleteAsync(savedPath, ct);
+
+            // Create a tombstone asset row so the rejection is auditable (IsVirusScanPassed=0).
+            var rejectedAsset = new MediaAsset
+            {
+                FileName       = Path.GetFileName(file.FileName),
+                StoragePath    = savedPath,      // path that was deleted
+                StorageBackend = _storage.BackendName,
+                MimeType       = mimeType,
+                FileSizeBytes  = file.Length,
+                Width          = width,
+                Height         = height,
+                UploadedById   = uploadedById,
+            };
+            var rejectedId = await _assets.CreateAsync(rejectedAsset);
+            rejectedAsset.Id = rejectedId;
+            await _mediaExtended.SetVirusScanResultAsync(rejectedId, false);
+            rejectedAsset.IsVirusScanPassed = false;
+
+            return (null, "File rejected: virus scan detected a threat. The file has not been stored.");
+        }
+
+        // 8. Create MediaAsset row via stored procedure (EXEC usp_MediaAsset_Create)
         var asset = new MediaAsset
         {
             FileName       = Path.GetFileName(file.FileName),
@@ -103,8 +151,12 @@ public class MediaUploadService : IMediaUploadService
         var id = await _assets.CreateAsync(asset);
         asset.Id = id;
 
-        // 8. Image processing: resize + WebP conversion (BRD FR-MEDIA-02)
-        //    Non-image files skip this step silently.
+        // 9. Record scan passed
+        await _mediaExtended.SetVirusScanResultAsync(id, true);
+        asset.IsVirusScanPassed = true;
+
+        // 10. Image processing: resize + WebP conversion (BRD FR-MEDIA-02)
+        //     Non-image files skip this step silently.
         if (_imaging.ShouldProcess(mimeType))
         {
             await ProcessImageAsync(file, asset, guid, datePath, ct);

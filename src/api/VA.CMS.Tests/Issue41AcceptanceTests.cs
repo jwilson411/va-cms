@@ -130,7 +130,7 @@ public class Issue41AcceptanceTests(DatabaseFixture fixture)
     {
         var userId  = await SeedUserAsync();
         var storage = new TrackingInMemoryStorageBackend();
-        var service = new MediaUploadService(storage, AssetRepo(), Imaging());
+        var service = new MediaUploadService(storage, AssetRepo(), Imaging(), new NoOpVirusScanService(), new MediaExtendedRepository(fixture.CreateDb()));
 
         // Build a small valid JPEG (use 1×1 PNG converted to JPEG bytes via ImageSharp)
         var jpegBytes = BuildJpegBytes(100, 80);
@@ -166,7 +166,7 @@ public class Issue41AcceptanceTests(DatabaseFixture fixture)
     {
         var userId  = await SeedUserAsync();
         var storage = new TrackingInMemoryStorageBackend();
-        var service = new MediaUploadService(storage, AssetRepo(), Imaging());
+        var service = new MediaUploadService(storage, AssetRepo(), Imaging(), new NoOpVirusScanService(), new MediaExtendedRepository(fixture.CreateDb()));
 
         var pngBytes = MinimalPng1x1();
         var file     = MakeFormFile(pngBytes, "banner.png", "image/png");
@@ -186,7 +186,7 @@ public class Issue41AcceptanceTests(DatabaseFixture fixture)
     {
         var userId  = await SeedUserAsync();
         var storage = new TrackingInMemoryStorageBackend();
-        var service = new MediaUploadService(storage, AssetRepo(), Imaging());
+        var service = new MediaUploadService(storage, AssetRepo(), Imaging(), new NoOpVirusScanService(), new MediaExtendedRepository(fixture.CreateDb()));
 
         var pdfBytes = System.Text.Encoding.UTF8.GetBytes("%PDF-1.4 content");
         var file     = MakeFormFile(pdfBytes, "report.pdf", "application/pdf");
@@ -207,7 +207,7 @@ public class Issue41AcceptanceTests(DatabaseFixture fixture)
     {
         var userId  = await SeedUserAsync();
         var storage = new TrackingInMemoryStorageBackend();
-        var service = new MediaUploadService(storage, AssetRepo(), Imaging());
+        var service = new MediaUploadService(storage, AssetRepo(), Imaging(), new NoOpVirusScanService(), new MediaExtendedRepository(fixture.CreateDb()));
 
         // Minimal GIF89a header (13 bytes, treated as image/gif)
         var gifBytes = Convert.FromBase64String(
@@ -230,7 +230,7 @@ public class Issue41AcceptanceTests(DatabaseFixture fixture)
     {
         var userId  = await SeedUserAsync();
         var storage = new TrackingInMemoryStorageBackend();
-        var service = new MediaUploadService(storage, AssetRepo(), Imaging());
+        var service = new MediaUploadService(storage, AssetRepo(), Imaging(), new NoOpVirusScanService(), new MediaExtendedRepository(fixture.CreateDb()));
 
         var wideJpeg = BuildJpegBytes(2400, 1200);
         var file     = MakeFormFile(wideJpeg, "wide.jpg", "image/jpeg");
@@ -305,6 +305,12 @@ internal class TrackingInMemoryStorageBackend : IStorageBackend
     {
         _files[storagePath] = bytes;
         return Task.FromResult(storagePath);
+    }
+
+    public Task DeleteAsync(string storagePath, CancellationToken ct = default)
+    {
+        _files.Remove(storagePath);
+        return Task.CompletedTask;
     }
 
     public bool Has(string storagePath) => _files.ContainsKey(storagePath);

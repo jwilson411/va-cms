@@ -28,4 +28,12 @@ public interface IStorageBackend
     /// Issue #41 — FR-MEDIA-02.
     /// </summary>
     Task<string> SaveBytesAsync(byte[] bytes, string storagePath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes a previously saved file from storage.
+    /// Called when a virus scan flags the file so it is not retained on disk.
+    /// No-op if the file does not exist.
+    /// Issue #45 — FR-MEDIA-04.
+    /// </summary>
+    Task DeleteAsync(string storagePath, CancellationToken ct = default);
 }

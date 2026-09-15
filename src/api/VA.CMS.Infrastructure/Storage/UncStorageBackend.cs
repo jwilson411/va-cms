@@ -41,6 +41,15 @@ public class UncStorageBackend : IStorageBackend
         return storagePath;
     }
 
+    /// <inheritdoc />
+    public Task DeleteAsync(string storagePath, CancellationToken ct = default)
+    {
+        var fullPath = ResolvePath(storagePath);
+        if (File.Exists(fullPath))
+            File.Delete(fullPath);
+        return Task.CompletedTask;
+    }
+
     private string ResolvePath(string storagePath)
     {
         if (string.IsNullOrWhiteSpace(_options.UncRootPath))
