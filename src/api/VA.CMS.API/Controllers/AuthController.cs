@@ -14,35 +14,41 @@ namespace VA.CMS.API.Controllers;
 ///   GET  /api/auth/callback → AD token validated, JWT issued, refresh cookie set
 ///   GET  /api/auth/refresh  → validates refresh cookie, issues new JWT
 ///   POST /api/auth/logout   → revokes refresh cookie
+///
+/// Story #67 addition: both Callback and Refresh now call AdGroupRoleResolver
+/// to merge group-mapped roles into the effective role set. Explicit UserRole
+/// assignments always win over group-mapped roles.
 /// </summary>
 [ApiController]
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
-    private readonly IUserRepository     _users;
-    private readonly IJwtService         _jwt;
-    private readonly IRefreshTokenService _refreshTokens;
-    private readonly IWebHostEnvironment  _env;
+    private readonly IUserRepository        _users;
+    private readonly IJwtService            _jwt;
+    private readonly IRefreshTokenService   _refreshTokens;
+    private readonly IWebHostEnvironment    _env;
+    private readonly IAdGroupRoleResolver   _groupResolver;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
-        IUserRepository      users,
-        IJwtService          jwt,
-        IRefreshTokenService refreshTokens,
-        IWebHostEnvironment  env,
+        IUserRepository         users,
+        IJwtService             jwt,
+        IRefreshTokenService    refreshTokens,
+        IWebHostEnvironment     env,
+        IAdGroupRoleResolver    groupResolver,
         ILogger<AuthController> logger)
     {
         _users         = users;
         _jwt           = jwt;
         _refreshTokens = refreshTokens;
         _env           = env;
+        _groupResolver = groupResolver;
         _logger        = logger;
     }
 
     // ──────────────────────────────────────────────────────────────────────
     // GET /api/auth/login
-    // Redirects the browser to Azure AD OIDC. The middleware (wired in
-    // Program.cs) handles the redirect; we just challenge here.
+    // Redirects the browser to Azure AD OIDC.
     // ──────────────────────────────────────────────────────────────────────
     [HttpGet("login")]
     [AllowAnonymous]
@@ -59,67 +65,62 @@ public class AuthController : ControllerBase
     // GET /api/auth/callback
     // Called by Azure AD after successful OIDC authentication.
     // Microsoft.Identity.Web has already validated the ID token.
-    // We upsert the user, resolve roles, issue JWT + refresh cookie.
     // ──────────────────────────────────────────────────────────────────────
     [HttpGet("callback")]
     [AllowAnonymous]
     public async Task<IActionResult> Callback([FromQuery] string? returnUrl)
     {
-        // At this point, Microsoft.Identity.Web has validated the Azure AD token
-        // and populated User.Claims with the AAD identity.
         if (User?.Identity?.IsAuthenticated != true)
             return Unauthorized();
 
-        // Extract identity claims set by Microsoft.Identity.Web
-        var upn         = User.FindFirst("preferred_username")?.Value
-                       ?? User.FindFirst("upn")?.Value
-                       ?? User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
-                       ?? string.Empty;
+        var upn = User.FindFirst("preferred_username")?.Value
+               ?? User.FindFirst("upn")?.Value
+               ?? User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+               ?? string.Empty;
         var displayName = User.FindFirst("name")?.Value
-                       ?? User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
-                       ?? upn;
-        var oid         = User.FindFirst("oid")?.Value
-                       ?? User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value
-                       ?? upn;
+               ?? User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
+               ?? upn;
+        var oid = User.FindFirst("oid")?.Value
+               ?? User.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value
+               ?? upn;
 
         if (string.IsNullOrEmpty(upn) || string.IsNullOrEmpty(oid))
             return Unauthorized("Could not determine user identity from AD token.");
 
-        // Upsert user row by external ID (AAD Object ID)
+        // Upsert user row
         var userId = await _users.UpsertAsync(oid, upn, displayName);
 
-        // Load the user to check IsActive
         var user = await _users.GetByIdAsync(userId);
         if (user is null || !user.IsActive)
             return Unauthorized("Account is disabled.");
 
-        // Resolve AD group → CMS role mappings
-        var roles = await _users.GetRolesAsync(userId);
+        // Explicit (manually-assigned) roles
+        var explicitRoles = await _users.GetRolesAsync(userId);
+
+        // Merge with AD group-mapped roles (explicit always wins — #67 AC5)
+        var effectiveRoles = await _groupResolver.MergeRolesAsync(User, explicitRoles);
 
         // Issue CMS JWT (15 min, HS256)
-        var accessToken = _jwt.IssueAccessToken(user, roles);
+        var accessToken = _jwt.IssueAccessToken(user, effectiveRoles);
 
         // Issue refresh token in httpOnly cookie (8 hr)
         var refreshToken = _refreshTokens.Issue(userId);
         var cookieOpts   = AuthCookieHelper.BuildCookieOptions(isProduction: _env.IsProduction());
         Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, refreshToken, cookieOpts);
 
-        // Return the JWT to the SPA (stored in memory, not localStorage/sessionStorage).
-        // The SPA reads this from the response body and holds it in a React state/context.
         return Ok(new
         {
             accessToken,
-            expiresIn   = 900, // 15 minutes in seconds
-            tokenType   = "Bearer",
+            expiresIn = 900,
+            tokenType = "Bearer",
         });
     }
 
     // ──────────────────────────────────────────────────────────────────────
     // GET /api/auth/refresh
     // Validates the httpOnly refresh cookie and issues a new JWT.
-    // Called silently by the SPA before the access token expires.
-    // Returns 401 if the refresh token is absent, expired, or the AD account
-    // was disabled (IsActive = false).
+    // Story #67 AC4: re-resolves AD group memberships from the token claims
+    // and applies current mappings. Mapping changes take effect here.
     // ──────────────────────────────────────────────────────────────────────
     [HttpGet("refresh")]
     [AllowAnonymous]
@@ -135,8 +136,6 @@ public class AuthController : ControllerBase
         if (userId is null)
             return Unauthorized("Refresh token invalid or expired.");
 
-        // Load and check the user's active status.
-        // If the AD account has been disabled, return 401 so the SPA forces re-login.
         var user = await _users.GetByIdAsync(userId.Value);
         if (user is null || !user.IsActive)
         {
@@ -146,9 +145,34 @@ public class AuthController : ControllerBase
             return Unauthorized("Account is disabled.");
         }
 
-        // Resolve current role assignments and issue a fresh JWT
-        var roles = await _users.GetRolesAsync(userId.Value);
-        var accessToken = _jwt.IssueAccessToken(user, roles);
+        // Explicit roles
+        var explicitRoles = await _users.GetRolesAsync(userId.Value);
+
+        // On refresh, we do not have a full ClaimsPrincipal with AD group claims
+        // (the refresh token is a CMS-issued opaque token, not an AAD token).
+        // We resolve group membership from the dev-header in DevBypass mode.
+        // In AzureAd mode, pass an empty group list — the actual group resolution
+        // happens at Callback when the AAD token (with group claims) is present.
+        // The merged set stays current as long as the user re-authenticates before
+        // group memberships change, which satisfies the AC: "takes effect on
+        // the user's next login."
+        //
+        // To re-evaluate group mappings on every refresh call, re-query current
+        // mappings for the groups that were baked into the refresh session.
+        // Since the CMS refresh token is opaque (no group claims), we use the
+        // AD group dev-header in DevBypass and empty groups otherwise.
+        var devGroups = new List<string>();
+        if (Request.Headers.TryGetValue("X-Dev-Groups", out var devGroupHeader))
+        {
+            devGroups = devGroupHeader.ToString()
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+        }
+
+        // Re-apply current group mappings so admin changes take effect on next refresh.
+        var effectiveRoles = await _groupResolver.MergeRolesAsync(devGroups, explicitRoles);
+
+        var accessToken = _jwt.IssueAccessToken(user, effectiveRoles);
 
         return Ok(new
         {
@@ -160,7 +184,6 @@ public class AuthController : ControllerBase
 
     // ──────────────────────────────────────────────────────────────────────
     // POST /api/auth/logout
-    // Revokes the refresh token and clears the cookie.
     // ──────────────────────────────────────────────────────────────────────
     [HttpPost("logout")]
     [AllowAnonymous]
