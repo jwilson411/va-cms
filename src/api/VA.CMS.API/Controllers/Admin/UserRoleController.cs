@@ -7,30 +7,42 @@ using VA.CMS.Infrastructure.Data.Repositories;
 namespace VA.CMS.API.Controllers.Admin;
 
 /// <summary>
-/// User and role management endpoints.
-/// Story #23 RBAC gates (BRD FR-USERS-04):
+/// User directory and role management endpoints.
+/// Story #56 — Build user directory and role assignment admin UI.
+/// BRD FR-USERS-03 and FR-USERS-04.
 ///
-///   GET    /api/v1/admin/users                          — CanAdminSystem (SystemAdmin)
-///   GET    /api/v1/admin/users/{id}/roles               — CanAdminSystem
-///   POST   /api/v1/admin/users/{id}/roles               — CanAdminSystem
-///   DELETE /api/v1/admin/users/{userId}/roles/{roleId}  — CanAdminSystem
+///   GET    /api/v1/admin/users                           — CanAdminSystem (SystemAdmin)
+///   GET    /api/v1/admin/users/{id}                      — CanAdminSystem
+///   GET    /api/v1/admin/users/{id}/roles                — CanAdminSystem
+///   POST   /api/v1/admin/users/{id}/roles                — CanAdminSystem
+///   DELETE /api/v1/admin/users/{userId}/roles/{roleId}   — CanAdminSystem
+///   POST   /api/v1/admin/users/{id}/deactivate           — CanAdminSystem
+///   GET    /api/v1/admin/roles                           — CanAdminSystem
+///   GET    /api/v1/admin/sections                        — CanAdminSystem
 /// </summary>
 [ApiController]
-[Route("api/v1/admin/users")]
+[Route("api/v1/admin")]
 [Authorize(Policy = CmsRoles.Policies.CanAdminSystem)]
 public class UserRoleController : ControllerBase
 {
     private readonly IUserRepository _users;
     private readonly IUserRoleRepository _userRoles;
+    private readonly IRoleRepository _roles;
 
-    public UserRoleController(IUserRepository users, IUserRoleRepository userRoles)
+    public UserRoleController(
+        IUserRepository users,
+        IUserRoleRepository userRoles,
+        IRoleRepository roles)
     {
         _users     = users;
         _userRoles = userRoles;
+        _roles     = roles;
     }
 
-    /// <summary>List active users.</summary>
-    [HttpGet]
+    // ── User directory ─────────────────────────────────────────────────────────
+
+    /// <summary>List active users with optional name/email search.</summary>
+    [HttpGet("users")]
     [ProducesResponseType(typeof(IEnumerable<User>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListUsers(
         [FromQuery] string? search = null,
@@ -41,8 +53,21 @@ public class UserRoleController : ControllerBase
         return Ok(users);
     }
 
+    /// <summary>Get a single user with their role assignments.</summary>
+    [HttpGet("users/{userId:long}")]
+    [ProducesResponseType(typeof(UserDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetUser(long userId)
+    {
+        var detail = await _userRoles.GetDetailAsync(userId);
+        if (detail is null) return NotFound();
+        return Ok(detail);
+    }
+
+    // ── Role assignments ───────────────────────────────────────────────────────
+
     /// <summary>Get all role assignments for a user.</summary>
-    [HttpGet("{userId:long}/roles")]
+    [HttpGet("users/{userId:long}/roles")]
     [ProducesResponseType(typeof(IEnumerable<UserRoleAssignment>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetUserRoles(long userId)
@@ -55,7 +80,7 @@ public class UserRoleController : ControllerBase
     }
 
     /// <summary>Assign a role to a user, optionally scoped to a section.</summary>
-    [HttpPost("{userId:long}/roles")]
+    [HttpPost("users/{userId:long}/roles")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> AssignRole(
@@ -65,7 +90,6 @@ public class UserRoleController : ControllerBase
         var user = await _users.GetByIdAsync(userId);
         if (user is null) return NotFound();
 
-        // Look up the actor (granter) from JWT
         var grantedByClaimVal = User.FindFirst("cms_user_id")?.Value;
         long.TryParse(grantedByClaimVal, out var grantedById);
 
@@ -74,7 +98,7 @@ public class UserRoleController : ControllerBase
     }
 
     /// <summary>Revoke a role from a user.</summary>
-    [HttpDelete("{userId:long}/roles/{roleId:long}")]
+    [HttpDelete("users/{userId:long}/roles/{roleId:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeRole(
@@ -87,6 +111,47 @@ public class UserRoleController : ControllerBase
 
         await _userRoles.RevokeRoleAsync(userId, roleId, sectionId);
         return NoContent();
+    }
+
+    // ── User lifecycle ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Deactivate a user — sets IsActive=0.
+    /// The next login attempt returns 403 because the auth pipeline checks IsActive.
+    /// </summary>
+    [HttpPost("users/{userId:long}/deactivate")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeactivateUser(long userId)
+    {
+        var user = await _users.GetByIdAsync(userId);
+        if (user is null) return NotFound();
+
+        var actorClaimVal = User.FindFirst("cms_user_id")?.Value;
+        long.TryParse(actorClaimVal, out var actorId);
+
+        await _userRoles.DeactivateAsync(userId, actorId);
+        return NoContent();
+    }
+
+    // ── Lookup data ────────────────────────────────────────────────────────────
+
+    /// <summary>List all roles (for role assignment dropdown).</summary>
+    [HttpGet("roles")]
+    [ProducesResponseType(typeof(IEnumerable<RoleRow>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListRoles()
+    {
+        var roles = await _roles.ListAllAsync();
+        return Ok(roles);
+    }
+
+    /// <summary>List all content sections (for section-scoped role assignment).</summary>
+    [HttpGet("sections")]
+    [ProducesResponseType(typeof(IEnumerable<ContentSectionRow>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListSections()
+    {
+        var sections = await _roles.ListSectionsAsync();
+        return Ok(sections);
     }
 }
 

@@ -10,6 +10,7 @@ import { ContentTypeBrowserPage } from './pages/ContentTypeBrowserPage';
 import { ContentEntryListPage } from './features/contentEntries';
 import { MediaLibraryPage } from './features/media';
 import { SearchAnalyticsPage } from './features/searchAnalytics';
+import { UserListPage, UserDetailPage } from './features/users';
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="/admin/content" element={<ContentEntryListPage />} />
                     {/* Issue #51: Search analytics full page (FR-SEARCH-06) */}
                     <Route path="/admin/search/analytics" element={<SearchAnalyticsPage />} />
+                    {/* Issue #56: User directory and role assignment admin UI (FR-USERS-03/04) */}
+                    <Route path="/admin/users" element={<UserListPage />} />
+                    <Route path="/admin/users/:userId" element={<UserDetailPage />} />
                     <Route path="*" element={<DashboardPage />} />
                   </Routes>
                 </ProtectedRoute>
