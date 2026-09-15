@@ -227,7 +227,7 @@ public class Issue68AcceptanceTests
     {
         // Locate the example file relative to this test assembly
         var repoRoot = FindRepoRoot();
-        var examplePath = Path.Combine(
+        var examplePath = IoPath.Combine(
             repoRoot, "src", "api", "VA.CMS.API",
             "appsettings.Development.json.example");
 
@@ -248,7 +248,7 @@ public class Issue68AcceptanceTests
     public void AC6_README_Contains_DevBypass_Instructions()
     {
         var repoRoot = FindRepoRoot();
-        var readmePath = Path.Combine(repoRoot, "README.md");
+        var readmePath = IoPath.Combine(repoRoot, "README.md");
 
         Assert.True(File.Exists(readmePath),
             $"README.md not found at: {readmePath}");
@@ -269,7 +269,7 @@ public class Issue68AcceptanceTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
         {
-            if (Directory.Exists(Path.Combine(dir.FullName, "migrations")))
+            if (Directory.Exists(IoPath.Combine(dir.FullName, "migrations")))
                 return dir.FullName;
             dir = dir.Parent;
         }

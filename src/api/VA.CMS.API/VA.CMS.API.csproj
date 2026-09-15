@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="dbup-sqlserver" Version="7.2.0" />
+    <PackageReference Include="HotChocolate.AspNetCore" Version="14.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Negotiate" Version="8.0.29" />
     <PackageReference Include="Microsoft.Identity.Web" Version="2.19.1" />
