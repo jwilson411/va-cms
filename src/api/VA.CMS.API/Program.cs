@@ -1,12 +1,32 @@
 using DbUp;
 using DbUp.Engine;
 using DbUp.ScriptProviders;
-using System.Reflection;
+using VA.CMS.Infrastructure.Data;
+using VA.CMS.Infrastructure.Data.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException(
+        "Connection string 'DefaultConnection' is missing. " +
+        "Copy appsettings.Development.json.example to appsettings.Development.json and fill in values.");
+
+// -----------------------------------------------------------------------
+// PetaPoco: register CmsDatabase as a scoped service
+// All DB queries go through repositories — no raw calls in controllers.
+// -----------------------------------------------------------------------
+builder.Services.AddScoped<CmsDatabase>(_ => new CmsDatabase(connectionString));
+
+// Repository registrations
+builder.Services.AddScoped<IContentEntryRepository, ContentEntryRepository>();
+builder.Services.AddScoped<IContentVersionRepository, ContentVersionRepository>();
+builder.Services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>();
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 
 var app = builder.Build();
 
@@ -16,13 +36,6 @@ var app = builder.Build();
 // exactly once per environment in version order.
 // The API aborts startup if any migration fails — no partial state.
 // -----------------------------------------------------------------------
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException(
-        "Connection string 'DefaultConnection' is missing. " +
-        "Copy appsettings.Development.json.example to appsettings.Development.json and fill in values.");
-
-// Ensure the target database exists (creates it if absent)
-EnsureDatabase.For.SqlDatabase(connectionString);
 
 // Resolve the migrations directory relative to the application base
 var migrationsPath = Path.GetFullPath(
@@ -34,6 +47,9 @@ if (!Directory.Exists(migrationsPath))
     migrationsPath = Path.GetFullPath(
         Path.Combine(AppContext.BaseDirectory, "migrations"));
 }
+
+// Ensure the target database exists (creates it if absent)
+EnsureDatabase.For.SqlDatabase(connectionString);
 
 var upgrader = DeployChanges.To
     .SqlDatabase(connectionString)
