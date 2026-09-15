@@ -12,4 +12,19 @@ public interface IContentEntryRepository
     Task UpdateAsync(ContentEntry entry);
     /// <summary>Soft-archive a content entry (story #23: section-scope enforced by controller).</summary>
     Task ArchiveAsync(long id, long actorId);
+
+    /// <summary>
+    /// Admin list with joins to ContentType + User. Supports filter, sort, pagination.
+    /// Used by the content entry list screen (issue #29, FR-AUTH-01).
+    /// </summary>
+    Task<ContentEntryAdminPage> ListAdminAsync(
+        long?    contentTypeId  = null,
+        string?  status        = null,
+        string?  authorSearch  = null,
+        DateTime? dateFrom     = null,
+        DateTime? dateTo       = null,
+        string   sortBy        = "UpdatedAt",
+        string   sortDir       = "DESC",
+        int      page          = 1,
+        int      pageSize      = 25);
 }
