@@ -3,6 +3,7 @@ using DbUp.Engine;
 using DbUp.ScriptProviders;
 using VA.CMS.Infrastructure.Data;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.API.Controllers.Admin;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +28,7 @@ builder.Services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<IDbMonitorRepository, DbMonitorRepository>();
 
 var app = builder.Build();
 
