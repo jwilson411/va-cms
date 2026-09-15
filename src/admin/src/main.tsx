@@ -13,6 +13,7 @@ import { SearchAnalyticsPage } from './features/searchAnalytics';
 import { UserListPage, UserDetailPage } from './features/users';
 import { AuditLogPage } from './features/audit';
 import { NavigationEditorPage } from './features/navigation';
+import { RedirectsPage } from './features/redirects';
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="/admin/audit" element={<AuditLogPage />} />
                     {/* Issue #46: Navigation menu CRUD and drag-and-drop editor (FR-NAV-01, FR-NAV-03) */}
                     <Route path="/admin/navigation" element={<NavigationEditorPage />} />
+                    {/* Issue #48: Redirect management table (FR-NAV-06) */}
+                    <Route path="/admin/redirects" element={<RedirectsPage />} />
                     <Route path="*" element={<DashboardPage />} />
                   </Routes>
                 </ProtectedRoute>

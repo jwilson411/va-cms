@@ -36,6 +36,30 @@ public interface INavigationRepository
     Task BulkReorderAsync(long menuId, string itemsJson);
     Task<Redirect?> GetRedirectByPathAsync(string fromPath);
     Task<long> CreateRedirectAsync(Redirect redirect);
+
+    // ── Redirect admin management (Issue #48 — FR-NAV-06) ───────────────────
+
+    /// <summary>
+    /// List all redirects (active and inactive) for the admin management table.
+    /// Pass isActive=true to filter to active-only, isActive=false for inactive-only,
+    /// null for all rows.
+    /// </summary>
+    Task<(IReadOnlyList<RedirectAdminRow> Rows, int TotalRows)> ListRedirectsAsync(
+        bool? isActive = null,
+        int page = 1,
+        int pageSize = 50);
+
+    /// <summary>Get a single redirect row with creator info (or null if not found).</summary>
+    Task<RedirectAdminRow?> GetRedirectByIdAsync(long id);
+
+    /// <summary>
+    /// Edit an existing redirect (FromPath / ToPath / StatusCode).
+    /// Automatically deactivates any other active redirect for the same FromPath.
+    /// </summary>
+    Task UpdateRedirectAsync(long id, string fromPath, string toPath, int statusCode);
+
+    /// <summary>Soft-deactivate a redirect (sets IsActive = 0).</summary>
+    Task DeactivateRedirectAsync(long id);
 }
 
 // ── Search ────────────────────────────────────────────────────────────────────
