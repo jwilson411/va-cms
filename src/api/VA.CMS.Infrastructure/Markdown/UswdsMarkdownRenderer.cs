@@ -3,22 +3,28 @@ using Markdig;
 namespace VA.CMS.Infrastructure.Markdown;
 
 /// <summary>
-/// Renders CommonMark Markdown to USWDS-safe HTML using Markdig.
-///
-/// DisableHtml() ensures no raw HTML passthrough — consistent with how
-/// FieldsJson is stored (pure Markdown, never HTML) and how the published
-/// site renders content.  The preview endpoint uses this same pipeline so
-/// that preview output matches what publish produces exactly — no drift.
-///
-/// Issue #34 / BRD FR-AUTH-08.
+/// Issue #66 — BRD FR-AUTH-02a/02b.
+/// Canonical interface for server-side Markdown rendering.
+/// The same pipeline powers both live preview and publish — no drift.
 /// </summary>
-public interface IUswdsMarkdownRenderer
+public interface IMarkdownRenderer
 {
     /// <summary>Render CommonMark Markdown to sanitized HTML.</summary>
     string Render(string markdown);
 }
 
-public sealed class UswdsMarkdownRenderer : IUswdsMarkdownRenderer
+/// <summary>
+/// Renders CommonMark Markdown to USWDS-safe HTML using Markdig.
+/// DisableHtml() ensures no raw HTML passthrough.
+/// Issue #34 / BRD FR-AUTH-08 and Issue #66 / BRD FR-AUTH-02a/02b.
+/// </summary>
+public interface IUswdsMarkdownRenderer : IMarkdownRenderer
+{
+    // Inherits Render(string) from IMarkdownRenderer.
+    // Kept for backward compatibility with existing DI registrations.
+}
+
+public sealed class UswdsMarkdownRenderer : IUswdsMarkdownRenderer, IMarkdownRenderer
 {
     private static readonly MarkdownPipeline _pipeline =
         new MarkdownPipelineBuilder()

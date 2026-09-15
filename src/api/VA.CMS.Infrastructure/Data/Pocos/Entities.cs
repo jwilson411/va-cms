@@ -33,6 +33,24 @@ public class ContentEntry
     public long OwnerId { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// FieldsJson from the joined ContentVersion (published or latest).
+    /// Populated by usp_ContentEntry_GetById — LEFT JOIN on PublishedVersionId.
+    /// Null when no version exists yet.
+    /// [Ignore]: PetaPoco must not include this in SP FetchAsync calls — set only by MapContentEntry.
+    /// </summary>
+    [PetaPoco.Ignore]
+    public string? FieldsJson { get; set; }
+
+    /// <summary>
+    /// Pre-rendered HTML for RichText fields. Populated at publish time by Markdig pipeline.
+    /// Null when entry has not been published or rendered.
+    /// Issue #66: FR-AUTH-02a/02b.
+    /// [Ignore]: PetaPoco must not include this in SP FetchAsync calls — set only by MapContentEntry.
+    /// </summary>
+    [PetaPoco.Ignore]
+    public string? RenderedFieldsJson { get; set; }
 }
 
 [TableName("ContentVersion")]

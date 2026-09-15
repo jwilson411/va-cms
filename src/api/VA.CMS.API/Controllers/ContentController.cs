@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Markdown;
 
 namespace VA.CMS.API.Controllers;
 
@@ -28,15 +29,21 @@ public class ContentController : ControllerBase
     private readonly IContentEntryRepository _entries;
     private readonly IRbacService _rbac;
     private readonly IMediaAltTextGuardRepository _altTextGuard;
+    private readonly IContentVersionRepository _versions;
+    private readonly IMarkdownRenderer _renderer;
 
     public ContentController(
         IContentEntryRepository entries,
         IRbacService rbac,
-        IMediaAltTextGuardRepository altTextGuard)
+        IMediaAltTextGuardRepository altTextGuard,
+        IContentVersionRepository versions,
+        IMarkdownRenderer renderer)
     {
         _entries      = entries;
         _rbac         = rbac;
         _altTextGuard = altTextGuard;
+        _versions     = versions;
+        _renderer     = renderer;
     }
 
     // ── Read ─────────────────────────────────────────────────────────────────
@@ -58,12 +65,25 @@ public class ContentController : ControllerBase
     /// <summary>Get a single content entry by id. All CMS roles permitted.</summary>
     [HttpGet("{id:long}")]
     [Authorize(Policy = CmsRoles.Policies.CanRead)]
-    [ProducesResponseType(typeof(ContentEntry), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ContentEntryDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(long id)
     {
         var entry = await _entries.GetByIdAsync(id);
-        return entry is null ? NotFound() : Ok(entry);
+        if (entry is null) return NotFound();
+
+        return Ok(new ContentEntryDetailResponse(
+            entry.Id,
+            entry.ContentTypeId,
+            entry.Slug,
+            entry.Locale,
+            entry.Status,
+            entry.PublishedVersionId,
+            entry.OwnerId,
+            entry.CreatedAt,
+            entry.UpdatedAt,
+            MarkdownBody: entry.FieldsJson,
+            RenderedBody: entry.RenderedFieldsJson));
     }
 
     // ── Write ─────────────────────────────────────────────────────────────────
@@ -196,6 +216,7 @@ public class ContentController : ControllerBase
     /// <summary>
     /// Direct publish. Requires CanPublish.
     /// Issue #43 — FR-MEDIA-05: blocks publish if any referenced image asset lacks alt text.
+    /// Issue #66 — FR-AUTH-02a: regenerates RenderedFieldsJson on publish.
     /// </summary>
     [HttpPost("{id:long}/publish")]
     [Authorize(Policy = CmsRoles.Policies.CanPublish)]
@@ -217,6 +238,15 @@ public class ContentController : ControllerBase
                 BlockingAssets: missingAltText
                     .Select(a => new BlockingAssetItem(a.Id, a.FileName))
                     .ToList()));
+        }
+
+        // Issue #66: regenerate RenderedFieldsJson on publish (BRD FR-AUTH-02a).
+        var versions = await _versions.ListWithAuthorAsync(id, 1, 1);
+        var latestVersion = versions.FirstOrDefault();
+        if (latestVersion != null)
+        {
+            var renderedJson = RenderFieldsJson(latestVersion.FieldsJson, _renderer);
+            await _versions.UpdateRenderedFieldsAsync(latestVersion.Id, renderedJson);
         }
 
         return NoContent();
@@ -347,6 +377,37 @@ public class ContentController : ControllerBase
 
     private ObjectResult Forbidden(string message) =>
         StatusCode(StatusCodes.Status403Forbidden, new { error = message });
+
+    /// <summary>
+    /// Render all string values in a FieldsJson blob through the Markdown renderer.
+    /// Returns a new JSON object with the same keys but string values replaced with rendered HTML.
+    /// Issue #66: BRD FR-AUTH-02a/02b — RenderedFieldsJson mirrors FieldsJson with HTML values.
+    /// </summary>
+    internal static string RenderFieldsJson(string fieldsJson, IMarkdownRenderer renderer)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(fieldsJson);
+            var rendered = new Dictionary<string, object?>();
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var raw = prop.Value.GetString() ?? string.Empty;
+                    rendered[prop.Name] = renderer.Render(raw);
+                }
+                else
+                {
+                    rendered[prop.Name] = prop.Value.Clone();
+                }
+            }
+            return System.Text.Json.JsonSerializer.Serialize(rendered);
+        }
+        catch
+        {
+            return "{}";
+        }
+    }
 }
 
 // ── Request / response DTOs ───────────────────────────────────────────────────
@@ -386,4 +447,26 @@ public sealed record ContentPublishBlockedResponse(
 
 /// <summary>A single asset that is blocking publish because its alt text is not set.</summary>
 public sealed record BlockingAssetItem(long Id, string FileName);
+
+// ── Issue #66: Content entry detail response with markdownBody/renderedBody ───
+
+/// <summary>
+/// Content entry API response including rendered fields — issue #66, BRD FR-AUTH-02a.
+/// markdownBody: raw CommonMark Markdown stored in FieldsJson (from joined ContentVersion).
+/// renderedBody: server-rendered HTML via Markdig DisableHtml() pipeline.
+/// Both fields are null when the entry has no published version yet.
+/// </summary>
+public sealed record ContentEntryDetailResponse(
+    long      Id,
+    long      ContentTypeId,
+    string    Slug,
+    string    Locale,
+    string    Status,
+    long?     PublishedVersionId,
+    long      OwnerId,
+    DateTime  CreatedAt,
+    DateTime  UpdatedAt,
+    // FR-AUTH-02a/02b: both forms always present for RichText fields
+    string?   MarkdownBody,
+    string?   RenderedBody);
 

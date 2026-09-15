@@ -123,6 +123,17 @@ public class ContentVersionRepository : IContentVersionRepository
         return (long)outParam.Value;
     }
 
+    public async Task UpdateRenderedFieldsAsync(long versionId, string renderedFieldsJson)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_ContentVersion_UpdateRenderedFields @Id, @RenderedFieldsJson";
+        cmd.Parameters.AddWithValue("@Id", versionId);
+        cmd.Parameters.AddWithValue("@RenderedFieldsJson", renderedFieldsJson);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     private static ContentVersionWithAuthor MapVersionWithAuthor(Microsoft.Data.SqlClient.SqlDataReader r) => new()
     {
         Id             = r.GetInt64(r.GetOrdinal("Id")),

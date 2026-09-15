@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Markdown;
 
 namespace VA.CMS.API.Controllers;
 
@@ -20,15 +21,18 @@ public class ContentVersionController : ControllerBase
     private readonly IContentVersionRepository _versions;
     private readonly IContentEntryRepository   _entries;
     private readonly IRbacService              _rbac;
+    private readonly IMarkdownRenderer         _renderer;
 
     public ContentVersionController(
         IContentVersionRepository versions,
         IContentEntryRepository   entries,
-        IRbacService              rbac)
+        IRbacService              rbac,
+        IMarkdownRenderer         renderer)
     {
         _versions = versions;
         _entries  = entries;
         _rbac     = rbac;
+        _renderer = renderer;
     }
 
     // ── GET /api/v1/content/{entryId}/versions ────────────────────────────────
@@ -115,6 +119,14 @@ public class ContentVersionController : ControllerBase
 
         var actorId = _rbac.GetUserId(User) ?? 0;
         var newVersionId = await _versions.RestoreAsync(entryId, versionId, actorId);
+
+        // Issue #66: regenerate RenderedFieldsJson on restore (AC: renderedBody cached on version restore).
+        var targetVersion = await _versions.GetByIdWithAuthorAsync(versionId);
+        if (targetVersion != null)
+        {
+            var renderedJson = ContentController.RenderFieldsJson(targetVersion.FieldsJson, _renderer);
+            await _versions.UpdateRenderedFieldsAsync(newVersionId, renderedJson);
+        }
 
         return Ok(new ContentVersionRestoreResponse(newVersionId));
     }

@@ -314,8 +314,12 @@ builder.Services.AddScoped<IMediaUploadService, MediaUploadService>();
 builder.Services.AddSingleton<IPreviewTokenService, PreviewTokenService>();
 
 // Markdown renderer (shared by preview and publish pipelines)
-builder.Services.AddSingleton<VA.CMS.Infrastructure.Markdown.IUswdsMarkdownRenderer,
-    VA.CMS.Infrastructure.Markdown.UswdsMarkdownRenderer>();
+// Issue #66: register both IMarkdownRenderer and IUswdsMarkdownRenderer from the same singleton.
+builder.Services.AddSingleton<VA.CMS.Infrastructure.Markdown.UswdsMarkdownRenderer>();
+builder.Services.AddSingleton<VA.CMS.Infrastructure.Markdown.IUswdsMarkdownRenderer>(
+    sp => sp.GetRequiredService<VA.CMS.Infrastructure.Markdown.UswdsMarkdownRenderer>());
+builder.Services.AddSingleton<VA.CMS.Infrastructure.Markdown.IMarkdownRenderer>(
+    sp => sp.GetRequiredService<VA.CMS.Infrastructure.Markdown.UswdsMarkdownRenderer>());
 
 // Seed (demo)
 builder.Services.AddScoped<ISeedService, DemoSeedService>();

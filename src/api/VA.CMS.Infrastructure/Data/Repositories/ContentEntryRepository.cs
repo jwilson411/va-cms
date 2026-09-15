@@ -41,7 +41,7 @@ public class ContentEntryRepository : IContentEntryRepository
 
     private static ContentEntry MapContentEntry(Microsoft.Data.SqlClient.SqlDataReader reader)
     {
-        return new ContentEntry
+        var entry = new ContentEntry
         {
             Id = reader.GetInt64(reader.GetOrdinal("Id")),
             ContentTypeId = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
@@ -55,6 +55,24 @@ public class ContentEntryRepository : IContentEntryRepository
             CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             UpdatedAt = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
         };
+
+        // RenderedFieldsJson and FieldsJson come from LEFT JOIN on PublishedVersionId.
+        // Only present when reading from usp_ContentEntry_GetById/GetBySlug — try/catch for safety.
+        // Issue #66: FR-AUTH-02a/02b.
+        try
+        {
+            var ordFields = reader.GetOrdinal("FieldsJson");
+            entry.FieldsJson = reader.IsDBNull(ordFields) ? null : reader.GetString(ordFields);
+        }
+        catch { /* column not present in all queries */ }
+        try
+        {
+            var ordRendered = reader.GetOrdinal("RenderedFieldsJson");
+            entry.RenderedFieldsJson = reader.IsDBNull(ordRendered) ? null : reader.GetString(ordRendered);
+        }
+        catch { /* column not present in all queries */ }
+
+        return entry;
     }
 
     public async Task<Page<ContentEntry>> ListAsync(int page, int pageSize,
