@@ -1,7 +1,9 @@
 using DbUp;
 using DbUp.Engine;
 using DbUp.ScriptProviders;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
@@ -20,6 +22,11 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? throw new InvalidOperationException(
         "Connection string 'DefaultConnection' is missing. " +
         "Copy appsettings.Development.json.example to appsettings.Development.json and fill in values.");
+
+// Auth options — drives which scheme is active.
+var authOptions = builder.Configuration
+    .GetSection(AuthOptions.SectionName)
+    .Get<AuthOptions>() ?? new AuthOptions();
 
 // JWT options — Jwt:SigningKey must be set via environment variable in production.
 var jwtOptions = builder.Configuration
@@ -43,34 +50,88 @@ if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey))
 // -----------------------------------------------------------------------
 // Authentication
 //
-// Two schemes are registered:
-//  1. "AzureAd" (OpenIdConnect/cookie) — handles the OIDC login/callback.
-//     Microsoft.Identity.Web validates the Azure AD token in /api/auth/callback.
-//  2. "Bearer" (JwtBearer) — protects all other API endpoints.
-//     The CMS issues these JWTs after a successful AD login.
+// Three modes (selected by Auth:Mode configuration value):
+//
+//  AzureAd (default):
+//    "AzureAd" (OpenIdConnect/cookie) — handles the OIDC login/callback.
+//    Microsoft.Identity.Web validates the Azure AD token in /api/auth/callback.
+//    "Bearer" (JwtBearer) — protects all other API endpoints.
+//
+//  WindowsAuth:
+//    "Negotiate" — Windows Integrated Auth (Kerberos/NTLM) for IIS intranet.
+//    /api/auth/windows-login extracts the Windows identity and issues a CMS JWT.
+//    "Bearer" (JwtBearer) — protects all other API endpoints.
+//
+//  DevBypass:
+//    No AD; X-Dev-User header accepted as UPN. Development only.
 //
 // The default challenge scheme is JwtBearer so unauthenticated API calls
 // get a 401 rather than an OIDC redirect.
 // -----------------------------------------------------------------------
+switch (authOptions.Mode)
+{
+    case AuthMode.WindowsAuth:
+        // Register Negotiate (Windows Integrated Auth) + JwtBearer.
+        // Negotiate is used only on /api/auth/windows-login — everything else
+        // requires a Bearer JWT.
+        //
+        // In test environments, the real NegotiateHandler requires Kestrel
+        // (IConnectionItemsFeature) which is not available in WebApplicationFactory's
+        // in-memory test server. When WINDOWS_AUTH_FAKE_NEGOTIATE=true is set,
+        // we use a passthrough handler that trusts the X-Test-Windows-Upn header.
+        // This flag must NEVER be set in production environments.
+        var useFakeNegotiate = builder.Configuration["WINDOWS_AUTH_FAKE_NEGOTIATE"] == "true";
+        if (useFakeNegotiate && builder.Environment.IsProduction())
+            throw new InvalidOperationException(
+                "WINDOWS_AUTH_FAKE_NEGOTIATE must not be used in Production.");
 
-// Microsoft.Identity.Web registers the AzureAd OIDC scheme (uses cookies internally).
-// Then chain JwtBearer as the second scheme for API endpoint protection.
-builder.Services
-    .AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
-    })
-    .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"),
-        openIdConnectScheme: "AzureAd",
-        cookieScheme:        "AzureAdCookies")
-    .Services
-    .AddAuthentication()
-    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
-    {
-        var jwtSvc = new JwtService(jwtOptions);
-        options.TokenValidationParameters = jwtSvc.GetValidationParameters();
-    });
+        var authBuilder = builder.Services
+            .AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
+            });
+
+        if (useFakeNegotiate)
+        {
+            // Test-only: passthrough Negotiate handler. Never in Production.
+            authBuilder.AddScheme<AuthenticationSchemeOptions, FakeNegotiateHandler>(
+                NegotiateDefaults.AuthenticationScheme, _ => { });
+        }
+        else
+        {
+            authBuilder.AddNegotiate();
+        }
+
+        authBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+        {
+            var jwtSvc = new JwtService(jwtOptions);
+            options.TokenValidationParameters = jwtSvc.GetValidationParameters();
+        });
+        break;
+
+    case AuthMode.AzureAd:
+    default:
+        // Microsoft.Identity.Web registers the AzureAd OIDC scheme (uses cookies internally).
+        // Then chain JwtBearer as the second scheme for API endpoint protection.
+        builder.Services
+            .AddAuthentication(options =>
+            {
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"),
+                openIdConnectScheme: "AzureAd",
+                cookieScheme:        "AzureAdCookies")
+            .Services
+            .AddAuthentication()
+            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+            {
+                var jwtSvc = new JwtService(jwtOptions);
+                options.TokenValidationParameters = jwtSvc.GetValidationParameters();
+            });
+        break;
+}
 
 // All endpoints require a valid JWT by default.
 // /api/auth/* and /health are explicitly [AllowAnonymous].
@@ -99,6 +160,7 @@ builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IDbMonitorRepository, DbMonitorRepository>();
 
 // Auth services
+builder.Services.AddSingleton(authOptions);
 builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddSingleton<IRefreshTokenService, InMemoryRefreshTokenService>();
