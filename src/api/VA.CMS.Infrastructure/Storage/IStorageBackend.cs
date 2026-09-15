@@ -21,4 +21,11 @@ public interface IStorageBackend
     /// Returns the relative storage path recorded in MediaAsset.StoragePath.
     /// </summary>
     Task<string> SaveAsync(IFormFile file, string storagePath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Saves a raw byte array to storage (used for generated WebP variants).
+    /// Returns the relative storage path.
+    /// Issue #41 — FR-MEDIA-02.
+    /// </summary>
+    Task<string> SaveBytesAsync(byte[] bytes, string storagePath, CancellationToken ct = default);
 }

@@ -232,6 +232,7 @@ IStorageBackend storageBackend = storageOptions.Backend?.ToLowerInvariant() swit
     _            => new LocalStorageBackend(storageOptions),   // default: local
 };
 builder.Services.AddSingleton<IStorageBackend>(storageBackend);
+builder.Services.AddSingleton<IImageProcessingService, ImageProcessingService>();
 builder.Services.AddScoped<IMediaUploadService, MediaUploadService>();
 
 // Preview token service — issue #34 (BRD FR-AUTH-08)

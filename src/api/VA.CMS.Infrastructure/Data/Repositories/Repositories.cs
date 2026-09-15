@@ -173,6 +173,7 @@ public class MediaAssetRepository : IMediaAssetRepository
             Title          = reader.IsDBNull(reader.GetOrdinal("Title"))          ? null : reader.GetString(reader.GetOrdinal("Title")),
             Description    = reader.IsDBNull(reader.GetOrdinal("Description"))    ? null : reader.GetString(reader.GetOrdinal("Description")),
             Tags           = reader.IsDBNull(reader.GetOrdinal("Tags"))           ? null : reader.GetString(reader.GetOrdinal("Tags")),
+            WebPStoragePath = reader.IsDBNull(reader.GetOrdinal("WebPStoragePath")) ? null : reader.GetString(reader.GetOrdinal("WebPStoragePath")),
             CreatedAt      = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
             UpdatedAt      = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
         };
@@ -221,6 +222,18 @@ public class MediaAssetRepository : IMediaAssetRepository
         await _db.ExecuteAsync(
             "EXEC usp_MediaAsset_UpdateMetadata @0, @1, @2, @3, @4",
             asset.Id, asset.AltText, asset.Title, asset.Description, asset.Tags);
+    }
+
+    /// <inheritdoc />
+    public async Task UpdateWebPPathAsync(long id, string webPStoragePath)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_MediaAsset_UpdateWebPPath @Id, @WebPStoragePath";
+        cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@WebPStoragePath", webPStoragePath);
+        await cmd.ExecuteNonQueryAsync();
     }
 }
 
