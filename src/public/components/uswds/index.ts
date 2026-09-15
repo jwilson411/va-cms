@@ -17,3 +17,9 @@ export type { UswdsFooterProps, FooterNavColumn } from './UswdsFooter';
 
 export { UswdsTable } from './UswdsTable';
 export type { UswdsTableProps } from './UswdsTable';
+
+export { UswdsBreadcrumb } from './UswdsBreadcrumb';
+export type { UswdsBreadcrumbProps, BreadcrumbItem } from './UswdsBreadcrumb';
+
+export { UswdsInPageNav } from './UswdsInPageNav';
+export type { UswdsInPageNavProps, InPageNavSection } from './UswdsInPageNav';
