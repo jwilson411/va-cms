@@ -34,9 +34,23 @@ public interface INavigationRepository
 
 public interface ISearchRepository
 {
+    /// <summary>
+    /// Full-text search over published content.
+    /// All filter parameters are optional and AND-combined when provided.
+    /// </summary>
+    /// <param name="query">FTS query string (required).</param>
+    /// <param name="contentTypeId">Filter by content type ID.</param>
+    /// <param name="fromDate">Include only entries published on or after this UTC date.</param>
+    /// <param name="toDate">Include only entries published on or before this UTC date.</param>
+    /// <param name="tagTermId">Filter by taxonomy term ID (tag).</param>
+    /// <param name="page">1-based page number.</param>
+    /// <param name="pageSize">Results per page (1–100).</param>
     Task<Page<SearchResult>> FullTextSearchAsync(
         string query,
         long? contentTypeId = null,
+        DateTime? fromDate = null,
+        DateTime? toDate = null,
+        long? tagTermId = null,
         int page = 1,
         int pageSize = 25);
     Task LogQueryAsync(string query, int resultCount, long? userId = null);
