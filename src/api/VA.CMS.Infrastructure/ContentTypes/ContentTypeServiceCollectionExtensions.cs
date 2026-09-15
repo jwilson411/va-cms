@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using VA.CMS.Infrastructure.ContentTypes.Validation;
 
 namespace VA.CMS.Infrastructure.ContentTypes;
 
@@ -32,6 +33,9 @@ public static class ContentTypeServiceCollectionExtensions
         services.TryAddSingleton<IFieldTypeRegistry>(sp =>
             new FieldTypeRegistry(sp.GetServices<ContentTypeDefinitionBase>()));
 
+        // Register the field validator (singleton — stateless).
+        services.TryAddSingleton<IFieldValidator, FieldValidator>();
+
         return services;
     }
 
@@ -43,6 +47,10 @@ public static class ContentTypeServiceCollectionExtensions
     {
         services.TryAddSingleton<IFieldTypeRegistry>(sp =>
             new FieldTypeRegistry(sp.GetServices<ContentTypeDefinitionBase>()));
+
+        // Register the field validator (singleton — stateless).
+        services.TryAddSingleton<IFieldValidator, FieldValidator>();
+
         return services;
     }
 }
