@@ -60,7 +60,15 @@ COMPONENT PATTERNS:
 - Use USWDS Pagination for any list longer than 25 items
 - Use USWDS Modal (with proper focus trap) for confirmation dialogs and quick-edit overlays
 
-WHAT NOT TO DO:
+RICH TEXT / MARKDOWN EDITOR:
+The CMS stores rich text as CommonMark Markdown, not HTML. The admin editor is a WYSIWYG Markdown editor — content owners see formatted output (bold, headings, lists) without ever writing Markdown syntax. When designing or implementing the editor field:
+- Use Milkdown (preferred) or Toast UI Editor as the WYSIWYG Markdown surface
+- The editor panel is left/center; a live preview panel (rendered by the same Markdig pipeline as publish) is right
+- Toolbar: Bold, Italic, H2, H3, H4, Ordered List, Unordered List, Link, Block Quote, Insert Image (opens media library modal)
+- H1 is NOT in the toolbar — it's the page title field, separate from body
+- Raw HTML entry is disabled in the editor config
+- The preview pane uses the USWDS `usa-prose` class so preview typography matches the public site exactly
+- A "Preview only" mode collapses the editor and shows full-width rendered preview (for review/approval flows)
 - Do not use inline styles
 - Do not override USWDS focus styles
 - Do not use color alone to convey meaning (always pair with icon or text)

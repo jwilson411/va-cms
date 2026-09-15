@@ -109,26 +109,46 @@ va-cms/
         └── deploy.yml
 ```
 
-## Authentication Flow
+## Auth Flow: AD → JWT
 
 ```
-User → IIS → Admin SPA
-                │
-                ├─► POST /api/auth/login
-                │     │
-                │     ├─► Redirect to AAD OIDC endpoint
-                │     ├─► AAD validates VA credentials (MFA if required)
-                │     └─► Return to /api/auth/callback with code
-                │           │
-                │           └─► Exchange code for tokens
-                │                 │
-                │                 └─► Issue JWT access token (15min) +
-                │                     refresh token (httpOnly cookie, 8hr)
-                │
-                └─► Subsequent API calls: Bearer {access_token}
-                    │
-                    └─► Token expiry: silent refresh via /api/auth/refresh
+User opens Admin SPA
+        │
+        ▼
+GET /api/auth/login
+        │
+        ▼
+Redirect → Azure AD (OIDC)
+  AD validates VA credentials + MFA
+        │
+        ▼
+Callback → /api/auth/callback
+  Microsoft.Identity.Web validates token
+        │
+        ├── Sync User row (upsert by UPN)
+        ├── Resolve AD group → CMS role mappings
+        │
+        └── Issue: JWT access token (15 min, signed HS256)
+                  + Refresh token (httpOnly cookie, 8 hr)
+        │
+        ▼
+Admin SPA receives JWT — stored in memory (NOT localStorage)
+All API calls: Authorization: Bearer {jwt}
+
+Silent refresh: before expiry, SPA calls GET /api/auth/refresh
+  → validates httpOnly refresh cookie
+  → issues new JWT
+  → no user interaction required
+
+AD account disabled? → next refresh returns 401 → SPA forces re-login
 ```
+
+**Key principles:**
+- No CMS password ever created or stored
+- AD is the single source of identity truth
+- JWT is stateless — API tier is horizontally scalable without shared session state
+- Refresh token in httpOnly cookie — not accessible to JavaScript (XSS-safe)
+- AD group → role mapping eliminates manual per-user role assignment at scale
 
 ## Content Rendering Pipeline
 
@@ -163,7 +183,9 @@ HTML streamed to browser (SSR) or served from ISR cache
 | Admin state management | TanStack Query (React Query) | Server state management, caching, background sync |
 | Admin routing | React Router v6 | Stable, well-understood in VA dev community |
 | Rich text editor | TipTap | ProseMirror-based, extensible, can enforce USWDS HTML output |
-| Auth library | Microsoft.Identity.Web | Official MS library for AAD OIDC in ASP.NET Core |
+| Auth | Microsoft.Identity.Web (AD → JWT) | Official MS library for AAD OIDC in ASP.NET Core; AD authenticates, CMS issues JWT |
+| Markdown renderer | Markdig | Fast, extensible CommonMark renderer for .NET; same pipeline in live preview and publish |
+| WYSIWYG editor | Milkdown or Toast UI Editor | ProseMirror/CodeMirror-based Markdown editors with WYSIWYG surface — content owners see formatting, storage is Markdown |
 | Testing (API) | xUnit + TestContainers (MSSQL) | Real DB in CI, no mocks for data layer |
 | Testing (React) | Vitest + React Testing Library | Fast, co-located with components |
 | Accessibility testing | axe-core + Playwright | Automated a11y CI gate |

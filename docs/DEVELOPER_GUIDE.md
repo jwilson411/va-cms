@@ -1,9 +1,102 @@
 # Developer Guide
 ## VA CMS — USWDS-Compliant Content Management System
 
-## Stack Quick Reference
+## Rich Text Fields: Markdown Storage
 
-| Layer | Technology | Docs |
+Rich text fields store **CommonMark Markdown** — not HTML. The API serves both forms:
+
+```json
+{
+  "fields": {
+    "body": {
+      "markdownBody": "## Overview\n\nThis is the **content**...",
+      "renderedBody": "<h2>Overview</h2>\n<p>This is the <strong>content</strong>...</p>"
+    }
+  }
+}
+```
+
+**Backend rendering (Markdig .NET):**
+
+```csharp
+// src/api/VA.CMS.Infrastructure/Markdown/UswdsMarkdownRenderer.cs
+using Markdig;
+
+public class UswdsMarkdownRenderer : IMarkdownRenderer
+{
+    private static readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .DisableHtml()           // blocks raw HTML injection — DB stores clean Markdown only
+        .Build();
+
+    public string Render(string markdown)
+    {
+        // DisableHtml means no <script>, no inline styles, no raw HTML passthrough
+        return Markdown.ToHtml(markdown, _pipeline);
+    }
+}
+```
+
+**Same pipeline in live preview:** `POST /api/v1/preview/render` accepts Markdown, returns HTML. The admin SPA calls this on a debounced 500ms interval. The preview panel always matches what publish produces — no drift.
+
+**Admin WYSIWYG editor:** Content owners use a formatted rich text surface and never write raw Markdown. Buttons in the toolbar produce Markdown under the hood transparently.
+
+```typescript
+// src/admin/src/features/contentTypes/fields/MarkdownField.tsx
+// Using Milkdown (ProseMirror-based Markdown WYSIWYG)
+import { Editor } from '@milkdown/react';
+import { commonmark } from '@milkdown/preset-commonmark';
+
+export function MarkdownField({ value, onChange, fieldDef }: CustomFieldProps) {
+  return (
+    <div className="usa-form-group">
+      <label className="usa-label" htmlFor={fieldDef.name}>
+        {fieldDef.label}
+        {fieldDef.required && <abbr title="required" className="usa-required"> *</abbr>}
+      </label>
+      {/* WYSIWYG surface — user sees formatting, storage is Markdown */}
+      <Editor defaultValue={value} onChange={onChange} plugins={[commonmark]} />
+    </div>
+  );
+}
+```
+
+---
+
+## Authentication: AD → JWT
+
+The CMS uses AD as the identity provider. The API issues a JWT — it never stores passwords.
+
+```
+1. Admin SPA loads → no JWT in memory → redirect to /api/auth/login
+2. /api/auth/login → redirect to Azure AD (OIDC)
+3. AD validates user + MFA → callback to /api/auth/callback
+4. API validates the AD token, upserts User row, resolves AD group → role mapping
+5. API issues:
+     - JWT access token (15 min, HS256, stored in-memory in SPA — not localStorage)
+     - Refresh token (httpOnly cookie, 8 hr)
+6. All API requests: Authorization: Bearer {jwt}
+7. Before JWT expires, SPA silently POSTs to /api/auth/refresh
+     - API validates httpOnly cookie
+     - Issues new JWT
+8. If AD account is disabled: next refresh → 401 → SPA clears state → login redirect
+```
+
+**Dev setup (no AD):** Set `Auth:Mode=DevBypass` in `appsettings.Development.json`. The API accepts a `X-Dev-User: alice@va.gov` header and issues a JWT for that UPN without AD. Never ship this mode in Production.
+
+```json
+// appsettings.Development.json (excerpt)
+{
+  "Auth": {
+    "Mode": "DevBypass",
+    "DevBypassAllowedUsers": ["alice@va.gov", "bob@va.gov"]
+  }
+}
+```
+
+---
+
+## Stack Quick Reference
 |---|---|---|
 | API | ASP.NET Core 8 | https://docs.microsoft.com/aspnet/core |
 | ORM | Entity Framework Core 8 | https://docs.microsoft.com/ef/core |

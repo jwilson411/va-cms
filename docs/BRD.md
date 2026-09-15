@@ -1,10 +1,11 @@
 # Business Requirements Document (BRD)
 ## VA CMS — USWDS-Compliant Content Management System
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Status:** Draft  
 **Owner:** Justin Wilson  
 **Last Updated:** 2026-09-14  
+**Changelog:** v1.1 — Switched rich text storage from HTML to Markdown (DB-safe, portable, renderer-agnostic). Clarified auth chain: AD authentication issues JWT; no separate CMS user database or password.  
 
 ---
 
@@ -75,7 +76,11 @@ Build a self-hosted CMS on a modern, VA-familiar stack. File for VA TRM inclusio
 
 **FR-AUTH-01** — Content owners shall be able to create new content entries using a guided, USWDS-styled form interface without writing HTML or code.
 
-**FR-AUTH-02** — The rich text editor shall produce semantic, accessible HTML compliant with USWDS typography standards. Inline style overrides that break accessibility shall be blocked.
+**FR-AUTH-02** — The rich text editor shall be a WYSIWYG Markdown editor. Content is stored as CommonMark Markdown in the database. The editor renders a real-time USWDS-styled preview alongside the editing surface so content owners see formatted output without knowing Markdown syntax. Inline style overrides and raw HTML insertion are blocked — output is plain Markdown only.
+
+**FR-AUTH-02a** — The Markdown-to-HTML renderer (used at publish/render time) shall produce semantic HTML compliant with USWDS typography standards and must be the same renderer used in the live preview, eliminating preview/publish drift.
+
+**FR-AUTH-02b** — The stored Markdown shall be treated as the source of truth. The public site and API consumers receive rendered HTML via a `renderedBody` field; raw Markdown is also available via `markdownBody` for headless consumers who prefer to render themselves.
 
 **FR-AUTH-03** — Content owners shall be able to upload images and documents, with automatic metadata capture (alt text required before publish).
 
@@ -89,7 +94,7 @@ Build a self-hosted CMS on a modern, VA-familiar stack. File for VA TRM inclusio
 
 **FR-AUTH-08** — The authoring interface shall provide a live preview of how the content will render on the public site before publishing.
 
-**FR-AUTH-09** — The WYSIWYG editor shall enforce USWDS heading hierarchy (H1 is page title only; editor starts at H2) to prevent structural accessibility violations.
+**FR-AUTH-09** — The WYSIWYG Markdown editor toolbar shall expose heading levels H2–H4 only (H1 is the page title, managed separately). The editor shall prevent direct raw HTML entry. Toolbar actions map to Markdown syntax transparently — content owners use buttons, not Markdown symbols.
 
 ### 5.2 Content Types and Schema (FR-SCHEMA)
 
@@ -137,7 +142,11 @@ Build a self-hosted CMS on a modern, VA-familiar stack. File for VA TRM inclusio
 
 ### 5.5 User Management and Access Control (FR-USERS)
 
-**FR-USERS-01** — The system shall integrate with Azure Active Directory via OIDC/SAML for authentication. No separate CMS password shall be required for VA users.
+**FR-USERS-01** — The system shall integrate with Active Directory via Azure AD (OIDC) for authentication. AD authenticates the user; the CMS API issues a JWT access token on successful AD validation. No separate CMS password is created or stored. The user's AD account is the single credential.
+
+**FR-USERS-01a** — The JWT access token shall be short-lived (15 minutes). A refresh token stored in a secure httpOnly cookie shall allow silent renewal up to the session limit (8 hours) without re-authentication. On AD account deactivation, the next refresh attempt returns 401 and forces re-login.
+
+**FR-USERS-01b** — AD group membership may be mapped to CMS roles. Administrators configure the AD group → CMS role mapping in the settings UI. This eliminates per-user role assignment for organizations where AD groups already represent job functions (e.g., "VA-CMS-Editors" AD group → Editor role).
 
 **FR-USERS-02** — The system shall support Windows-integrated authentication for intranet deployments where AAD federation is not available.
 

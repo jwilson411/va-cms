@@ -50,11 +50,14 @@ A point-in-time snapshot of a content entry's fields.
 | Id | BIGINT IDENTITY | PK |
 | ContentEntryId | BIGINT | FK → ContentEntry |
 | VersionNumber | INT | Auto-increment per entry |
-| FieldsJson | NVARCHAR(MAX) | Full field payload as JSON |
+| FieldsJson | NVARCHAR(MAX) | Full field payload as JSON. Rich text fields stored as CommonMark Markdown strings — never raw HTML. |
+| RenderedFieldsJson | NVARCHAR(MAX) | Cached rendered HTML for each Markdown field, generated at publish time. Invalidated and regenerated on restore or re-publish. |
 | Status | NVARCHAR(20) | Status at time of snapshot |
 | AuthorId | BIGINT | FK → User — who created this version |
 | ChangeNote | NVARCHAR(1000) | Optional description of changes |
 | CreatedAt | DATETIME2 | |
+
+**Markdown storage note:** `FieldsJson` stores rich text fields as raw Markdown (CommonMark). The API exposes both `markdownBody` (raw, for headless consumers) and `renderedBody` (server-rendered HTML via Markdig, USWDS-safe). The same Markdig pipeline is used in the live preview, eliminating preview/publish drift.
 
 **Indexes:** `IX_ContentVersion_EntryId_Version` (unique composite)
 
