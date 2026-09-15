@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useCallback, useId } from 'react';
-import { useMediaAssets, useMediaDetail } from './useMediaAssets';
+import { useMediaAssets, useMediaDetail, useUpdateMediaMetadata } from './useMediaAssets';
 import type { MediaAssetSummary, MediaDetailDto } from './mediaTypes';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -443,12 +443,51 @@ interface MediaDetailPanelProps {
   onUseAsset?: () => void;
 }
 
+/**
+ * Detail panel for a selected media asset.
+ * Issue #43: shows a required alt text input for images, with a USWDS Alert
+ * warning when alt text is missing.
+ */
 function MediaDetailPanel({
   isLoading,
   detail,
   onClose,
   onUseAsset,
 }: MediaDetailPanelProps): JSX.Element {
+  const [altTextDraft, setAltTextDraft] = useState<string>('');
+  const [altTextEditing, setAltTextEditing] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const altTextInputId    = useId();
+  const altTextDescribeId = useId();
+
+  const patchMutation = useUpdateMediaMetadata(detail?.id ?? null);
+
+  const isImage = detail?.mimeType.startsWith('image/') ?? false;
+  const missingAltText = isImage && (!detail?.altText || detail.altText.trim() === '');
+
+  const handleEditAltText = useCallback(() => {
+    setAltTextDraft(detail?.altText ?? '');
+    setAltTextEditing(true);
+    setSaveError(null);
+  }, [detail?.altText]);
+
+  const handleCancelAltText = useCallback(() => {
+    setAltTextEditing(false);
+    setSaveError(null);
+  }, []);
+
+  const handleSaveAltText = useCallback(async () => {
+    if (!detail) return;
+    setSaveError(null);
+    try {
+      await patchMutation.mutateAsync({ altText: altTextDraft.trim() || null });
+      setAltTextEditing(false);
+    } catch {
+      setSaveError('Failed to save alt text. Please try again.');
+    }
+  }, [detail, altTextDraft, patchMutation]);
+
   return (
     <aside
       aria-label="Asset details"
@@ -499,6 +538,90 @@ function MediaDetailPanel({
             )}
           </div>
 
+          {/* ── Issue #43: USWDS Alert when image is missing alt text ──────── */}
+          {missingAltText && (
+            <div
+              className="usa-alert usa-alert--warning usa-alert--slim margin-bottom-2"
+              role="alert"
+              data-testid="alt-text-required-alert"
+            >
+              <div className="usa-alert__body">
+                <p className="usa-alert__text">
+                  This image needs alt text before it can be used in published content.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Issue #43: Required alt text field for images ──────────────── */}
+          {isImage && (
+            <div className="usa-form-group margin-bottom-2" data-testid="alt-text-field-group">
+              <label className="usa-label" htmlFor={altTextInputId}>
+                Alt text
+                <abbr title="required" className="usa-required"> *</abbr>
+              </label>
+              {!altTextEditing ? (
+                <>
+                  <p
+                    id={altTextInputId}
+                    data-testid="media-detail-alttext"
+                    style={{ marginBottom: '0.25rem' }}
+                  >
+                    {detail.altText ?? <span className="usa-hint">Not set</span>}
+                  </p>
+                  <button
+                    type="button"
+                    className="usa-button usa-button--unstyled"
+                    onClick={handleEditAltText}
+                    data-testid="alt-text-edit-button"
+                    aria-label="Edit alt text"
+                  >
+                    Edit
+                  </button>
+                </>
+              ) : (
+                <>
+                  <input
+                    id={altTextInputId}
+                    className={`usa-input${saveError ? ' usa-input--error' : ''}`}
+                    type="text"
+                    value={altTextDraft}
+                    onChange={(e) => setAltTextDraft(e.target.value)}
+                    aria-describedby={saveError ? altTextDescribeId : undefined}
+                    aria-required="true"
+                    data-testid="alt-text-input"
+                    maxLength={500}
+                  />
+                  {saveError && (
+                    <span id={altTextDescribeId} className="usa-error-message" role="alert" data-testid="alt-text-error">
+                      {saveError}
+                    </span>
+                  )}
+                  <div className="display-flex flex-gap-2 margin-top-1">
+                    <button
+                      type="button"
+                      className="usa-button usa-button--small"
+                      onClick={handleSaveAltText}
+                      disabled={patchMutation.isPending}
+                      data-testid="alt-text-save-button"
+                    >
+                      {patchMutation.isPending ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      type="button"
+                      className="usa-button usa-button--unstyled usa-button--small"
+                      onClick={handleCancelAltText}
+                      disabled={patchMutation.isPending}
+                      data-testid="alt-text-cancel-button"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Metadata table */}
           <dl data-testid="media-detail-metadata">
             <dt className="text-bold">Filename</dt>
@@ -517,12 +640,17 @@ function MediaDetailPanel({
               </>
             )}
 
-            <dt className="text-bold">Alt text</dt>
-            <dd data-testid="media-detail-alttext">
-              {detail.altText ?? (
-                <span className="usa-hint">Not set</span>
-              )}
-            </dd>
+            {/* Alt text for non-images (no required field, just display) */}
+            {!isImage && (
+              <>
+                <dt className="text-bold">Alt text</dt>
+                <dd data-testid="media-detail-alttext">
+                  {detail.altText ?? (
+                    <span className="usa-hint">Not set</span>
+                  )}
+                </dd>
+              </>
+            )}
 
             {detail.title && (
               <>

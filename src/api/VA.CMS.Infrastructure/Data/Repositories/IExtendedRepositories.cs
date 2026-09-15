@@ -74,6 +74,32 @@ public interface IUserRoleRepository
         int pageSize = 50);
 }
 
+// ── Alt Text Guard ────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Checks whether all image assets referenced by a content entry have alt text set.
+/// Issue #43 — FR-MEDIA-05: alt text enforcement before publish.
+/// </summary>
+public interface IMediaAltTextGuardRepository
+{
+    /// <summary>
+    /// Returns the list of image asset IDs (and filenames) that are referenced by
+    /// the given content entry and are missing alt text.
+    /// An empty list means all image references are satisfied and publish is allowed.
+    /// </summary>
+    Task<IReadOnlyList<MissingAltTextAsset>> GetMissingAltTextAsync(long contentEntryId);
+}
+
+/// <summary>
+/// Lightweight DTO for an asset that is blocking publish due to missing alt text.
+/// </summary>
+public class MissingAltTextAsset
+{
+    public long   Id       { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public string MimeType { get; set; } = string.Empty;
+}
+
 // ── Extended Media ────────────────────────────────────────────────────────────
 
 public interface IMediaExtendedRepository

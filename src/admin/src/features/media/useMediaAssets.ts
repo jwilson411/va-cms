@@ -2,8 +2,8 @@
  * TanStack Query hooks for media library (issue #42).
  */
 
-import { useQuery } from '@tanstack/react-query';
-import type { MediaListDto, MediaDetailDto } from './mediaTypes';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { MediaListDto, MediaDetailDto, MediaPatchBody } from './mediaTypes';
 
 const MEDIA_API = '/api/v1/media';
 
@@ -56,3 +56,28 @@ export function useMediaDetail(id: number | null) {
     enabled:  id !== null,
   });
 }
+
+/**
+ * PATCH /api/v1/media/{id} — update alt text and other metadata.
+ * Issue #43: required alt text field in detail panel.
+ */
+export function useUpdateMediaMetadata(id: number | null) {
+  const qc = useQueryClient();
+  return useMutation<void, Error, MediaPatchBody>({
+    mutationFn: async (body) => {
+      const res = await fetch(`${MEDIA_API}/${id!}`, {
+        method:      'PATCH',
+        credentials: 'include',
+        headers:     { 'Content-Type': 'application/json' },
+        body:        JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} patching media ${id}`);
+    },
+    onSuccess: () => {
+      // Invalidate detail and list caches so the UI reflects the new alt text
+      void qc.invalidateQueries({ queryKey: ['media-detail', id] });
+      void qc.invalidateQueries({ queryKey: ['media-assets'] });
+    },
+  });
+}
+

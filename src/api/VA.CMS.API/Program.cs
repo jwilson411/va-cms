@@ -200,6 +200,8 @@ builder.Services.AddScoped<CmsDatabase>(_ => new CmsDatabase(connectionString));
 builder.Services.AddScoped<IContentEntryRepository, ContentEntryRepository>();
 builder.Services.AddScoped<IContentVersionRepository, ContentVersionRepository>();
 builder.Services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
+builder.Services.AddScoped<IMediaExtendedRepository, MediaExtendedRepository>();
+builder.Services.AddScoped<IMediaAltTextGuardRepository, MediaAltTextGuardRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
