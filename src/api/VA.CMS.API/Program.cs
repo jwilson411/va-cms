@@ -113,7 +113,12 @@ var app = builder.Build();
 
 // -----------------------------------------------------------------------
 // DbUp: run all pending SQL migrations from the /migrations folder.
+// Skipped when SKIP_MIGRATIONS=true (e.g. in integration test hosts).
 // -----------------------------------------------------------------------
+var skipMigrations = builder.Configuration["SKIP_MIGRATIONS"] == "true";
+
+if (!skipMigrations)
+{
 var migrationsPath = Path.GetFullPath(
     Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "migrations"));
 
@@ -145,6 +150,8 @@ Console.ForegroundColor = ConsoleColor.Green;
 Console.WriteLine("Database migrations applied successfully.");
 Console.ResetColor();
 
+} // end if (!skipMigrations)
+
 // -----------------------------------------------------------------------
 // HTTP pipeline
 // -----------------------------------------------------------------------
@@ -172,3 +179,6 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = Dat
 app.Run();
 
 return 0;
+
+// Make Program accessible to WebApplicationFactory<Program> in test projects.
+public partial class Program { }
