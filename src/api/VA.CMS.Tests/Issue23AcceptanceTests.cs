@@ -515,6 +515,24 @@ internal sealed class Issue23ContentEntryStub : IContentEntryRepository
     public Task UpdateAsync(ContentEntry entry) => Task.CompletedTask;
 
     public Task ArchiveAsync(long id, long actorId) => Task.CompletedTask;
+
+    public Task<ContentEntryAdminPage> ListAdminAsync(
+        long?     contentTypeId = null,
+        string?   status        = null,
+        string?   authorSearch  = null,
+        DateTime? dateFrom      = null,
+        DateTime? dateTo        = null,
+        string    sortBy        = "UpdatedAt",
+        string    sortDir       = "DESC",
+        int       page          = 1,
+        int       pageSize      = 25)
+        => Task.FromResult(new ContentEntryAdminPage
+        {
+            Items     = Array.Empty<ContentEntryAdminRow>(),
+            TotalRows = 0,
+            Page      = page,
+            PageSize  = pageSize,
+        });
 }
 
 internal sealed class Issue23UserRoleStub : IUserRoleRepository

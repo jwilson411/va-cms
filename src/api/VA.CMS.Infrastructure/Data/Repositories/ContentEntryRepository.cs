@@ -105,4 +105,92 @@ public class ContentEntryRepository : IContentEntryRepository
             "EXEC usp_ContentEntry_Archive @0, @1",
             id, actorId);
     }
+
+    public async Task<ContentEntryAdminPage> ListAdminAsync(
+        long?     contentTypeId = null,
+        string?   status        = null,
+        string?   authorSearch  = null,
+        DateTime? dateFrom      = null,
+        DateTime? dateTo        = null,
+        string    sortBy        = "UpdatedAt",
+        string    sortDir       = "DESC",
+        int       page          = 1,
+        int       pageSize      = 25)
+    {
+        // Use ADO.NET directly to handle OUTPUT parameter and result set.
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+
+        // The SP returns rows first, then sets @TotalRows OUTPUT.
+        // We wrap in a batch that re-selects @TotalRows as a second result set.
+        cmd.CommandText = @"
+            DECLARE @TotalRows INT;
+            EXEC usp_ContentEntry_ListAdmin
+                @ContentTypeId = @ContentTypeId,
+                @Status        = @Status,
+                @AuthorSearch  = @AuthorSearch,
+                @DateFrom      = @DateFrom,
+                @DateTo        = @DateTo,
+                @SortBy        = @SortBy,
+                @SortDir       = @SortDir,
+                @Page          = @Page,
+                @PageSize      = @PageSize,
+                @TotalRows     = @TotalRows OUTPUT;
+            SELECT @TotalRows AS TotalRows;";
+
+        AddNullableParam(cmd, "@ContentTypeId", System.Data.SqlDbType.BigInt,     (object?)contentTypeId);
+        AddNullableParam(cmd, "@Status",        System.Data.SqlDbType.NVarChar,   (object?)status);
+        AddNullableParam(cmd, "@AuthorSearch",  System.Data.SqlDbType.NVarChar,   (object?)authorSearch);
+        AddNullableParam(cmd, "@DateFrom",      System.Data.SqlDbType.DateTime2,  (object?)dateFrom);
+        AddNullableParam(cmd, "@DateTo",        System.Data.SqlDbType.DateTime2,  (object?)dateTo);
+        cmd.Parameters.AddWithValue("@SortBy",   sortBy);
+        cmd.Parameters.AddWithValue("@SortDir",  sortDir);
+        cmd.Parameters.AddWithValue("@Page",     page);
+        cmd.Parameters.AddWithValue("@PageSize", pageSize);
+
+        var items = new List<ContentEntryAdminRow>();
+        int totalRows = 0;
+
+        await using var reader = await cmd.ExecuteReaderAsync();
+        // First result set: the content entry rows
+        while (await reader.ReadAsync())
+        {
+            items.Add(new ContentEntryAdminRow
+            {
+                Id                = reader.GetInt64(reader.GetOrdinal("Id")),
+                Slug              = reader.GetString(reader.GetOrdinal("Slug")),
+                Status            = reader.GetString(reader.GetOrdinal("Status")),
+                ContentTypeId     = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
+                ContentTypeName   = reader.GetString(reader.GetOrdinal("ContentTypeName")),
+                OwnerId           = reader.GetInt64(reader.GetOrdinal("OwnerId")),
+                AuthorDisplayName = reader.GetString(reader.GetOrdinal("AuthorDisplayName")),
+                UpdatedAt         = reader.GetDateTime(reader.GetOrdinal("UpdatedAt")),
+                Title             = reader.GetString(reader.GetOrdinal("Title")),
+            });
+        }
+        // Second result set: TotalRows scalar
+        if (await reader.NextResultAsync() && await reader.ReadAsync())
+        {
+            totalRows = reader.IsDBNull(0) ? 0 : reader.GetInt32(0);
+        }
+
+        return new ContentEntryAdminPage
+        {
+            Items     = items,
+            TotalRows = totalRows,
+            Page      = page,
+            PageSize  = pageSize,
+        };
+    }
+
+    private static void AddNullableParam(
+        Microsoft.Data.SqlClient.SqlCommand cmd,
+        string name,
+        System.Data.SqlDbType dbType,
+        object? value)
+    {
+        var p = cmd.Parameters.Add(name, dbType);
+        p.Value = value ?? DBNull.Value;
+    }
 }
