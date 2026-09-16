@@ -130,7 +130,6 @@ const mockResponse: SearchResponse = {
 describe('fetchSearchResults', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
-    // @ts-expect-error – env stub
     process.env.NEXT_PUBLIC_API_URL = 'http://localhost:5000';
   });
 
