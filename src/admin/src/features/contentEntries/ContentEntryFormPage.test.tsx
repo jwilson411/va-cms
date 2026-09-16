@@ -445,13 +445,12 @@ describe('FieldRenderer', () => {
     expect(container.querySelector('textarea')).not.toBeNull();
   });
 
-  it('renders RichText as Milkdown MarkdownField editor (issue #65)', () => {
+  it('renders RichText as the TipTap WYSIWYG editor (issue #115)', () => {
     const { container } = renderField({ name: 'body', label: 'Body', type: 'RichText', required: false, maxLength: null });
-    // Issue #65: RichTextField now delegates to MarkdownField (Milkdown WYSIWYG), not TipTap.
-    // The markdown-field data-testid is the canonical identifier.
-    expect(container.querySelector('[data-testid="markdown-field"]')).not.toBeNull();
-    // The Milkdown toolbar must be present
-    expect(container.querySelector('[data-testid="md-toolbar"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="rich-text-field"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="rich-text-toolbar"]')).not.toBeNull();
+    // No split preview pane — the editor is the live preview.
+    expect(container.querySelector('[data-testid="md-preview-pane"]')).toBeNull();
   });
 
   it('renders Number as <input type="number">', () => {

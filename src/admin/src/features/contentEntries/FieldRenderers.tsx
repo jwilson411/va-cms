@@ -12,7 +12,6 @@
 import React from 'react';
 import type { FieldDefinitionDto, FieldValues } from './formTypes';
 import { RichTextEditor } from './RichTextEditor';
-import { MarkdownField } from './MarkdownField';
 
 export interface FieldRendererProps {
   def: FieldDefinitionDto;
@@ -136,22 +135,71 @@ export function LongTextField({
   );
 }
 
-// ── Rich Text (Milkdown WYSIWYG + USWDS split preview — issue #65) ────────────
+// ── Rich Text (TipTap WYSIWYG, Markdown storage — issue #115) ─────────────────
 //
-// Replaced from TipTap (HTML storage, issue #31) to Milkdown (Markdown storage,
-// issue #65 / BRD FR-AUTH-02).  Stored value is now a CommonMark Markdown string.
-// The live preview pane calls POST /api/v1/preview/render which uses the same
-// Markdig pipeline as publish — eliminating preview/publish drift.
+// The editor IS the live preview: no split pane, no preview toggle. Stored value
+// is a Markdown string serialised by tiptap-markdown; Markdig (#66) renders it on
+// the public site with DisableHtml(), so the editor never emits raw HTML.
 
-export function RichTextField(props: FieldRendererProps): JSX.Element {
+export function RichTextField({
+  def,
+  value,
+  error,
+  onChange,
+  onBlur,
+}: FieldRendererProps): JSX.Element {
+  const editorId = `field-${def.name}`;
+  const labelId  = `field-${def.name}-label`;
+  const errorId  = `field-${def.name}-error`;
+  const hintId   = `field-${def.name}-hint`;
+  const hasHint  = !!def.hint;
+
+  const describedBy = [
+    hasHint  ? hintId  : null,
+    error    ? errorId : null,
+  ]
+    .filter(Boolean)
+    .join(' ') || undefined;
+
   return (
-    <MarkdownField
-      def={props.def}
-      value={props.value}
-      error={props.error}
-      onChange={(md) => props.onChange(md)}
-      onBlur={props.onBlur}
-    />
+    <div
+      className={`usa-form-group${error ? ' usa-form-group--error' : ''}`}
+      data-testid="rich-text-field"
+    >
+      {/*
+       * A contenteditable <div> is non-labellable per the HTML spec, so this is
+       * a <span> with an id rather than <label htmlFor>; the editor's
+       * contenteditable references it via aria-labelledby.
+       */}
+      <span id={labelId} className="usa-label">
+        {def.label}
+        {def.required && (
+          <abbr title="required" className="usa-hint usa-hint--required">
+            {' '}*
+          </abbr>
+        )}
+      </span>
+      {hasHint && (
+        <span id={hintId} className="usa-hint">
+          {def.hint}
+        </span>
+      )}
+      {error && (
+        <span id={errorId} className="usa-error-message" role="alert">
+          {error}
+        </span>
+      )}
+      <RichTextEditor
+        editorId={editorId}
+        labelId={labelId}
+        value={typeof value === 'string' ? value : ''}
+        onChange={(md) => onChange(md)}
+        onBlur={() => onBlur(def.name)}
+        ariaDescribedby={describedBy}
+        ariaInvalid={!!error}
+        ariaRequired={def.required}
+      />
+    </div>
   );
 }
 

@@ -37,28 +37,25 @@ public class UswdsMarkdownRenderer : IMarkdownRenderer
 }
 ```
 
-**Same pipeline in live preview:** `POST /api/v1/preview/render` accepts Markdown, returns HTML. The admin SPA calls this on a debounced 500ms interval. The preview panel always matches what publish produces — no drift.
-
-**Admin WYSIWYG editor:** Content owners use a formatted rich text surface and never write raw Markdown. Buttons in the toolbar produce Markdown under the hood transparently.
+**Admin WYSIWYG editor (issue #115):** Content owners use a formatted rich text surface and never write raw Markdown. The editor *is* the live preview — there is no split pane or preview toggle. The RichText field renders TipTap with a USWDS toolbar; on every change the document is serialised to Markdown with `tiptap-markdown` (`html: false`, so nothing the editor emits is raw HTML) and that Markdown string is what gets stored. Markdig renders it on the public site with the same `DisableHtml()` pipeline. `POST /api/v1/preview/render` remains available for server-side rendering of arbitrary Markdown.
 
 ```typescript
-// src/admin/src/features/contentTypes/fields/MarkdownField.tsx
-// Using Milkdown (ProseMirror-based Markdown WYSIWYG)
-import { Editor } from '@milkdown/react';
-import { commonmark } from '@milkdown/preset-commonmark';
+// src/admin/src/features/contentEntries/RichTextEditor.tsx (abridged)
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import { Markdown } from 'tiptap-markdown';
 
-export function MarkdownField({ value, onChange, fieldDef }: CustomFieldProps) {
-  return (
-    <div className="usa-form-group">
-      <label className="usa-label" htmlFor={fieldDef.name}>
-        {fieldDef.label}
-        {fieldDef.required && <abbr title="required" className="usa-required"> *</abbr>}
-      </label>
-      {/* WYSIWYG surface — user sees formatting, storage is Markdown */}
-      <Editor defaultValue={value} onChange={onChange} plugins={[commonmark]} />
-    </div>
-  );
-}
+const editor = useEditor({
+  extensions: [
+    StarterKit.configure({ heading: false /* H2-H4 added explicitly; H1 is the page title */ }),
+    Heading.configure({ levels: [2, 3, 4] }),
+    Link, Image,
+    Markdown.configure({ html: false, tightLists: true, bulletListMarker: '-' }),
+  ],
+  content: value,                       // Markdown string in…
+  onUpdate: ({ editor }) =>
+    onChange(editor.storage.markdown.getMarkdown()),   // …Markdown string out
+});
 ```
 
 ---
@@ -105,7 +102,7 @@ The CMS uses AD as the identity provider. The API issues a JWT — it never stor
 | Admin UI | React 18 + TypeScript | https://react.dev |
 | Design System | USWDS 3.x | https://designsystem.digital.gov |
 | Admin State | TanStack Query v5 | https://tanstack.com/query |
-| WYSIWYG | Milkdown | https://milkdown.dev |
+| WYSIWYG | TipTap + tiptap-markdown | https://tiptap.dev |
 | Markdown | Markdig | https://github.com/xoofx/markdig |
 | Public Site | Next.js 14 (App Router) | https://nextjs.org/docs |
 | Database | SQL Server 2019+ | |
