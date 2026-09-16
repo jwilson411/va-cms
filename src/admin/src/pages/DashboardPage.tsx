@@ -1,4 +1,3 @@
-import { useAuth } from '../context/AuthContext';
 import { SearchAnalyticsWidget } from '../features/searchAnalytics';
 
 /**
@@ -8,12 +7,9 @@ import { SearchAnalyticsWidget } from '../features/searchAnalytics';
  * and top 10 zero-result queries (last 30 days).
  */
 export function DashboardPage(): JSX.Element {
-  const { logout } = useAuth();
-
   return (
-    <main id="main-content" className="grid-container">
-      <h1>VA CMS Admin</h1>
-      <p>You are signed in.</p>
+    <main id="main-content">
+      <h1>Dashboard</h1>
 
       {/* ── Issue #51: Search Analytics Dashboard Widget ─────────────────── */}
       <div className="usa-card margin-top-3">
@@ -23,16 +19,6 @@ export function DashboardPage(): JSX.Element {
         <div className="usa-card__body">
           <SearchAnalyticsWidget />
         </div>
-      </div>
-
-      <div className="margin-top-4">
-        <button
-          type="button"
-          className="usa-button usa-button--secondary"
-          onClick={() => void logout()}
-        >
-          Sign out
-        </button>
       </div>
     </main>
   );

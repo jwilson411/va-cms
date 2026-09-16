@@ -68,6 +68,28 @@ public class ContentEntryRepository : IContentEntryRepository
         };
     }
 
+    public async Task<(bool Success, string? ErrorMessage)> TransitionAsync(
+        long entryId, long versionId, string fromStatus, string toStatus, long actorId, string? comment = null)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_Workflow_Transition @ContentEntryId, @ContentVersionId, @FromStatus, @ToStatus, @ActorId, @Comment, @Success OUTPUT, @ErrorMessage OUTPUT";
+        cmd.Parameters.AddWithValue("@ContentEntryId",   entryId);
+        cmd.Parameters.AddWithValue("@ContentVersionId", versionId);
+        cmd.Parameters.AddWithValue("@FromStatus",       fromStatus);
+        cmd.Parameters.AddWithValue("@ToStatus",         toStatus);
+        cmd.Parameters.AddWithValue("@ActorId",          actorId);
+        cmd.Parameters.AddWithValue("@Comment",          (object?)comment ?? DBNull.Value);
+        var success = cmd.Parameters.Add("@Success", System.Data.SqlDbType.Bit);
+        success.Direction = System.Data.ParameterDirection.Output;
+        var error = cmd.Parameters.Add("@ErrorMessage", System.Data.SqlDbType.NVarChar, 500);
+        error.Direction = System.Data.ParameterDirection.Output;
+        await cmd.ExecuteNonQueryAsync();
+        return (success.Value is true, error.Value as string);
+    }
+
     private static ContentEntry MapContentEntry(Microsoft.Data.SqlClient.SqlDataReader reader)
     {
         var entry = new ContentEntry
@@ -98,6 +120,12 @@ public class ContentEntryRepository : IContentEntryRepository
         {
             var ordRendered = reader.GetOrdinal("RenderedFieldsJson");
             entry.RenderedFieldsJson = reader.IsDBNull(ordRendered) ? null : reader.GetString(ordRendered);
+        }
+        catch { /* column not present in all queries */ }
+        try
+        {
+            var ordTypeName = reader.GetOrdinal("ContentTypeName");
+            entry.ContentTypeName = reader.IsDBNull(ordTypeName) ? null : reader.GetString(ordTypeName);
         }
         catch { /* column not present in all queries */ }
 

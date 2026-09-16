@@ -253,6 +253,7 @@ builder.Services.AddScoped<CmsDatabase>(_ => new CmsDatabase(connectionString));
 
 // Repositories
 builder.Services.AddScoped<IContentEntryRepository, ContentEntryRepository>();
+builder.Services.AddScoped<IContentTypeRepository, ContentTypeRepository>();
 builder.Services.AddScoped<IContentVersionRepository, ContentVersionRepository>();
 builder.Services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
 builder.Services.AddScoped<IMediaExtendedRepository, MediaExtendedRepository>();

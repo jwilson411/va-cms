@@ -15,6 +15,7 @@ import { useContentEntryForm } from './useContentEntryForm';
 import { FieldRenderer } from './FieldRenderers';
 import { SlugField } from './SlugField';
 import { PreviewButton } from './PreviewButton';
+import { WorkflowActions } from './WorkflowActions';
 
 export interface ContentEntryFormPageProps {
   /**
@@ -203,6 +204,11 @@ export function ContentEntryFormPage({
               </button>
             )}
           </div>
+
+          {/* ── Workflow (issue #37) — edit mode only; a new entry is Draft ── */}
+          {isEditMode && entryId !== undefined && (
+            <WorkflowActions entryId={entryId} disabled={isSaving} />
+          )}
 
           {/* ── Validation summary ───────────────────────────────────── */}
           {hasErrors && (

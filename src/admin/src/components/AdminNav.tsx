@@ -32,6 +32,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Audit Log', to: '/admin/audit' },
   { label: 'Search Analytics', to: '/admin/search/analytics' },
   { label: 'Navigation', to: '/admin/navigation', ariaLabel: 'Navigation menu editor' },
+  { label: 'Redirects', to: '/admin/redirects', ariaLabel: 'Redirect management' },
+  { label: 'Search Pins', to: '/admin/search/pins' },
+  { label: 'Settings', to: '/admin/settings', ariaLabel: 'Admin settings' },
 ];
 
 /**
@@ -41,28 +44,34 @@ const NAV_ITEMS: NavItem[] = [
  * then activate it to jump directly to `#main-content`, bypassing repeated
  * navigation on every page.
  */
+/**
+ * Skip navigation link — visually hidden until focused. Targets `id="main-content"`
+ * which every admin page sets on its <main>. Rendered by AdminLayout as the very
+ * first element in the shell: .usa-skipnav is absolutely positioned, so it must
+ * sit outside the USWDS grid columns (which are position: relative) or it shows
+ * inside the sidebar instead of off-screen.
+ */
+export function SkipNav(): JSX.Element {
+  return (
+    <a
+      href="#main-content"
+      className="usa-skipnav"
+      data-testid="skip-nav-link"
+    >
+      Skip to main content
+    </a>
+  );
+}
+
 export function AdminNav(): JSX.Element {
   return (
     <>
-      {/*
-       * Skip navigation link — visually hidden until focused.
-       * Targets `id="main-content"` which every admin page sets on its <main>.
-       * This is the first focusable element in the SPA shell.
-       */}
-      <a
-        href="#main-content"
-        className="usa-skipnav"
-        data-testid="skip-nav-link"
-      >
-        Skip to main content
-      </a>
-
       <nav
         aria-label="Admin navigation"
-        className="usa-sidenav"
         data-testid="admin-nav"
       >
-        <ul className="usa-sidenav__list">
+        {/* USWDS 3 sidenav: the class goes on the <ul>, items on <li> */}
+        <ul className="usa-sidenav">
           {NAV_ITEMS.map(({ label, to, ariaLabel }) => (
             <li key={to} className="usa-sidenav__item">
               <NavLink

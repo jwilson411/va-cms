@@ -13,6 +13,15 @@ public interface IContentEntryRepository
     /// published version and content type. Null when there is no published entry.
     /// </summary>
     Task<PublishedContentEntry?> GetPublishedBySlugAsync(string slug, string locale = "en-US");
+
+    /// <summary>
+    /// Workflow state transition via usp_Workflow_Transition (BRD FR-WORKFLOW-01).
+    /// Validates the from→to pair, updates ContentEntry.Status, logs a
+    /// WorkflowTransition row and an audit entry. Returns (false, message) when the
+    /// entry is not in <paramref name="fromStatus"/> or the transition is not allowed.
+    /// </summary>
+    Task<(bool Success, string? ErrorMessage)> TransitionAsync(
+        long entryId, long versionId, string fromStatus, string toStatus, long actorId, string? comment = null);
     Task<Page<ContentEntry>> ListAsync(int page, int pageSize, string? status = null, long? contentTypeId = null);
     Task<long> CreateAsync(ContentEntry entry);
     Task UpdateAsync(ContentEntry entry);
