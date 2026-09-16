@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
+using VA.CMS.API.Notifications;
 using VA.CMS.API.Webhooks;
 using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.Data.Pocos;
@@ -40,6 +41,7 @@ public class ContentController : ControllerBase
     private readonly IContentTypeRepository _contentTypes;
     private readonly IFieldTypeRegistry _registry;
     private readonly IWebhookBackgroundDispatcher _webhooks;
+    private readonly IWorkflowNotifier _notifier;
 
     public ContentController(
         IContentEntryRepository entries,
@@ -50,7 +52,8 @@ public class ContentController : ControllerBase
         IMediaExtendedRepository mediaUsage,
         IContentTypeRepository contentTypes,
         IFieldTypeRegistry registry,
-        IWebhookBackgroundDispatcher webhooks)
+        IWebhookBackgroundDispatcher webhooks,
+        IWorkflowNotifier notifier)
     {
         _entries      = entries;
         _rbac         = rbac;
@@ -61,6 +64,7 @@ public class ContentController : ControllerBase
         _contentTypes = contentTypes;
         _registry     = registry;
         _webhooks     = webhooks;
+        _notifier     = notifier;
     }
 
     /// <summary>Payload for content.* webhook events (issue #54).</summary>
@@ -324,7 +328,10 @@ public class ContentController : ControllerBase
                 return Forbidden("You do not have permission to submit content in this section.");
         }
 
-        return await TransitionAsync(entry, "InReview");
+        var result = await TransitionAsync(entry, "InReview");
+        if (result is NoContentResult)
+            await _notifier.NotifyAsync(entry.Id, NotificationEventTypes.ReviewRequested, _rbac.GetUserId(User) ?? 0);
+        return result;
     }
 
     /// <summary>
@@ -341,7 +348,10 @@ public class ContentController : ControllerBase
         var entry = await _entries.GetByIdAsync(id);
         if (entry is null) return NotFound();
 
-        return await TransitionAsync(entry, "Approved");
+        var result = await TransitionAsync(entry, "Approved");
+        if (result is NoContentResult)
+            await _notifier.NotifyAsync(entry.Id, NotificationEventTypes.ContentApproved, _rbac.GetUserId(User) ?? 0);
+        return result;
     }
 
     /// <summary>
@@ -358,7 +368,10 @@ public class ContentController : ControllerBase
         var entry = await _entries.GetByIdAsync(id);
         if (entry is null) return NotFound();
 
-        return await TransitionAsync(entry, "Draft", request?.Comment);
+        var result = await TransitionAsync(entry, "Draft", request?.Comment);
+        if (result is NoContentResult)
+            await _notifier.NotifyAsync(entry.Id, NotificationEventTypes.ContentReturned, _rbac.GetUserId(User) ?? 0, request?.Comment);
+        return result;
     }
 
     /// <summary>

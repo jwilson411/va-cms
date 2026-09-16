@@ -245,6 +245,7 @@ public class WorkflowTransitionTests
                 Replace<IContentVersionRepository>(services, _ => _versions);
                 Replace<IContentTypeRepository>(services,    _ => new Issue23ContentTypeStub());
                 Replace<IMediaAltTextGuardRepository>(services, _ => new NoMissingAltTextStub());
+                Replace<INotificationRepository>(services,   _ => new Issue38NotificationStub());
             });
         }
 

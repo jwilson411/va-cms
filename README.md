@@ -122,6 +122,16 @@ API is in DevBypass mode the login page shows a **Development sign-in** panel li
 `SystemAdmin` + `Developer` roles so every admin screen is usable. (`GET /api/auth/login`
 redirects to `/login` in DevBypass mode instead of challenging Azure AD.)
 
+Those dev roles live only in the JWT. Workflow notifications (the bell in the admin top bar,
+issue #38) resolve reviewers from `UserRole` rows, so to see "submitted for review"
+notifications locally, grant the reviewing dev user a real Editor/SiteAdmin role first —
+sign in as `alice@va.gov`, open **Users → bob**, assign *Editor* — then submit content as
+alice and sign in as bob. Approve/return notifications go to the entry's owner and need no
+extra setup.
+
+Running a second checkout against an API on another port? `VITE_API_PROXY=http://localhost:5101 npm run dev -- --port 5174`
+overrides the Vite `/api` proxy target.
+
 **5. Seed demo content and connect the public site (optional but recommended):**
 
 ```bash

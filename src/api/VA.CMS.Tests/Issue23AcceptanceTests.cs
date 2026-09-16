@@ -441,6 +441,7 @@ public sealed class Issue23TestFactory : WebApplicationFactory<Program>
             Replace<IContentTypeRepository>(services, _ => new Issue23ContentTypeStub());
             Replace<IUserRoleRepository>(services, _ => new Issue23UserRoleStub());
             Replace<IDbMonitorRepository>(services, _ => new Issue23DbMonitorStub());
+            Replace<INotificationRepository>(services, _ => new Issue38NotificationStub());
         });
     }
 
