@@ -116,7 +116,26 @@ API is in DevBypass mode the login page shows a **Development sign-in** panel li
 `SystemAdmin` + `Developer` roles so every admin screen is usable. (`GET /api/auth/login`
 redirects to `/login` in DevBypass mode instead of challenging Azure AD.)
 
-**5. Or authenticate from the command line using the DevBypass header:**
+**5. Seed demo content and connect the public site (optional but recommended):**
+
+```bash
+# Demo pages, news articles, users and taxonomy (idempotent; --reset drops and re-seeds)
+cd src/api
+VACMS_CONNECTION_STRING="Server=localhost,14333;Database=VACMS_Dev;User Id=sa;Password=VaCms_Dev!2026;TrustServerCertificate=True" \
+  dotnet run --project VA.CMS.CLI -- db seed --demo
+
+# Let publishes/unpublishes/nav changes invalidate the Next.js page cache (issue #54 webhooks).
+# Use the same secret as REVALIDATE_SECRET in src/public/.env.local (unset = unsigned, dev only).
+curl -s -X POST http://localhost:5100/api/v1/webhooks -H "X-Dev-User: alice@va.gov" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"public-site","url":"http://localhost:3000/api/revalidate","secret":"dev-secret",
+       "events":["content.published","content.unpublished","content.archived","navigation.updated"]}'
+```
+
+Uploaded media is written to `Storage:LocalRootPath` (`src/api/VA.CMS.API/.uploads`, gitignored, from
+the example settings) and served by `GET /api/v1/media/serve/{id}`.
+
+**6. Or authenticate from the command line using the DevBypass header:**
 
 ```bash
 # Obtain a JWT for a sample user

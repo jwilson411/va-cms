@@ -13,6 +13,7 @@
 
 import React, { useState, useCallback, useId } from 'react';
 import { useMediaAssets, useMediaDetail, useUpdateMediaMetadata } from './useMediaAssets';
+import { MediaUploadForm } from './MediaUploadForm';
 import type { MediaAssetSummary, MediaDetailDto } from './mediaTypes';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -109,6 +110,9 @@ export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Eleme
   return (
     <div className="grid-container" data-testid="media-library-page">
       <h1 className="page-heading">Media Library</h1>
+
+      {/* Upload — POST /api/v1/media/upload (issue #40) */}
+      <MediaUploadForm onUploaded={(id) => setSelectedId(id)} />
 
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       <div className="usa-prose display-flex flex-align-center flex-wrap margin-bottom-2">

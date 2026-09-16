@@ -330,6 +330,7 @@ builder.Services.AddScoped<IWebhookRepository, WebhookRepository>();
 builder.Services.AddHttpClient("WebhookClient")
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();
+builder.Services.AddSingleton<IWebhookBackgroundDispatcher, WebhookBackgroundDispatcher>();
 
 // Issue #35: Scheduled publish / expiry background worker (BRD FR-AUTH-04)
 builder.Services.AddHostedService<VA.CMS.Infrastructure.Services.ScheduledPublishWorker>();
@@ -338,6 +339,7 @@ builder.Services.AddHostedService<VA.CMS.Infrastructure.Services.ScheduledPublis
 // Content Type Registry (FR-SCHEMA-01)
 // -----------------------------------------------------------------------
 builder.Services.AddContentType<StandardPageTypeDefinition>();
+builder.Services.AddContentType<NewsArticleTypeDefinition>();
 
 // -----------------------------------------------------------------------
 // Issue #53: Hot Chocolate GraphQL (FR-DEV-02)

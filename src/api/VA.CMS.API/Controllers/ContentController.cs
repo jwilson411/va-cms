@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
+using VA.CMS.API.Webhooks;
 using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
@@ -21,6 +22,7 @@ namespace VA.CMS.API.Controllers;
 ///   POST   /api/v1/content/{id}/submit-review  — CanWrite
 ///   POST   /api/v1/content/{id}/approve        — CanPublish (Editor, SiteAdmin, SystemAdmin)
 ///   POST   /api/v1/content/{id}/return         — CanPublish (InReview → Draft, comment required)
+///   POST   /api/v1/content/{id}/archive        — CanPublish (Published/Approved → Archived)
 ///   POST   /api/v1/content/{id}/publish        — CanPublish
 ///   POST   /api/v1/content/{id}/unpublish      — CanPublish
 ///   POST   /api/v1/content/{id}/archive        — CanPublish
@@ -37,6 +39,7 @@ public class ContentController : ControllerBase
     private readonly IMediaExtendedRepository _mediaUsage;
     private readonly IContentTypeRepository _contentTypes;
     private readonly IFieldTypeRegistry _registry;
+    private readonly IWebhookBackgroundDispatcher _webhooks;
 
     public ContentController(
         IContentEntryRepository entries,
@@ -46,7 +49,8 @@ public class ContentController : ControllerBase
         IMarkdownRenderer renderer,
         IMediaExtendedRepository mediaUsage,
         IContentTypeRepository contentTypes,
-        IFieldTypeRegistry registry)
+        IFieldTypeRegistry registry,
+        IWebhookBackgroundDispatcher webhooks)
     {
         _entries      = entries;
         _rbac         = rbac;
@@ -56,7 +60,18 @@ public class ContentController : ControllerBase
         _mediaUsage   = mediaUsage;
         _contentTypes = contentTypes;
         _registry     = registry;
+        _webhooks     = webhooks;
     }
+
+    /// <summary>Payload for content.* webhook events (issue #54).</summary>
+    private static object ContentEventPayload(ContentEntry entry) => new
+    {
+        id              = entry.Id,
+        slug            = entry.Slug,
+        locale          = entry.Locale,
+        contentTypeName = entry.ContentTypeName,
+        status          = entry.Status,
+    };
 
     // ── Read ─────────────────────────────────────────────────────────────────
 
@@ -284,6 +299,8 @@ public class ContentController : ControllerBase
         }
 
         await _entries.ArchiveAsync(id, _rbac.GetUserId(User) ?? 0);
+        entry.Status = "Archived";
+        _webhooks.Enqueue(WebhookEvents.ContentArchived, ContentEventPayload(entry));
         return NoContent();
     }
 
@@ -385,6 +402,7 @@ public class ContentController : ControllerBase
         {
             entry.PublishedVersionId = latestVersion.Id;
             await _entries.UpdateAsync(entry);
+            _webhooks.Enqueue(WebhookEvents.ContentPublished, ContentEventPayload(entry));
             return NoContent();
         }
 
@@ -396,6 +414,7 @@ public class ContentController : ControllerBase
         entry.Status             = "Published";
         entry.PublishedVersionId = latestVersion.Id;
         await _entries.UpdateAsync(entry);
+        _webhooks.Enqueue(WebhookEvents.ContentPublished, ContentEventPayload(entry));
         return NoContent();
     }
 
@@ -411,7 +430,37 @@ public class ContentController : ControllerBase
         if (entry is null) return NotFound();
 
         // Published → Approved (same edge the scheduled-expiry worker uses).
-        return await TransitionAsync(entry, "Approved");
+        var result = await TransitionAsync(entry, "Approved");
+        if (result is NoContentResult)
+        {
+            entry.Status = "Approved";
+            _webhooks.Enqueue(WebhookEvents.ContentUnpublished, ContentEventPayload(entry));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Archive via the workflow state machine (Published/Approved → Archived), logging a
+    /// WorkflowTransition row. Requires CanPublish. Issue #37.
+    /// DELETE /api/v1/content/{id} remains the unconditional soft-delete for authors.
+    /// </summary>
+    [HttpPost("{id:long}/archive")]
+    [Authorize(Policy = CmsRoles.Policies.CanPublish)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ContentTransitionErrorResponse), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ArchiveTransition(long id)
+    {
+        var entry = await _entries.GetByIdAsync(id);
+        if (entry is null) return NotFound();
+
+        var result = await TransitionAsync(entry, "Archived");
+        if (result is NoContentResult)
+        {
+            entry.Status = "Archived";
+            _webhooks.Enqueue(WebhookEvents.ContentArchived, ContentEventPayload(entry));
+        }
+        return result;
     }
 
     /// <summary>

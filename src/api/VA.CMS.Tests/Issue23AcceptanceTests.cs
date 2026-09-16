@@ -496,7 +496,7 @@ internal class Issue23ContentEntryStub : IContentEntryRepository
         UpdatedAt     = DateTime.UtcNow,
     };
 
-    public Task<ContentEntry?> GetByIdAsync(long id)
+    public virtual Task<ContentEntry?> GetByIdAsync(long id)
         => Task.FromResult<ContentEntry?>(id == _entry.Id ? _entry : null);
 
     public Task<ContentEntry?> GetBySlugAsync(string slug, string locale = "en-US")
@@ -521,7 +521,7 @@ internal class Issue23ContentEntryStub : IContentEntryRepository
 
     public Task<long> CreateAsync(ContentEntry entry) => Task.FromResult(42L);
 
-    public Task UpdateAsync(ContentEntry entry) => Task.CompletedTask;
+    public virtual Task UpdateAsync(ContentEntry entry) => Task.CompletedTask;
 
     public Task ArchiveAsync(long id, long actorId) => Task.CompletedTask;
 
@@ -651,7 +651,9 @@ internal sealed class Issue23ContentVersionStub : IContentVersionRepository
 internal sealed class Issue23ContentTypeStub : IContentTypeRepository
 {
     public Task<ContentType?> GetByNameAsync(string name)
-        => Task.FromResult<ContentType?>(new ContentType { Id = 1, Name = name, DisplayName = name });
+        => Task.FromResult<ContentType?>(name == "standard_page"
+            ? new ContentType { Id = 1, Name = name, DisplayName = "Standard Page" }
+            : null);
 
     public Task<long> UpsertAsync(ContentType type)
         => Task.FromResult(1L);

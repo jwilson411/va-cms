@@ -23,6 +23,10 @@
     "ClientSecret": "YOUR_CLIENT_SECRET_DEV_ONLY",
     "CallbackPath": "/api/auth/callback"
   },
+  "Storage": {
+    "Backend": "local",
+    "LocalRootPath": ".uploads"
+  },
   "Jwt": {
     "SigningKey": "REPLACE_WITH_32_CHAR_OR_LONGER_SECRET",
     "Issuer": "va-cms-api",

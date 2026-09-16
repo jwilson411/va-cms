@@ -4,6 +4,7 @@ using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Storage;
+using VA.CMS.API.Webhooks;
 
 namespace VA.CMS.API.Controllers;
 
@@ -25,17 +26,58 @@ public class MediaController : ControllerBase
     private readonly IMediaAssetRepository    _assets;
     private readonly IMediaExtendedRepository _extended;
     private readonly IRbacService             _rbac;
+    private readonly IStorageBackend          _storage;
+    private readonly IWebhookBackgroundDispatcher _webhooks;
 
     public MediaController(
         IMediaUploadService      uploader,
         IMediaAssetRepository    assets,
         IMediaExtendedRepository extended,
-        IRbacService             rbac)
+        IRbacService             rbac,
+        IStorageBackend          storage,
+        IWebhookBackgroundDispatcher webhooks)
     {
         _uploader = uploader;
         _assets   = assets;
         _extended = extended;
         _rbac     = rbac;
+        _storage  = storage;
+        _webhooks = webhooks;
+    }
+
+    // ── Serve ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Stream a stored file. Anonymous: published pages and the admin library both
+    /// reference images as /api/v1/media/serve/{id}. Files are stored outside the
+    /// web root (FR-SECURITY-06) so this is the only way they are exposed.
+    /// ?variant=webp returns the generated WebP rendition when one exists.
+    /// </summary>
+    [HttpGet("serve/{id:long}")]
+    [AllowAnonymous]
+    [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Serve(long id, [FromQuery] string? variant, CancellationToken ct)
+    {
+        var asset = await _assets.GetByIdAsync(id);
+        if (asset is null) return NotFound();
+
+        var useWebP = string.Equals(variant, "webp", StringComparison.OrdinalIgnoreCase)
+                      && !string.IsNullOrEmpty(asset.WebPStoragePath);
+        var path     = useWebP ? asset.WebPStoragePath! : asset.StoragePath;
+        var mimeType = useWebP ? "image/webp" : asset.MimeType;
+
+        var stream = await _storage.OpenReadAsync(path, ct);
+        if (stream is null) return NotFound();
+
+        // Inline for images/PDFs; attachment for anything else so browsers don't render it.
+        var inline = mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+                     || mimeType == "application/pdf";
+        if (!inline)
+            Response.Headers.ContentDisposition = $"attachment; filename=\"{Uri.EscapeDataString(asset.FileName)}\"";
+
+        return File(stream, mimeType, enableRangeProcessing: true);
     }
 
     // ── Upload ───────────────────────────────────────────────────────────────
@@ -70,6 +112,8 @@ public class MediaController : ControllerBase
 
         if (error is not null)
             return BadRequest(new MediaErrorResponse(error));
+
+        _webhooks.Enqueue(WebhookEvents.MediaUploaded, new { id = asset!.Id, fileName = asset.FileName, mimeType = asset.MimeType });
 
         var response = new MediaUploadResponse(
             Id:              asset!.Id,

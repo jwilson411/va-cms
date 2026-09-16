@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using VA.CMS.API.Webhooks;
 using System.Text.Json;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
@@ -26,6 +27,7 @@ namespace VA.CMS.API.Controllers;
 [ApiController]
 [Route("api/v1/navigation")]
 [Authorize]
+[NotifyWebhook(WebhookEvents.NavigationUpdated)]   // any successful mutation → public nav cache revalidates
 public class NavigationAdminController : ControllerBase
 {
     private readonly INavigationMenuRepository _menus;

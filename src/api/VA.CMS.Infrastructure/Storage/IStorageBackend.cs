@@ -36,4 +36,13 @@ public interface IStorageBackend
     /// Issue #45 — FR-MEDIA-04.
     /// </summary>
     Task DeleteAsync(string storagePath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Opens the stored file for reading so the API can stream it to clients
+    /// (GET /api/v1/media/serve/{id}) — files live outside the web root and are
+    /// never served as static content (BRD FR-SECURITY-06). Returns null when the
+    /// file does not exist. Default: not readable (backends override).
+    /// </summary>
+    Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default)
+        => Task.FromResult<Stream?>(null);
 }
