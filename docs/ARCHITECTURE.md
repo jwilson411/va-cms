@@ -190,7 +190,7 @@ HTML streamed to browser (SSR) or served from ISR cache
 | Rich text editor | TipTap | ProseMirror-based, extensible, can enforce USWDS HTML output |
 | Auth | Microsoft.Identity.Web (AD → JWT) | Official MS library for AAD OIDC in ASP.NET Core; AD authenticates, CMS issues JWT |
 | Markdown renderer | Markdig | Fast, extensible CommonMark renderer for .NET; same pipeline in live preview and publish |
-| WYSIWYG editor | Milkdown or Toast UI Editor | ProseMirror/CodeMirror-based Markdown editors with WYSIWYG surface — content owners see formatting, storage is Markdown |
+| WYSIWYG editor | TipTap + tiptap-markdown | Decision in #69: true WYSIWYG (the editor is the preview); content owners see formatting, storage is Markdown serialised by tiptap-markdown |
 | Testing (API) | xUnit + TestContainers (MSSQL) | Real DB in CI, no mocks for data layer |
 | Testing (React) | Vitest + React Testing Library | Fast, co-located with components |
 | Accessibility testing | axe-core + Playwright | Automated a11y CI gate |

@@ -1,43 +1,55 @@
 /**
- * Tests for issue #31: TipTap rich text editor with USWDS-safe toolbar.
+ * Tests for issue #115: TipTap WYSIWYG RichText field with tiptap-markdown export.
  *
  * AC covered:
- *  - Toolbar: Bold, Italic, H2-H4 only, Ordered List, Unordered List, Link, Block Quote
- *  - H1 is disabled in toolbar (page title is the H1)
- *  - Inline color picker and font size controls are absent
- *  - Media insertion opens media library modal
- *  - RichTextField uses aria-labelledby (not htmlFor) per HTML spec for contenteditable
+ *  - Toolbar: Bold, Italic, H2-H4 (no H1), ordered/unordered list, link, image insert
+ *  - No split view or preview toggle — the editor is the live preview
+ *  - Value is Markdown in and Markdown out; no raw HTML is ever emitted
+ *  - Image insert opens the existing MediaLibraryModal and inserts `![alt](url)`
+ *  - Section 508: aria-labelledby on the contenteditable, aria-pressed on toggles,
+ *    toolbar is a single tab stop with arrow-key navigation
  */
 
 import React from 'react';
-import {
-  render,
-  screen,
-  fireEvent,
-  within,
-} from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 import { RichTextEditor } from './RichTextEditor';
-import { MediaLibraryModal } from './MediaLibraryModal';
-import { RichTextField } from './FieldRenderers';
+import { RichTextField, FieldRenderer } from './FieldRenderers';
 import type { FieldDefinitionDto } from './formTypes';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function renderEditor(overrides: Partial<React.ComponentProps<typeof RichTextEditor>> = {}) {
-  const defaults: React.ComponentProps<typeof RichTextEditor> = {
+type EditorProps = React.ComponentProps<typeof RichTextEditor>;
+
+function renderEditor(overrides: Partial<EditorProps> = {}) {
+  const props: EditorProps = {
     editorId: 'test-body',
     labelId: 'test-body-label',
     value: '',
     onChange: vi.fn(),
     onBlur: vi.fn(),
+    ...overrides,
   };
-  return render(<RichTextEditor {...defaults} {...overrides} />);
+  const utils = render(<RichTextEditor {...props} />);
+  const rerenderWith = (next: Partial<EditorProps>) =>
+    utils.rerender(<RichTextEditor {...props} {...next} />);
+  return { ...utils, props, rerenderWith };
 }
 
-function renderRichTextField(overrides: Partial<FieldDefinitionDto> = {}) {
-  const def: FieldDefinitionDto = {
+function contentEditable(container: HTMLElement): HTMLElement {
+  const el = container.querySelector<HTMLElement>('[contenteditable="true"]');
+  if (!el) throw new Error('contenteditable not rendered');
+  return el;
+}
+
+function lastMarkdown(onChange: ReturnType<typeof vi.fn>): string {
+  const calls = onChange.mock.calls;
+  return calls.length ? (calls[calls.length - 1][0] as string) : '';
+}
+
+function makeDef(overrides: Partial<FieldDefinitionDto> = {}): FieldDefinitionDto {
+  return {
     name: 'body',
     label: 'Body',
     type: 'RichText',
@@ -45,324 +57,422 @@ function renderRichTextField(overrides: Partial<FieldDefinitionDto> = {}) {
     maxLength: null,
     ...overrides,
   };
-  return render(
-    <RichTextField
-      def={def}
-      value=""
-      onChange={vi.fn()}
-      onBlur={vi.fn()}
-    />,
-  );
 }
 
-// ── AC: USWDS-safe toolbar buttons ────────────────────────────────────────────
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+// ── AC: Word-style toolbar ────────────────────────────────────────────────────
 
 describe('RichTextEditor toolbar', () => {
-  it('renders the toolbar region', () => {
+  it('renders a toolbar with Bold, Italic, H2-H4, lists, link, block quote and image', () => {
     renderEditor();
-    expect(screen.getByTestId('rich-text-toolbar')).toBeInTheDocument();
-    expect(screen.getByRole('toolbar')).toBeInTheDocument();
+    const toolbar = screen.getByRole('toolbar', { name: 'Text formatting' });
+    expect(toolbar).toBe(screen.getByTestId('rich-text-toolbar'));
+    for (const name of [
+      'Bold',
+      'Italic',
+      'Heading 2',
+      'Heading 3',
+      'Heading 4',
+      'Ordered list',
+      'Unordered list',
+      'Insert link',
+      'Block quote',
+      'Insert image from library',
+    ]) {
+      expect(within(toolbar).getByRole('button', { name })).toBeInTheDocument();
+    }
   });
 
-  it('renders a Bold button', () => {
+  it('does NOT render an H1 button (page title is the H1)', () => {
     renderEditor();
-    expect(screen.getByTestId('toolbar-bold')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Bold/i })).toBeInTheDocument();
-  });
-
-  it('renders an Italic button', () => {
-    renderEditor();
-    expect(screen.getByTestId('toolbar-italic')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Italic/i })).toBeInTheDocument();
-  });
-
-  it('renders H2 button', () => {
-    renderEditor();
-    expect(screen.getByTestId('toolbar-h2')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Heading 2/i })).toBeInTheDocument();
-  });
-
-  it('renders H3 button', () => {
-    renderEditor();
-    expect(screen.getByTestId('toolbar-h3')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Heading 3/i })).toBeInTheDocument();
-  });
-
-  it('renders H4 button', () => {
-    renderEditor();
-    expect(screen.getByTestId('toolbar-h4')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Heading 4/i })).toBeInTheDocument();
-  });
-
-  it('renders Ordered List button', () => {
-    renderEditor();
-    expect(screen.getByTestId('toolbar-ordered-list')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ordered list' })).toBeInTheDocument();
-  });
-
-  it('renders Unordered List button', () => {
-    renderEditor();
-    expect(screen.getByTestId('toolbar-bullet-list')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Unordered list' })).toBeInTheDocument();
-  });
-
-  it('renders Link button', () => {
-    renderEditor();
-    expect(screen.getByTestId('toolbar-link')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /link/i })).toBeInTheDocument();
-  });
-
-  it('renders Block Quote button', () => {
-    renderEditor();
-    expect(screen.getByTestId('toolbar-blockquote')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Block quote/i })).toBeInTheDocument();
-  });
-
-  it('renders Media button', () => {
-    renderEditor();
-    expect(screen.getByTestId('toolbar-media')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Insert media/i })).toBeInTheDocument();
-  });
-
-  // ── AC: H1 is disabled in toolbar ──────────────────────────────────────────
-
-  it('does NOT render an H1 toolbar button', () => {
-    renderEditor();
-    // No button with label "Heading 1"
     expect(screen.queryByRole('button', { name: /Heading 1/i })).toBeNull();
     expect(screen.queryByTestId('toolbar-h1')).toBeNull();
   });
 
-  // ── AC: No inline color picker or font size ─────────────────────────────────
+  it('does NOT render a split view, preview pane or preview toggle', () => {
+    renderEditor({ value: '## Hello' });
+    expect(screen.queryByRole('button', { name: /preview/i })).toBeNull();
+    expect(screen.queryByTestId('md-split-container')).toBeNull();
+    expect(screen.queryByTestId('md-preview-pane')).toBeNull();
+    expect(screen.queryByText(/Raw Markdown/i)).toBeNull();
+  });
 
-  it('does NOT render a color picker control', () => {
+  it('does NOT render color or font-size controls', () => {
     const { container } = renderEditor();
-    // No <input type="color">
     expect(container.querySelector('input[type="color"]')).toBeNull();
-    // No element with aria-label containing "color"
-    expect(screen.queryByRole('button', { name: /color/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /color|font size/i })).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
   });
 
-  it('does NOT render a font size control', () => {
+  it('toggle buttons expose aria-pressed; the image button exposes aria-haspopup instead', () => {
     renderEditor();
-    expect(screen.queryByRole('combobox', { name: /font size/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /font size/i })).toBeNull();
-    expect(screen.queryByRole('spinbutton', { name: /font size/i })).toBeNull();
-  });
-
-  // ── AC: Toolbar buttons have aria-pressed ──────────────────────────────────
-
-  it('all toolbar format buttons have aria-pressed attribute', () => {
-    const { container } = renderEditor();
-    const toolbar = container.querySelector('[data-testid="rich-text-toolbar"]') as HTMLElement;
-    const formatButtons = within(toolbar).getAllByRole('button');
-    // Every toolbar button that is a toggle must have aria-pressed
-    // (Media button opens a dialog — aria-haspopup, no aria-pressed required)
-    const toggleButtons = formatButtons.filter(
-      (btn) => !btn.getAttribute('aria-haspopup'),
-    );
-    for (const btn of toggleButtons) {
-      expect(btn).toHaveAttribute('aria-pressed');
+    const toolbar = screen.getByTestId('rich-text-toolbar');
+    for (const btn of within(toolbar).getAllByRole('button')) {
+      if (btn.getAttribute('aria-haspopup')) {
+        expect(btn).toHaveAttribute('aria-haspopup', 'dialog');
+        expect(btn).not.toHaveAttribute('aria-pressed');
+      } else {
+        expect(btn).toHaveAttribute('aria-pressed');
+      }
     }
   });
 
-  // ── AC: Media button opens media library modal ─────────────────────────────
+  it('reflects the active heading level in aria-pressed', () => {
+    renderEditor({ value: '## Title' });
+    // Caret starts at the beginning of the document, inside the H2.
+    expect(screen.getByTestId('toolbar-h2')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('toolbar-h3')).toHaveAttribute('aria-pressed', 'false');
+  });
+});
 
-  it('clicking the Media button opens the media library modal', () => {
+// ── AC: Markdown in / Markdown out ────────────────────────────────────────────
+
+describe('RichTextEditor Markdown round-trip', () => {
+  it('renders an initial Markdown value as WYSIWYG HTML', () => {
+    const { container } = renderEditor({
+      value: '## Hello\n\nSome **bold** and *italic* text.\n\n- one\n- two\n\n> quoted',
+    });
+    const ce = contentEditable(container);
+    expect(ce.querySelector('h2')?.textContent).toBe('Hello');
+    expect(ce.querySelector('strong')?.textContent).toBe('bold');
+    expect(ce.querySelector('em')?.textContent).toBe('italic');
+    expect(ce.querySelectorAll('ul li')).toHaveLength(2);
+    expect(ce.querySelector('blockquote')?.textContent).toBe('quoted');
+    // No literal Markdown syntax in the WYSIWYG view.
+    expect(ce.textContent).not.toContain('##');
+    expect(ce.textContent).not.toContain('**');
+  });
+
+  it('emits Markdown (not HTML) from onChange when a toolbar action changes content', () => {
+    const onChange = vi.fn();
+    renderEditor({ value: 'Plain paragraph', onChange });
+
+    fireEvent.click(screen.getByTestId('toolbar-h2'));
+
+    const md = lastMarkdown(onChange);
+    expect(md).toBe('## Plain paragraph');
+    expect(md).not.toMatch(/<[a-z]/i);
+  });
+
+  it('toggles a bullet list and serialises with the "-" marker', () => {
+    const onChange = vi.fn();
+    renderEditor({ value: 'item', onChange });
+    fireEvent.click(screen.getByTestId('toolbar-bullet-list'));
+    expect(lastMarkdown(onChange)).toBe('- item');
+  });
+
+  it('toggles an ordered list', () => {
+    const onChange = vi.fn();
+    renderEditor({ value: 'item', onChange });
+    fireEvent.click(screen.getByTestId('toolbar-ordered-list'));
+    expect(lastMarkdown(onChange)).toBe('1. item');
+  });
+
+  it('toggles a block quote', () => {
+    const onChange = vi.fn();
+    renderEditor({ value: 'wise words', onChange });
+    fireEvent.click(screen.getByTestId('toolbar-blockquote'));
+    expect(lastMarkdown(onChange)).toBe('> wise words');
+  });
+
+  it('treats raw HTML in the Markdown as literal text (html: false, matches Markdig DisableHtml)', () => {
+    const onChange = vi.fn();
+    const { container } = renderEditor({
+      value: '<script>alert(1)</script> <u>plain</u> text',
+      onChange,
+    });
+    const ce = contentEditable(container);
+    expect(ce.querySelector('script')).toBeNull();
+    expect(ce.querySelector('u')).toBeNull();
+    expect(ce.textContent).toContain('<script>alert(1)</script>');
+
+    fireEvent.click(screen.getByTestId('toolbar-h3'));
+    const md = lastMarkdown(onChange);
+    expect(md.startsWith('### ')).toBe(true);
+    // Serialiser escapes it so it stays text on the public site too.
+    expect(md).not.toMatch(/<script>/);
+  });
+
+  it('syncs an external value change into the editor without echoing it back', async () => {
+    const onChange = vi.fn();
+    const { container, rerenderWith } = renderEditor({ value: '', onChange });
+    expect(contentEditable(container).textContent).toBe('');
+
+    // Edit mode: the saved body arrives after mount.
+    await act(async () => {
+      rerenderWith({ value: '### Loaded later\n\nBody copy.' });
+    });
+
+    const ce = contentEditable(container);
+    expect(ce.querySelector('h3')?.textContent).toBe('Loaded later');
+    expect(ce.querySelector('p')?.textContent).toBe('Body copy.');
+    // Sync must not fire onChange — that would mark a pristine form dirty.
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('ignores the parent echoing back the Markdown the editor just emitted', async () => {
+    const onChange = vi.fn();
+    const { container, rerenderWith } = renderEditor({ value: 'hello', onChange });
+    fireEvent.click(screen.getByTestId('toolbar-h2'));
+    const emitted = lastMarkdown(onChange);
+    const before = contentEditable(container).innerHTML;
+
+    await act(async () => {
+      rerenderWith({ value: emitted });
+    });
+
+    // No re-parse: DOM identical, no additional onChange.
+    expect(contentEditable(container).innerHTML).toBe(before);
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── AC: Image insert via existing media library picker ────────────────────────
+
+describe('RichTextEditor image insert', () => {
+  it('opens the media library modal from the Image button', () => {
     renderEditor();
-    const mediaBtn = screen.getByTestId('toolbar-media');
-    fireEvent.click(mediaBtn);
-    expect(screen.getByTestId('media-library-modal')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('toolbar-image'));
     expect(screen.getByRole('dialog', { name: /Media Library/i })).toBeInTheDocument();
   });
 
-  it('media library modal closes when the close button is clicked', () => {
-    renderEditor();
-    fireEvent.click(screen.getByTestId('toolbar-media'));
-    expect(screen.getByTestId('media-library-modal')).toBeInTheDocument();
+  it('inserts the picked asset as a Markdown image on its own block and closes the modal', () => {
+    const onChange = vi.fn();
+    const { container } = renderEditor({ value: '## Heading\n\nIntro', onChange });
 
-    fireEvent.click(screen.getByTestId('media-modal-close'));
+    fireEvent.click(screen.getByTestId('toolbar-image'));
+    fireEvent.click(screen.getByTestId('media-asset-1'));
+
     expect(screen.queryByTestId('media-library-modal')).toBeNull();
+
+    const img = contentEditable(container).querySelector('img');
+    expect(img).toHaveAttribute('src', '/media/placeholder-hero.jpg');
+    expect(img).toHaveAttribute('alt', 'Placeholder hero image');
+
+    const md = lastMarkdown(onChange);
+    expect(md).toContain('![Placeholder hero image](/media/placeholder-hero.jpg)');
+    // Block image must be separated from neighbouring blocks so Markdig
+    // doesn't fold the heading into the image paragraph.
+    expect(md).not.toMatch(/\)## /);
+    expect(md).toMatch(/!\[Placeholder hero image\]\(\/media\/placeholder-hero\.jpg\)\n\n## Heading/);
+    expect(md).not.toContain('<img');
   });
 
-  it('media library modal closes when Escape is pressed', () => {
-    renderEditor();
-    fireEvent.click(screen.getByTestId('toolbar-media'));
-    expect(screen.getByTestId('media-library-modal')).toBeInTheDocument();
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByTestId('media-library-modal')).toBeNull();
-  });
-
-  it('media library modal closes when overlay is clicked', () => {
-    renderEditor();
-    fireEvent.click(screen.getByTestId('toolbar-media'));
-    expect(screen.getByTestId('media-library-modal')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('media-modal-overlay'));
-    expect(screen.queryByTestId('media-library-modal')).toBeNull();
-  });
-
-  // ── AC: Editor content area present ───────────────────────────────────────
-
-  it('renders the TipTap editor wrapper', () => {
-    renderEditor();
-    expect(screen.getByTestId('rich-text-editor')).toBeInTheDocument();
-  });
-
-  it('editor contenteditable has aria-labelledby pointing to the label', () => {
-    renderEditor({ editorId: 'body-field', labelId: 'body-label' });
-    const editor = screen.getByTestId('rich-text-editor');
-    const contenteditable = editor.querySelector('[contenteditable="true"]') as HTMLElement | null;
-    expect(contenteditable).not.toBeNull();
-    expect(contenteditable).toHaveAttribute('aria-labelledby', 'body-label');
-  });
-
-  it('editor contenteditable has aria-multiline="true"', () => {
-    renderEditor();
-    const editor = screen.getByTestId('rich-text-editor');
-    const contenteditable = editor.querySelector('[contenteditable="true"]') as HTMLElement | null;
-    expect(contenteditable).toHaveAttribute('aria-multiline', 'true');
-  });
-
-  it('calls onChange when content is updated', () => {
-    // TipTap dispatches onUpdate — verified via the TipTap editor internals.
-    // We confirm that the onChange prop is wired (the function object is passed
-    // to useEditor's onUpdate callback). The actual DOM mutation tests are
-    // better as E2E (axe + Playwright); unit test confirms prop plumbing.
+  it('closes the modal on Escape without inserting', () => {
     const onChange = vi.fn();
     renderEditor({ onChange });
-    // onChange will be called by TipTap once content is mutated
-    // (verified via integration test; accept prop-present confirmation here)
-    expect(onChange).toBeDefined();
+    fireEvent.click(screen.getByTestId('toolbar-image'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('media-library-modal')).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+// ── AC: Link insert ───────────────────────────────────────────────────────────
+
+describe('RichTextEditor links', () => {
+  it('inserts the URL as link text when nothing is selected', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('https://www.va.gov/');
+    const onChange = vi.fn();
+    renderEditor({ value: '', onChange });
+
+    fireEvent.click(screen.getByTestId('toolbar-link'));
+
+    expect(window.prompt).toHaveBeenCalledWith('Enter URL', '');
+    // Text === href serialises as a CommonMark autolink, which Markdig renders as <a>.
+    expect(lastMarkdown(onChange)).toBe('<https://www.va.gov/>');
   });
 
-  it('calls onBlur when editor loses focus', () => {
+  it('wraps the selected text in a Markdown link', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('https://www.va.gov/');
+    const onChange = vi.fn();
+    const { container } = renderEditor({ value: 'Visit VA today', onChange });
+
+    // Select "VA" in the DOM; ProseMirror reads the DOM selection while focused.
+    const ce = contentEditable(container);
+    ce.focus();
+    const textNode = ce.querySelector('p')!.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(textNode, 6);
+    range.setEnd(textNode, 8);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+
+    fireEvent.click(screen.getByTestId('toolbar-link'));
+
+    expect(lastMarkdown(onChange)).toBe('Visit [VA](https://www.va.gov/) today');
+  });
+
+  it('does nothing when the prompt is cancelled', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue(null);
+    const onChange = vi.fn();
+    renderEditor({ value: 'VA', onChange });
+    fireEvent.click(screen.getByTestId('toolbar-link'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('removes the link when the prompt is submitted empty', () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('');
+    const onChange = vi.fn();
+    renderEditor({ value: '[VA](https://www.va.gov/)', onChange });
+    expect(screen.getByTestId('toolbar-link')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Edit link' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('toolbar-link'));
+
+    expect(window.prompt).toHaveBeenCalledWith('Enter URL', 'https://www.va.gov/');
+    expect(lastMarkdown(onChange)).toBe('VA');
+  });
+});
+
+// ── AC: Section 508 / keyboard navigation ─────────────────────────────────────
+
+describe('RichTextEditor accessibility', () => {
+  it('contenteditable carries id, aria-labelledby, aria-multiline and forwarded ARIA', () => {
+    const { container } = renderEditor({
+      editorId: 'body-field',
+      labelId: 'body-label',
+      ariaDescribedby: 'body-hint body-error',
+      ariaInvalid: true,
+      ariaRequired: true,
+    });
+    const ce = contentEditable(container);
+    expect(ce).toHaveAttribute('id', 'body-field');
+    expect(ce).toHaveAttribute('aria-labelledby', 'body-label');
+    expect(ce).toHaveAttribute('aria-multiline', 'true');
+    expect(ce).toHaveAttribute('aria-describedby', 'body-hint body-error');
+    expect(ce).toHaveAttribute('aria-invalid', 'true');
+    expect(ce).toHaveAttribute('aria-required', 'true');
+    expect(screen.getByRole('toolbar')).toHaveAttribute('aria-controls', 'body-field');
+  });
+
+  it('toolbar is a single tab stop (roving tabindex)', () => {
+    renderEditor();
+    const buttons = within(screen.getByTestId('rich-text-toolbar')).getAllByRole('button');
+    const tabbable = buttons.filter((b) => b.tabIndex === 0);
+    expect(tabbable).toHaveLength(1);
+    expect(tabbable[0]).toBe(screen.getByTestId('toolbar-bold'));
+    for (const b of buttons.slice(1)) expect(b.tabIndex).toBe(-1);
+  });
+
+  it('ArrowRight / ArrowLeft / Home / End move focus between toolbar buttons', () => {
+    renderEditor();
+    const toolbar = screen.getByTestId('rich-text-toolbar');
+    const buttons = within(toolbar).getAllByRole('button');
+    const [bold, italic] = buttons;
+    const last = buttons[buttons.length - 1];
+
+    bold.focus();
+    fireEvent.keyDown(toolbar, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(italic);
+    expect(italic.tabIndex).toBe(0);
+    expect(bold.tabIndex).toBe(-1);
+
+    fireEvent.keyDown(toolbar, { key: 'ArrowLeft' });
+    expect(document.activeElement).toBe(bold);
+
+    // Wraps from first to last.
+    fireEvent.keyDown(toolbar, { key: 'ArrowLeft' });
+    expect(document.activeElement).toBe(last);
+
+    fireEvent.keyDown(toolbar, { key: 'Home' });
+    expect(document.activeElement).toBe(bold);
+
+    fireEvent.keyDown(toolbar, { key: 'End' });
+    expect(document.activeElement).toBe(last);
+  });
+
+  it('every toolbar button has an accessible name', () => {
+    renderEditor();
+    for (const b of within(screen.getByTestId('rich-text-toolbar')).getAllByRole('button')) {
+      expect(b.getAttribute('aria-label')).toBeTruthy();
+    }
+  });
+
+  it('calls onBlur when the editor loses focus', () => {
     const onBlur = vi.fn();
-    renderEditor({ onBlur });
-    const contenteditable = screen.getByTestId('rich-text-editor')
-      .querySelector('[contenteditable="true"]')!;
-    fireEvent.blur(contenteditable);
+    const { container } = renderEditor({ onBlur });
+    fireEvent.blur(contentEditable(container));
     expect(onBlur).toHaveBeenCalledTimes(1);
   });
 });
 
-// ── MediaLibraryModal unit tests ──────────────────────────────────────────────
-
-describe('MediaLibraryModal', () => {
-  it('renders a dialog with heading "Media Library"', () => {
-    render(<MediaLibraryModal onSelect={vi.fn()} onClose={vi.fn()} />);
-    expect(screen.getByRole('dialog', { name: /Media Library/i })).toBeInTheDocument();
-  });
-
-  it('lists placeholder media assets', () => {
-    render(<MediaLibraryModal onSelect={vi.fn()} onClose={vi.fn()} />);
-    expect(screen.getByTestId('media-asset-list')).toBeInTheDocument();
-    expect(screen.getByTestId('media-asset-1')).toBeInTheDocument();
-  });
-
-  it('calls onSelect with url and altText when an asset button is clicked', () => {
-    const onSelect = vi.fn();
-    render(<MediaLibraryModal onSelect={onSelect} onClose={vi.fn()} />);
-    fireEvent.click(screen.getByTestId('media-asset-1'));
-    expect(onSelect).toHaveBeenCalledWith(
-      '/media/placeholder-hero.jpg',
-      'Placeholder hero image',
-    );
-  });
-
-  it('calls onClose when the close button is clicked', () => {
-    const onClose = vi.fn();
-    render(<MediaLibraryModal onSelect={vi.fn()} onClose={onClose} />);
-    fireEvent.click(screen.getByTestId('media-modal-close'));
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('calls onClose when the overlay is clicked', () => {
-    const onClose = vi.fn();
-    render(<MediaLibraryModal onSelect={vi.fn()} onClose={onClose} />);
-    fireEvent.click(screen.getByTestId('media-modal-overlay'));
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('calls onClose when Escape is pressed', () => {
-    const onClose = vi.fn();
-    render(<MediaLibraryModal onSelect={vi.fn()} onClose={onClose} />);
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('has aria-modal="true" on the dialog', () => {
-    render(<MediaLibraryModal onSelect={vi.fn()} onClose={vi.fn()} />);
-    const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveAttribute('aria-modal', 'true');
-  });
-});
-
-// ── RichTextField USWDS wrapper tests ─────────────────────────────────────────
+// ── RichTextField USWDS wrapper ───────────────────────────────────────────────
 
 describe('RichTextField (FieldRenderers)', () => {
-  it('renders the usa-form-group wrapper', () => {
-    const { container } = renderRichTextField();
-    expect(container.querySelector('.usa-form-group')).not.toBeNull();
-  });
-
-  it('renders a label-like element with the field label text', () => {
-    renderRichTextField({ label: 'Article Body' });
-    // Label is rendered as a <span> with role="presentation" and class usa-label
-    expect(screen.getByText(/Article Body/)).toBeInTheDocument();
-  });
-
-  it('renders required asterisk abbr when field is required', () => {
-    const { container } = renderRichTextField({ required: true });
-    const abbr = container.querySelector('abbr[title="required"]');
-    expect(abbr).not.toBeNull();
-    expect(abbr?.textContent).toContain('*');
-  });
-
-  it('does NOT render required asterisk when field is not required', () => {
-    const { container } = renderRichTextField({ required: false });
-    expect(container.querySelector('abbr[title="required"]')).toBeNull();
-  });
-
-  it('shows usa-error-message when error is provided', () => {
-    const { container } = render(
+  function renderField(
+    overrides: Partial<FieldDefinitionDto> = {},
+    extra: Partial<React.ComponentProps<typeof RichTextField>> = {},
+  ) {
+    return render(
       <RichTextField
-        def={{ name: 'body', label: 'Body', type: 'RichText', required: true, maxLength: null }}
+        def={makeDef(overrides)}
         value=""
-        error="Body is required."
         onChange={vi.fn()}
         onBlur={vi.fn()}
+        {...extra}
       />,
     );
-    const errEl = container.querySelector('.usa-error-message');
-    expect(errEl).not.toBeNull();
-    expect(errEl?.textContent).toContain('Body is required.');
+  }
+
+  it('renders the TipTap editor inside a usa-form-group', () => {
+    const { container } = renderField();
+    const group = container.querySelector('.usa-form-group');
+    expect(group).not.toBeNull();
+    expect(group).toHaveAttribute('data-testid', 'rich-text-field');
+    expect(within(group as HTMLElement).getByTestId('rich-text-editor')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="markdown-field"]')).toBeNull();
   });
 
-  it('adds usa-form-group--error class when error is present', () => {
-    const { container } = render(
-      <RichTextField
-        def={{ name: 'body', label: 'Body', type: 'RichText', required: true, maxLength: null }}
-        value=""
-        error="Body is required."
-        onChange={vi.fn()}
-        onBlur={vi.fn()}
-      />,
+  it('labels the contenteditable via aria-labelledby → #field-{name}-label', () => {
+    const { container } = renderField({ label: 'Article Body' });
+    const label = container.querySelector('#field-body-label');
+    expect(label).not.toBeNull();
+    expect(label?.textContent).toContain('Article Body');
+    expect(contentEditable(container)).toHaveAttribute('aria-labelledby', 'field-body-label');
+    expect(contentEditable(container)).toHaveAttribute('id', 'field-body');
+  });
+
+  it('marks required fields with the USWDS required abbr and aria-required', () => {
+    const { container } = renderField({ required: true });
+    expect(container.querySelector('abbr[title="required"]')?.textContent).toContain('*');
+    expect(contentEditable(container)).toHaveAttribute('aria-required', 'true');
+  });
+
+  it('wires hint and error into aria-describedby and shows usa-error-message', () => {
+    const { container } = renderField(
+      { hint: 'Use headings to structure the page.' },
+      { error: 'Body is required.' },
     );
     expect(container.querySelector('.usa-form-group--error')).not.toBeNull();
+    expect(container.querySelector('.usa-error-message')?.textContent).toBe('Body is required.');
+    const ce = contentEditable(container);
+    expect(ce).toHaveAttribute('aria-describedby', 'field-body-hint field-body-error');
+    expect(ce).toHaveAttribute('aria-invalid', 'true');
   });
 
-  it('renders the Milkdown editor inside the form group (issue #65)', () => {
-    const { container } = renderRichTextField();
-    // Issue #65: RichTextField now delegates to MarkdownField (Milkdown), not TipTap.
-    // The markdown-field wrapper is the distinguishing data-testid.
-    expect(container.querySelector('[data-testid="markdown-field"]')).not.toBeNull();
+  it('passes Markdown through onChange and reports blur with the field name', () => {
+    const onChange = vi.fn();
+    const onBlur = vi.fn();
+    const { container } = render(
+      <RichTextField def={makeDef()} value="text" onChange={onChange} onBlur={onBlur} />,
+    );
+    fireEvent.click(screen.getByTestId('toolbar-bold'));
+    fireEvent.click(screen.getByTestId('toolbar-h2'));
+    expect(onChange).toHaveBeenLastCalledWith('## text');
+    fireEvent.blur(contentEditable(container));
+    expect(onBlur).toHaveBeenCalledWith('body');
   });
 
-  it('the label span carries id matching field-{name}-label', () => {
-    const { container } = renderRichTextField();
-    const labelSpan = container.querySelector('#field-body-label');
-    expect(labelSpan).not.toBeNull();
+  it('FieldRenderer routes RichText to the TipTap editor', () => {
+    render(
+      <FieldRenderer def={makeDef()} value="" onChange={vi.fn()} onBlur={vi.fn()} />,
+    );
+    expect(screen.getByTestId('rich-text-editor')).toBeInTheDocument();
   });
 });

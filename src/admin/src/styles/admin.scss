@@ -6,11 +6,13 @@
 @use "../../../theme/uswds/va-settings" as *;
 
 /* ── Rich text editor (features/contentEntries/RichTextEditor.tsx) ─────────── */
+/* TipTap WYSIWYG that stores Markdown (issue #115). The editor body is the live
+   preview, so it uses usa-prose and spans the form width like the old split view. */
 
 .va-cms-rich-editor {
   border: 1px solid color("base-dark");  /* matches .usa-input */
   border-radius: 0;
-  max-width: 30rem;                     /* same measure as .usa-textarea */
+  max-width: 64rem;
 }
 
 .va-cms-rich-editor__toolbar {
@@ -46,86 +48,32 @@
 }
 
 .va-cms-rich-editor__body .ProseMirror {
-  min-height: 12rem;
-  padding: 0.5rem;
+  min-height: 16rem;
+  padding: 0.5rem 1rem;
   outline: none;
   line-height: 1.5;
 }
 
 .va-cms-rich-editor__body .ProseMirror:focus-visible {
   outline: 0.25rem solid color($theme-focus-color);  /* USWDS focus ring */
-  outline-offset: 0;
-}
-
-.va-cms-rich-editor__body .ProseMirror p:first-child {
-  margin-top: 0;
-}
-
-/* ── Markdown field: Milkdown editor + live preview (MarkdownField.tsx) ─────── */
-
-.va-cms-md-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0.25rem 0.5rem;
-  border: 1px solid color("base-dark");
-  border-bottom: 0;
-  background: color("base-lightest");
-}
-
-.va-cms-md-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0;
-  border: 1px solid color("base-dark");
-}
-
-@media (max-width: 63.99em) {
-  .va-cms-md-split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.va-cms-md-split__editor {
-  min-height: 16rem;
-  border-right: 1px solid color("base-lighter");
-}
-
-.va-cms-md-split__preview {
-  min-height: 16rem;
-  padding: 0.5rem 1rem;
-  background: color("gray-1");
-  overflow-wrap: anywhere;
-}
-
-.va-cms-md-preview__label {
-  margin-top: 0;
-  font-weight: 700;
-}
-
-.va-cms-md-preview--full {
-  border: 1px solid color("base-dark");
-  padding: 0.5rem 1rem;
-  min-height: 8rem;
-}
-
-/* Milkdown renders a ProseMirror contenteditable inside .milkdown */
-.va-cms-milkdown-editor .milkdown {
-  height: 100%;
-}
-
-.va-cms-milkdown-editor .ProseMirror {
-  min-height: 16rem;
-  padding: 0.5rem;
-  outline: none;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-
-.va-cms-milkdown-editor .ProseMirror:focus-visible {
-  outline: 0.25rem solid color($theme-focus-color);
   outline-offset: -0.25rem;
+}
+
+.va-cms-rich-editor__body .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+/* Inserted images are block-level and never overflow the editor. */
+.va-cms-rich-editor__body .ProseMirror img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* ProseMirror marks the selected node (e.g. an image) so the author can see
+   what Delete/Backspace will act on. */
+.va-cms-rich-editor__body .ProseMirror .ProseMirror-selectednode {
+  outline: 0.25rem solid color($theme-focus-color);
 }
 
 /* ── Notification bell + panel (features/notifications/NotificationBell.tsx) ── */
