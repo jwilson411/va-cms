@@ -1,0 +1,7 @@
+/*
+ * uswds-theme.scss — compiles USWDS 3.x with the VA theme tokens (issue #17).
+ * The tokens live in src/theme/uswds/_va-settings.scss, shared with the admin
+ * SPA. `uswds-core` / `uswds` resolve via sassOptions.includePaths in
+ * next.config.js.
+ */
+@use "../../theme/uswds/va-theme";

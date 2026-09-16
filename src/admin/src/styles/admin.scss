@@ -1,12 +1,14 @@
 /*
- * admin.css — the few admin-only styles USWDS doesn't provide.
- * Loaded after uswds.css in main.tsx. Uses USWDS design tokens where they exist.
+ * admin.scss — the few admin-only styles USWDS doesn't provide.
+ * Loaded after uswds-theme.scss in main.tsx. Colors come from the USWDS theme
+ * tokens (VA palette, see src/theme/uswds/_va-settings.scss) via color().
  */
+@use "../../../theme/uswds/va-settings" as *;
 
 /* ── Rich text editor (features/contentEntries/RichTextEditor.tsx) ─────────── */
 
 .va-cms-rich-editor {
-  border: 1px solid #565c65;            /* base-dark, matches .usa-input */
+  border: 1px solid color("base-dark");  /* matches .usa-input */
   border-radius: 0;
   max-width: 30rem;                     /* same measure as .usa-textarea */
 }
@@ -17,29 +19,29 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0.25rem 0.5rem;
-  border-bottom: 1px solid #dfe1e2;     /* base-lighter */
-  background: #f0f0f0;                  /* base-lightest */
+  border-bottom: 1px solid color("base-lighter");
+  background: color("base-lightest");
 }
 
 .va-cms-toolbar__btn {
   padding: 0.25rem 0.5rem;
   min-width: 2rem;
   text-decoration: none;
-  color: #1b1b1b;
+  color: color("ink");
   font-weight: 700;
 }
 
 .va-cms-toolbar__btn:hover {
-  background: #dfe1e2;
+  background: color("base-lighter");
 }
 
 .va-cms-toolbar__btn.is-active {
-  background: #005ea2;                  /* primary */
-  color: #fff;
+  background: color("primary");
+  color: color("white");
 }
 
 .va-cms-toolbar__separator {
-  color: #a9aeb1;
+  color: color("base-light");
   padding: 0 0.25rem;
 }
 
@@ -51,7 +53,7 @@
 }
 
 .va-cms-rich-editor__body .ProseMirror:focus-visible {
-  outline: 0.25rem solid #2491ff;       /* USWDS focus ring */
+  outline: 0.25rem solid color($theme-focus-color);  /* USWDS focus ring */
   outline-offset: 0;
 }
 
@@ -67,16 +69,16 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0.25rem 0.5rem;
-  border: 1px solid #565c65;
+  border: 1px solid color("base-dark");
   border-bottom: 0;
-  background: #f0f0f0;
+  background: color("base-lightest");
 }
 
 .va-cms-md-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0;
-  border: 1px solid #565c65;
+  border: 1px solid color("base-dark");
 }
 
 @media (max-width: 63.99em) {
@@ -87,13 +89,13 @@
 
 .va-cms-md-split__editor {
   min-height: 16rem;
-  border-right: 1px solid #dfe1e2;
+  border-right: 1px solid color("base-lighter");
 }
 
 .va-cms-md-split__preview {
   min-height: 16rem;
   padding: 0.5rem 1rem;
-  background: #fafafa;
+  background: color("gray-1");
   overflow-wrap: anywhere;
 }
 
@@ -103,7 +105,7 @@
 }
 
 .va-cms-md-preview--full {
-  border: 1px solid #565c65;
+  border: 1px solid color("base-dark");
   padding: 0.5rem 1rem;
   min-height: 8rem;
 }
@@ -122,6 +124,6 @@
 }
 
 .va-cms-milkdown-editor .ProseMirror:focus-visible {
-  outline: 0.25rem solid #2491ff;
+  outline: 0.25rem solid color($theme-focus-color);
   outline-offset: -0.25rem;
 }

@@ -1,0 +1,6 @@
+/*
+ * uswds-theme.scss — compiles USWDS 3.x with the VA theme tokens (issue #17).
+ * The tokens live in src/theme/uswds/_va-settings.scss, shared with the public
+ * site. `uswds-core` / `uswds` resolve via the Sass loadPaths in vite.config.ts.
+ */
+@use "../../../theme/uswds/va-theme";

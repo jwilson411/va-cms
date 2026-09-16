@@ -2,14 +2,15 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import '@uswds/uswds/css/uswds.css';
-import './styles/admin.css';
+import './styles/uswds-theme.scss';
+import './styles/admin.scss';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminLayout } from './components/AdminLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { ContentTypeBrowserPage } from './pages/ContentTypeBrowserPage';
+import { ThemePage } from './pages/ThemePage';
 import {
   ContentEntryListPage,
   ContentEntryCreateRoute,
@@ -66,6 +67,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="/admin/navigation" element={<NavigationEditorPage />} />
                     {/* Issue #48: Redirect management table (FR-NAV-06) */}
                     <Route path="/admin/redirects" element={<RedirectsPage />} />
+                    {/* Issue #17: USWDS / VA theme smoke-test page */}
+                    <Route path="/admin/theme" element={<ThemePage />} />
                     <Route path="*" element={<DashboardPage />} />
                    </Route>
                   </Routes>

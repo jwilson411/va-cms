@@ -11,7 +11,7 @@
  */
 
 import type { Metadata } from 'next';
-import '@uswds/uswds/css/uswds.css';
+import '@/styles/uswds-theme.scss';
 import { UswdsHeader } from '@/components/uswds/UswdsHeader';
 import { fetchPrimaryNav } from '@/lib/cms/navigation';
 import { DapScript } from '@/components/analytics/DapScript';
