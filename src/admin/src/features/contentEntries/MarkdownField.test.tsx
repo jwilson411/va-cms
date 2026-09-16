@@ -65,7 +65,7 @@ function setupFetchMock(html: string = MOCK_PREVIEW_HTML) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).fetch = vi.fn().mockResolvedValue({
     ok: true,
-    json: async () => ({ html }),
+    json: async () => ({ renderedHtml: html }),
   } as unknown as Response);
 }
 

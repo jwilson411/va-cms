@@ -89,7 +89,15 @@ const mockDetailData: MediaDetailDto = {
   createdAt:         '2026-09-01T10:00:00Z',
   updatedAt:         '2026-09-01T10:00:00Z',
   usages: [
-    { contentEntryId: 10, fieldName: 'featuredImage', slug: 'news/article-1', status: 'Published', contentTypeId: 5 },
+    {
+      contentEntryId: 10,
+      fieldName: 'featuredImage',
+      slug: 'news/article-1',
+      status: 'Published',
+      contentTypeId: 5,
+      contentTypeName: 'News Article',
+      entryTitle: 'Article 1',
+    },
   ],
 };
 

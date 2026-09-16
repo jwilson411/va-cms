@@ -279,3 +279,24 @@ public class RedirectAdminRow
     public string?  CreatedByDisplayName  { get; set; }
     public DateTime CreatedAt             { get; set; }
 }
+
+/// <summary>
+/// Published entry as delivered to the public site by
+/// GET /api/v1/content/{slug} (usp_ContentEntry_GetPublishedBySlug).
+/// Joins the published ContentVersion and the ContentType so the caller has the
+/// type name for routing and the version's FieldsJson / RenderedFieldsJson.
+/// </summary>
+public class PublishedContentEntry
+{
+    public long Id { get; set; }
+    public long ContentTypeId { get; set; }
+    public string ContentTypeName { get; set; } = string.Empty;
+    public string? TemplateId { get; set; }
+    public string Slug { get; set; } = string.Empty;
+    public string Locale { get; set; } = "en-US";
+    public string Status { get; set; } = "Published";
+    public int VersionNumber { get; set; }
+    public string FieldsJson { get; set; } = "{}";
+    public string? RenderedFieldsJson { get; set; }
+    public DateTime PublishedAt { get; set; }
+}

@@ -89,7 +89,7 @@ describe('UserListPage', () => {
     mockUseDeactivate.mockReturnValue({
       mutate: mutateMock,
       isPending: false,
-    } as ReturnType<typeof hooks.useDeactivateUser>);
+    } as unknown as ReturnType<typeof hooks.useDeactivateUser>);
     return mutateMock;
   }
 
@@ -98,7 +98,7 @@ describe('UserListPage', () => {
       data: [],
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUsers>);
+    } as unknown as ReturnType<typeof hooks.useUsers>);
     setupDeactivate();
   });
 
@@ -109,7 +109,7 @@ describe('UserListPage', () => {
       data: undefined,
       isLoading: true,
       isError: false,
-    } as ReturnType<typeof hooks.useUsers>);
+    } as unknown as ReturnType<typeof hooks.useUsers>);
 
     render(<MemoryRouter><UserListPage /></MemoryRouter>);
     expect(screen.getByText(/Loading users/i)).toBeTruthy();
@@ -122,7 +122,7 @@ describe('UserListPage', () => {
       data: undefined,
       isLoading: false,
       isError: true,
-    } as ReturnType<typeof hooks.useUsers>);
+    } as unknown as ReturnType<typeof hooks.useUsers>);
 
     render(<MemoryRouter><UserListPage /></MemoryRouter>);
     expect(screen.getByRole('alert')).toBeTruthy();
@@ -143,7 +143,7 @@ describe('UserListPage', () => {
       data: [buildUser({ id: 1, displayName: 'Alice' }), buildUser({ id: 2, displayName: 'Bob', email: 'bob@va.gov' })],
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUsers>);
+    } as unknown as ReturnType<typeof hooks.useUsers>);
 
     render(<MemoryRouter><UserListPage /></MemoryRouter>);
     expect(screen.getByText('Alice')).toBeTruthy();
@@ -155,7 +155,7 @@ describe('UserListPage', () => {
       data: [buildUser({ email: 'alice@va.gov' })],
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUsers>);
+    } as unknown as ReturnType<typeof hooks.useUsers>);
 
     render(<MemoryRouter><UserListPage /></MemoryRouter>);
     expect(screen.getByText('alice@va.gov')).toBeTruthy();
@@ -166,7 +166,7 @@ describe('UserListPage', () => {
       data: [buildUser({ lastLoginAt: null })],
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUsers>);
+    } as unknown as ReturnType<typeof hooks.useUsers>);
 
     render(<MemoryRouter><UserListPage /></MemoryRouter>);
     expect(screen.getByText('Never')).toBeTruthy();
@@ -186,7 +186,7 @@ describe('UserListPage', () => {
       data: [buildUser({ id: 1, displayName: 'Alice' })],
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUsers>);
+    } as unknown as ReturnType<typeof hooks.useUsers>);
 
     render(<MemoryRouter><UserListPage /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: /Deactivate Alice/i }));
@@ -200,7 +200,7 @@ describe('UserListPage', () => {
       data: [buildUser({ id: 99, displayName: 'Alice' })],
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUsers>);
+    } as unknown as ReturnType<typeof hooks.useUsers>);
 
     render(<MemoryRouter><UserListPage /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: /Deactivate Alice/i }));
@@ -213,7 +213,7 @@ describe('UserListPage', () => {
       data: [buildUser()],
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUsers>);
+    } as unknown as ReturnType<typeof hooks.useUsers>);
 
     render(<MemoryRouter><UserListPage /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: /Deactivate Alice Admin/i }));
@@ -236,29 +236,29 @@ describe('UserDetailPage', () => {
       data: buildDetail(),
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUserDetail>);
+    } as unknown as ReturnType<typeof hooks.useUserDetail>);
 
     mockUseRoles.mockReturnValue({
       data: [buildRole()],
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useRoles>);
+    } as unknown as ReturnType<typeof hooks.useRoles>);
 
     mockUseSections.mockReturnValue({
       data: [],
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useSections>);
+    } as unknown as ReturnType<typeof hooks.useSections>);
 
     mockUseAssignRole.mockReturnValue({
       mutate: assignMutateMock,
       isPending: false,
-    } as ReturnType<typeof hooks.useAssignRole>);
+    } as unknown as ReturnType<typeof hooks.useAssignRole>);
 
     mockUseRevokeRole.mockReturnValue({
       mutate: revokeMutateMock,
       isPending: false,
-    } as ReturnType<typeof hooks.useRevokeRole>);
+    } as unknown as ReturnType<typeof hooks.useRevokeRole>);
 
     const rendered = render(
       <MemoryRouter initialEntries={[`/admin/users/${userId}`]}>
@@ -278,11 +278,11 @@ describe('UserDetailPage', () => {
       data: undefined,
       isLoading: true,
       isError: false,
-    } as ReturnType<typeof hooks.useUserDetail>);
-    mockUseRoles.mockReturnValue({ data: [], isLoading: false, isError: false } as ReturnType<typeof hooks.useRoles>);
-    mockUseSections.mockReturnValue({ data: [], isLoading: false, isError: false } as ReturnType<typeof hooks.useSections>);
-    mockUseAssignRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as ReturnType<typeof hooks.useAssignRole>);
-    mockUseRevokeRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as ReturnType<typeof hooks.useRevokeRole>);
+    } as unknown as ReturnType<typeof hooks.useUserDetail>);
+    mockUseRoles.mockReturnValue({ data: [], isLoading: false, isError: false } as unknown as ReturnType<typeof hooks.useRoles>);
+    mockUseSections.mockReturnValue({ data: [], isLoading: false, isError: false } as unknown as ReturnType<typeof hooks.useSections>);
+    mockUseAssignRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof hooks.useAssignRole>);
+    mockUseRevokeRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof hooks.useRevokeRole>);
 
     render(<MemoryRouter initialEntries={['/admin/users/1']}><Routes><Route path="/admin/users/:userId" element={<UserDetailPage />} /></Routes></MemoryRouter>);
     expect(screen.getByText(/Loading user/i)).toBeTruthy();
@@ -293,11 +293,11 @@ describe('UserDetailPage', () => {
       data: undefined,
       isLoading: false,
       isError: true,
-    } as ReturnType<typeof hooks.useUserDetail>);
-    mockUseRoles.mockReturnValue({ data: [], isLoading: false, isError: false } as ReturnType<typeof hooks.useRoles>);
-    mockUseSections.mockReturnValue({ data: [], isLoading: false, isError: false } as ReturnType<typeof hooks.useSections>);
-    mockUseAssignRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as ReturnType<typeof hooks.useAssignRole>);
-    mockUseRevokeRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as ReturnType<typeof hooks.useRevokeRole>);
+    } as unknown as ReturnType<typeof hooks.useUserDetail>);
+    mockUseRoles.mockReturnValue({ data: [], isLoading: false, isError: false } as unknown as ReturnType<typeof hooks.useRoles>);
+    mockUseSections.mockReturnValue({ data: [], isLoading: false, isError: false } as unknown as ReturnType<typeof hooks.useSections>);
+    mockUseAssignRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof hooks.useAssignRole>);
+    mockUseRevokeRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof hooks.useRevokeRole>);
 
     render(<MemoryRouter initialEntries={['/admin/users/1']}><Routes><Route path="/admin/users/:userId" element={<UserDetailPage />} /></Routes></MemoryRouter>);
     expect(screen.getByRole('alert')).toBeTruthy();
@@ -323,11 +323,11 @@ describe('UserDetailPage', () => {
       data: buildDetail({ roles: [buildRoleDetail()] }),
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUserDetail>);
-    mockUseRoles.mockReturnValue({ data: [buildRole()], isLoading: false, isError: false } as ReturnType<typeof hooks.useRoles>);
-    mockUseSections.mockReturnValue({ data: [], isLoading: false, isError: false } as ReturnType<typeof hooks.useSections>);
-    mockUseAssignRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as ReturnType<typeof hooks.useAssignRole>);
-    mockUseRevokeRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as ReturnType<typeof hooks.useRevokeRole>);
+    } as unknown as ReturnType<typeof hooks.useUserDetail>);
+    mockUseRoles.mockReturnValue({ data: [buildRole()], isLoading: false, isError: false } as unknown as ReturnType<typeof hooks.useRoles>);
+    mockUseSections.mockReturnValue({ data: [], isLoading: false, isError: false } as unknown as ReturnType<typeof hooks.useSections>);
+    mockUseAssignRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof hooks.useAssignRole>);
+    mockUseRevokeRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof hooks.useRevokeRole>);
 
     render(<MemoryRouter initialEntries={['/admin/users/1']}><Routes><Route path="/admin/users/:userId" element={<UserDetailPage />} /></Routes></MemoryRouter>);
     // Role name appears in the table body cell (strong) — use getAllByText and check at least one is in a table cell
@@ -372,11 +372,11 @@ describe('UserDetailPage', () => {
       data: buildDetail({ roles: [buildRoleDetail()] }),
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUserDetail>);
-    mockUseRoles.mockReturnValue({ data: [buildRole()], isLoading: false, isError: false } as ReturnType<typeof hooks.useRoles>);
-    mockUseSections.mockReturnValue({ data: [], isLoading: false, isError: false } as ReturnType<typeof hooks.useSections>);
-    mockUseAssignRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as ReturnType<typeof hooks.useAssignRole>);
-    mockUseRevokeRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as ReturnType<typeof hooks.useRevokeRole>);
+    } as unknown as ReturnType<typeof hooks.useUserDetail>);
+    mockUseRoles.mockReturnValue({ data: [buildRole()], isLoading: false, isError: false } as unknown as ReturnType<typeof hooks.useRoles>);
+    mockUseSections.mockReturnValue({ data: [], isLoading: false, isError: false } as unknown as ReturnType<typeof hooks.useSections>);
+    mockUseAssignRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof hooks.useAssignRole>);
+    mockUseRevokeRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof hooks.useRevokeRole>);
 
     render(<MemoryRouter initialEntries={['/admin/users/1']}><Routes><Route path="/admin/users/:userId" element={<UserDetailPage />} /></Routes></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: /Remove ContentOwner/i }));
@@ -391,11 +391,11 @@ describe('UserDetailPage', () => {
       data: buildDetail({ roles: [buildRoleDetail()] }),
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useUserDetail>);
-    mockUseRoles.mockReturnValue({ data: [buildRole()], isLoading: false, isError: false } as ReturnType<typeof hooks.useRoles>);
-    mockUseSections.mockReturnValue({ data: [], isLoading: false, isError: false } as ReturnType<typeof hooks.useSections>);
-    mockUseAssignRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as ReturnType<typeof hooks.useAssignRole>);
-    mockUseRevokeRole.mockReturnValue({ mutate: revokeMock, isPending: false } as ReturnType<typeof hooks.useRevokeRole>);
+    } as unknown as ReturnType<typeof hooks.useUserDetail>);
+    mockUseRoles.mockReturnValue({ data: [buildRole()], isLoading: false, isError: false } as unknown as ReturnType<typeof hooks.useRoles>);
+    mockUseSections.mockReturnValue({ data: [], isLoading: false, isError: false } as unknown as ReturnType<typeof hooks.useSections>);
+    mockUseAssignRole.mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof hooks.useAssignRole>);
+    mockUseRevokeRole.mockReturnValue({ mutate: revokeMock, isPending: false } as unknown as ReturnType<typeof hooks.useRevokeRole>);
 
     render(<MemoryRouter initialEntries={['/admin/users/1']}><Routes><Route path="/admin/users/:userId" element={<UserDetailPage />} /></Routes></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: /Remove ContentOwner/i }));

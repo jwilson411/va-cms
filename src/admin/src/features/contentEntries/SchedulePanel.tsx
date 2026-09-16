@@ -13,6 +13,7 @@
  */
 
 import React, { useState } from 'react';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 export interface SchedulePanelProps {
   /** Content entry ID (edit mode). */
@@ -117,7 +118,7 @@ export function SchedulePanel({
       : undefined;
 
     try {
-      const resp = await fetch(`/api/v1/content/${entryId}/schedule`, {
+      const resp = await authorizedFetch(`/api/v1/content/${entryId}/schedule`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

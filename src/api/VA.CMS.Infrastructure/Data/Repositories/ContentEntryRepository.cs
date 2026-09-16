@@ -39,6 +39,57 @@ public class ContentEntryRepository : IContentEntryRepository
         return MapContentEntry(reader);
     }
 
+    public async Task<PublishedContentEntry?> GetPublishedBySlugAsync(string slug, string locale = "en-US")
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_ContentEntry_GetPublishedBySlug @Slug, @Locale";
+        cmd.Parameters.AddWithValue("@Slug", slug);
+        cmd.Parameters.AddWithValue("@Locale", locale);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+
+        var ordTemplate = reader.GetOrdinal("TemplateId");
+        var ordRendered = reader.GetOrdinal("RenderedFieldsJson");
+        return new PublishedContentEntry
+        {
+            Id                 = reader.GetInt64(reader.GetOrdinal("Id")),
+            ContentTypeId      = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
+            ContentTypeName    = reader.GetString(reader.GetOrdinal("ContentTypeName")),
+            TemplateId         = reader.IsDBNull(ordTemplate) ? null : reader.GetString(ordTemplate),
+            Slug               = reader.GetString(reader.GetOrdinal("Slug")),
+            Locale             = reader.GetString(reader.GetOrdinal("Locale")),
+            Status             = reader.GetString(reader.GetOrdinal("Status")),
+            VersionNumber      = reader.GetInt32(reader.GetOrdinal("VersionNumber")),
+            FieldsJson         = reader.GetString(reader.GetOrdinal("FieldsJson")),
+            RenderedFieldsJson = reader.IsDBNull(ordRendered) ? null : reader.GetString(ordRendered),
+            PublishedAt        = reader.GetDateTime(reader.GetOrdinal("PublishedAt")),
+        };
+    }
+
+    public async Task<(bool Success, string? ErrorMessage)> TransitionAsync(
+        long entryId, long versionId, string fromStatus, string toStatus, long actorId, string? comment = null)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_Workflow_Transition @ContentEntryId, @ContentVersionId, @FromStatus, @ToStatus, @ActorId, @Comment, @Success OUTPUT, @ErrorMessage OUTPUT";
+        cmd.Parameters.AddWithValue("@ContentEntryId",   entryId);
+        cmd.Parameters.AddWithValue("@ContentVersionId", versionId);
+        cmd.Parameters.AddWithValue("@FromStatus",       fromStatus);
+        cmd.Parameters.AddWithValue("@ToStatus",         toStatus);
+        cmd.Parameters.AddWithValue("@ActorId",          actorId);
+        cmd.Parameters.AddWithValue("@Comment",          (object?)comment ?? DBNull.Value);
+        var success = cmd.Parameters.Add("@Success", System.Data.SqlDbType.Bit);
+        success.Direction = System.Data.ParameterDirection.Output;
+        var error = cmd.Parameters.Add("@ErrorMessage", System.Data.SqlDbType.NVarChar, 500);
+        error.Direction = System.Data.ParameterDirection.Output;
+        await cmd.ExecuteNonQueryAsync();
+        return (success.Value is true, error.Value as string);
+    }
+
     private static ContentEntry MapContentEntry(Microsoft.Data.SqlClient.SqlDataReader reader)
     {
         var entry = new ContentEntry
@@ -69,6 +120,12 @@ public class ContentEntryRepository : IContentEntryRepository
         {
             var ordRendered = reader.GetOrdinal("RenderedFieldsJson");
             entry.RenderedFieldsJson = reader.IsDBNull(ordRendered) ? null : reader.GetString(ordRendered);
+        }
+        catch { /* column not present in all queries */ }
+        try
+        {
+            var ordTypeName = reader.GetOrdinal("ContentTypeName");
+            entry.ContentTypeName = reader.IsDBNull(ordTypeName) ? null : reader.GetString(ordTypeName);
         }
         catch { /* column not present in all queries */ }
 

@@ -437,6 +437,8 @@ public sealed class Issue23TestFactory : WebApplicationFactory<Program>
         {
             Replace<IUserRepository>(services, _ => new Issue23UserStub());
             Replace<IContentEntryRepository>(services, _ => new Issue23ContentEntryStub());
+            Replace<IContentVersionRepository>(services, _ => new Issue23ContentVersionStub());
+            Replace<IContentTypeRepository>(services, _ => new Issue23ContentTypeStub());
             Replace<IUserRoleRepository>(services, _ => new Issue23UserRoleStub());
             Replace<IDbMonitorRepository>(services, _ => new Issue23DbMonitorStub());
         });
@@ -480,7 +482,7 @@ internal sealed class Issue23UserStub : IUserRepository
         ]);
 }
 
-internal sealed class Issue23ContentEntryStub : IContentEntryRepository
+internal class Issue23ContentEntryStub : IContentEntryRepository
 {
     private readonly ContentEntry _entry = new()
     {
@@ -494,11 +496,18 @@ internal sealed class Issue23ContentEntryStub : IContentEntryRepository
         UpdatedAt     = DateTime.UtcNow,
     };
 
-    public Task<ContentEntry?> GetByIdAsync(long id)
+    public virtual Task<ContentEntry?> GetByIdAsync(long id)
         => Task.FromResult<ContentEntry?>(id == _entry.Id ? _entry : null);
 
     public Task<ContentEntry?> GetBySlugAsync(string slug, string locale = "en-US")
         => Task.FromResult<ContentEntry?>(null);
+
+    public virtual Task<PublishedContentEntry?> GetPublishedBySlugAsync(string slug, string locale = "en-US")
+        => Task.FromResult<PublishedContentEntry?>(null);
+
+    public virtual Task<(bool Success, string? ErrorMessage)> TransitionAsync(
+        long entryId, long versionId, string fromStatus, string toStatus, long actorId, string? comment = null)
+        => Task.FromResult<(bool, string?)>((true, null));
 
     public Task<PetaPoco.Page<ContentEntry>> ListAsync(
         int page, int pageSize, string? status = null, long? contentTypeId = null)
@@ -512,7 +521,7 @@ internal sealed class Issue23ContentEntryStub : IContentEntryRepository
 
     public Task<long> CreateAsync(ContentEntry entry) => Task.FromResult(42L);
 
-    public Task UpdateAsync(ContentEntry entry) => Task.CompletedTask;
+    public virtual Task UpdateAsync(ContentEntry entry) => Task.CompletedTask;
 
     public Task ArchiveAsync(long id, long actorId) => Task.CompletedTask;
 
@@ -592,4 +601,60 @@ internal sealed class Issue23DbMonitorStub : IDbMonitorRepository
 
     public Task<IEnumerable<LongRunningQueryRow>> GetLongRunningQueriesAsync()
         => Task.FromResult<IEnumerable<LongRunningQueryRow>>(Array.Empty<LongRunningQueryRow>());
+}
+
+/// <summary>
+/// In-memory version store so create/update/workflow actions (which always write or
+/// read a ContentVersion) don't touch SQL in these RBAC-gate tests.
+/// </summary>
+internal sealed class Issue23ContentVersionStub : IContentVersionRepository
+{
+    private readonly List<ContentVersionWithAuthor> _versions =
+    [
+        new ContentVersionWithAuthor
+        {
+            Id = 1, ContentEntryId = 1, VersionNumber = 1, FieldsJson = "{}", Status = "Draft", AuthorId = 99,
+        },
+    ];
+
+    public Task<ContentVersion?> GetByIdAsync(long id)
+        => Task.FromResult<ContentVersion?>(null);
+
+    public Task<PetaPoco.Page<ContentVersion>> ListAsync(long contentEntryId, int page, int pageSize)
+        => Task.FromResult(new PetaPoco.Page<ContentVersion> { Items = [] });
+
+    public Task<long> CreateAsync(ContentVersion version)
+    {
+        var id = _versions.Count + 1;
+        _versions.Insert(0, new ContentVersionWithAuthor
+        {
+            Id = id, ContentEntryId = version.ContentEntryId, VersionNumber = id,
+            FieldsJson = version.FieldsJson, Status = version.Status, AuthorId = version.AuthorId,
+        });
+        return Task.FromResult<long>(id);
+    }
+
+    public Task<IReadOnlyList<ContentVersionWithAuthor>> ListWithAuthorAsync(long contentEntryId, int page = 1, int pageSize = 25)
+        => Task.FromResult<IReadOnlyList<ContentVersionWithAuthor>>(
+            _versions.Where(v => v.ContentEntryId == contentEntryId).Take(pageSize).ToList());
+
+    public Task<ContentVersionWithAuthor?> GetByIdWithAuthorAsync(long versionId)
+        => Task.FromResult(_versions.FirstOrDefault(v => v.Id == versionId));
+
+    public Task<long> RestoreAsync(long contentEntryId, long targetVersionId, long actorId)
+        => Task.FromResult(0L);
+
+    public Task UpdateRenderedFieldsAsync(long versionId, string renderedFieldsJson)
+        => Task.CompletedTask;
+}
+
+internal sealed class Issue23ContentTypeStub : IContentTypeRepository
+{
+    public Task<ContentType?> GetByNameAsync(string name)
+        => Task.FromResult<ContentType?>(name == "standard_page"
+            ? new ContentType { Id = 1, Name = name, DisplayName = "Standard Page" }
+            : null);
+
+    public Task<long> UpsertAsync(ContentType type)
+        => Task.FromResult(1L);
 }

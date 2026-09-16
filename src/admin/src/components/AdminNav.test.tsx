@@ -12,11 +12,12 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
-import { AdminNav } from './AdminNav';
+import { AdminNav, SkipNav } from './AdminNav';
 
 function renderNav(initialPath = '/admin') {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
+      <SkipNav />
       <AdminNav />
     </MemoryRouter>,
   );

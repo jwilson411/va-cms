@@ -7,6 +7,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ export interface ContentVersionRestoreResponse {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     ...init,

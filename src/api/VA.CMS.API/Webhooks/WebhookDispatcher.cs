@@ -16,6 +16,7 @@ public static class WebhookEvents
     public const string ContentUnpublished = "content.unpublished";
     public const string ContentArchived    = "content.archived";
     public const string MediaUploaded      = "media.uploaded";
+    public const string NavigationUpdated  = "navigation.updated";
 }
 
 /// <summary>
@@ -82,7 +83,7 @@ public class WebhookDispatcher : IWebhookDispatcher
         while (attempt < MaxAttempts)
         {
             attempt++;
-            var (statusCode, errorMsg) = await TrySendAsync(target.Url, target.Secret ?? string.Empty, payloadJson, ct);
+            var (statusCode, errorMsg) = await TrySendAsync(target.Url, target.Secret ?? string.Empty, eventName, payloadJson, ct);
 
             await _repo.CreateDeliveryAsync(new WebhookDelivery
             {
@@ -121,7 +122,7 @@ public class WebhookDispatcher : IWebhookDispatcher
     }
 
     private async Task<(int? StatusCode, string? ErrorMessage)> TrySendAsync(
-        string url, string secret, string payloadJson, CancellationToken ct)
+        string url, string secret, string eventName, string payloadJson, CancellationToken ct)
     {
         try
         {
@@ -133,6 +134,7 @@ public class WebhookDispatcher : IWebhookDispatcher
                 Content = content,
             };
             request.Headers.TryAddWithoutValidation("X-CMS-Signature", $"sha256={signature}");
+            request.Headers.TryAddWithoutValidation("X-CMS-Event", eventName);   // lets one endpoint handle several events
 
             using var response = await client.SendAsync(request, ct);
             return ((int)response.StatusCode, null);

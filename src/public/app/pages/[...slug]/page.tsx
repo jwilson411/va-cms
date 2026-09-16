@@ -1,5 +1,8 @@
 /**
- * app/pages/[slug]/page.tsx — Standard Page route.
+ * app/pages/[...slug]/page.tsx — Standard Page route.
+ *
+ * Catch-all: CMS slugs may contain "/" (section prefixes such as
+ * health-care/eligibility), so /pages/a/b/c resolves the slug "a/b/c".
  *
  * Issue #58 — BRD FR-DEV-03, FR-DEV-04
  * AC: Template renders published CMS Standard Page content.
@@ -22,15 +25,18 @@ import { StandardPageTemplate } from '@/components/templates/StandardPageTemplat
 import { BreadcrumbItem } from '@/components/uswds/UswdsBreadcrumb';
 
 interface PageProps {
-  params: { slug: string };
+  params: { slug: string[] };
 }
+
+/** Join the catch-all segments back into the CMS slug. */
+const slugFromParams = (params: PageProps['params']): string => params.slug.join('/');
 
 /**
  * Generate Next.js metadata (title tag) from the CMS page title.
  * Runs on the server alongside the page component.
  */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const page = await fetchStandardPage(params.slug);
+  const page = await fetchStandardPage(slugFromParams(params));
   if (!page) return { title: 'Page Not Found' };
 
   return {
@@ -50,7 +56,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export default async function StandardPage({ params }: PageProps): Promise<React.ReactElement> {
   const [page, navigation] = await Promise.all([
-    fetchStandardPage(params.slug),
+    fetchStandardPage(slugFromParams(params)),
     fetchPrimaryNav(),
   ]);
 

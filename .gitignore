@@ -21,3 +21,10 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Build caches / scratch
+*.tsbuildinfo
+body.txt
+
+# Local media uploads (Storage:LocalRootPath in appsettings.Development.json)
+.uploads/

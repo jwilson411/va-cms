@@ -253,6 +253,7 @@ builder.Services.AddScoped<CmsDatabase>(_ => new CmsDatabase(connectionString));
 
 // Repositories
 builder.Services.AddScoped<IContentEntryRepository, ContentEntryRepository>();
+builder.Services.AddScoped<IContentTypeRepository, ContentTypeRepository>();
 builder.Services.AddScoped<IContentVersionRepository, ContentVersionRepository>();
 builder.Services.AddScoped<IMediaAssetRepository, MediaAssetRepository>();
 builder.Services.AddScoped<IMediaExtendedRepository, MediaExtendedRepository>();
@@ -329,6 +330,7 @@ builder.Services.AddScoped<IWebhookRepository, WebhookRepository>();
 builder.Services.AddHttpClient("WebhookClient")
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();
+builder.Services.AddSingleton<IWebhookBackgroundDispatcher, WebhookBackgroundDispatcher>();
 
 // Issue #35: Scheduled publish / expiry background worker (BRD FR-AUTH-04)
 builder.Services.AddHostedService<VA.CMS.Infrastructure.Services.ScheduledPublishWorker>();
@@ -337,6 +339,7 @@ builder.Services.AddHostedService<VA.CMS.Infrastructure.Services.ScheduledPublis
 // Content Type Registry (FR-SCHEMA-01)
 // -----------------------------------------------------------------------
 builder.Services.AddContentType<StandardPageTypeDefinition>();
+builder.Services.AddContentType<NewsArticleTypeDefinition>();
 
 // -----------------------------------------------------------------------
 // Issue #53: Hot Chocolate GraphQL (FR-DEV-02)
@@ -370,12 +373,18 @@ var skipMigrations = builder.Configuration["SKIP_MIGRATIONS"] == "true";
 
 if (!skipMigrations)
 {
-var migrationsPath = System.IO.Path.GetFullPath(
-    System.IO.Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "migrations"));
-
-if (!Directory.Exists(migrationsPath))
-    migrationsPath = System.IO.Path.GetFullPath(
-        System.IO.Path.Combine(AppContext.BaseDirectory, "migrations"));
+// Walk up from bin/<Config>/<tfm>/ until a "migrations" folder is found (repo root
+// in source checkouts), otherwise expect it beside the binaries in a deployment.
+var migrationsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "migrations");
+for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+{
+    var candidate = System.IO.Path.Combine(dir.FullName, "migrations");
+    if (Directory.Exists(candidate))
+    {
+        migrationsPath = candidate;
+        break;
+    }
+}
 
 EnsureDatabase.For.SqlDatabase(connectionString);
 

@@ -1,0 +1,127 @@
+/*
+ * admin.css — the few admin-only styles USWDS doesn't provide.
+ * Loaded after uswds.css in main.tsx. Uses USWDS design tokens where they exist.
+ */
+
+/* ── Rich text editor (features/contentEntries/RichTextEditor.tsx) ─────────── */
+
+.va-cms-rich-editor {
+  border: 1px solid #565c65;            /* base-dark, matches .usa-input */
+  border-radius: 0;
+  max-width: 30rem;                     /* same measure as .usa-textarea */
+}
+
+.va-cms-rich-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid #dfe1e2;     /* base-lighter */
+  background: #f0f0f0;                  /* base-lightest */
+}
+
+.va-cms-toolbar__btn {
+  padding: 0.25rem 0.5rem;
+  min-width: 2rem;
+  text-decoration: none;
+  color: #1b1b1b;
+  font-weight: 700;
+}
+
+.va-cms-toolbar__btn:hover {
+  background: #dfe1e2;
+}
+
+.va-cms-toolbar__btn.is-active {
+  background: #005ea2;                  /* primary */
+  color: #fff;
+}
+
+.va-cms-toolbar__separator {
+  color: #a9aeb1;
+  padding: 0 0.25rem;
+}
+
+.va-cms-rich-editor__body .ProseMirror {
+  min-height: 12rem;
+  padding: 0.5rem;
+  outline: none;
+  line-height: 1.5;
+}
+
+.va-cms-rich-editor__body .ProseMirror:focus-visible {
+  outline: 0.25rem solid #2491ff;       /* USWDS focus ring */
+  outline-offset: 0;
+}
+
+.va-cms-rich-editor__body .ProseMirror p:first-child {
+  margin-top: 0;
+}
+
+/* ── Markdown field: Milkdown editor + live preview (MarkdownField.tsx) ─────── */
+
+.va-cms-md-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid #565c65;
+  border-bottom: 0;
+  background: #f0f0f0;
+}
+
+.va-cms-md-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  border: 1px solid #565c65;
+}
+
+@media (max-width: 63.99em) {
+  .va-cms-md-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.va-cms-md-split__editor {
+  min-height: 16rem;
+  border-right: 1px solid #dfe1e2;
+}
+
+.va-cms-md-split__preview {
+  min-height: 16rem;
+  padding: 0.5rem 1rem;
+  background: #fafafa;
+  overflow-wrap: anywhere;
+}
+
+.va-cms-md-preview__label {
+  margin-top: 0;
+  font-weight: 700;
+}
+
+.va-cms-md-preview--full {
+  border: 1px solid #565c65;
+  padding: 0.5rem 1rem;
+  min-height: 8rem;
+}
+
+/* Milkdown renders a ProseMirror contenteditable inside .milkdown */
+.va-cms-milkdown-editor .milkdown {
+  height: 100%;
+}
+
+.va-cms-milkdown-editor .ProseMirror {
+  min-height: 16rem;
+  padding: 0.5rem;
+  outline: none;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.va-cms-milkdown-editor .ProseMirror:focus-visible {
+  outline: 0.25rem solid #2491ff;
+  outline-offset: -0.25rem;
+}

@@ -50,6 +50,15 @@ public class UncStorageBackend : IStorageBackend
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
+    public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default)
+    {
+        var fullPath = ResolvePath(storagePath);
+        if (!File.Exists(fullPath)) return Task.FromResult<Stream?>(null);
+        return Task.FromResult<Stream?>(
+            new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, useAsync: true));
+    }
+
     private string ResolvePath(string storagePath)
     {
         if (string.IsNullOrWhiteSpace(_options.UncRootPath))

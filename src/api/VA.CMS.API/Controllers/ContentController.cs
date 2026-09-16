@@ -1,6 +1,9 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
+using VA.CMS.API.Webhooks;
+using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Markdown;
@@ -18,6 +21,8 @@ namespace VA.CMS.API.Controllers;
 ///   DELETE /api/v1/content/{id}     — CanWrite + section scope enforced by service
 ///   POST   /api/v1/content/{id}/submit-review  — CanWrite
 ///   POST   /api/v1/content/{id}/approve        — CanPublish (Editor, SiteAdmin, SystemAdmin)
+///   POST   /api/v1/content/{id}/return         — CanPublish (InReview → Draft, comment required)
+///   POST   /api/v1/content/{id}/archive        — CanPublish (Published/Approved → Archived)
 ///   POST   /api/v1/content/{id}/publish        — CanPublish
 ///   POST   /api/v1/content/{id}/unpublish      — CanPublish
 ///   POST   /api/v1/content/{id}/archive        — CanPublish
@@ -32,6 +37,9 @@ public class ContentController : ControllerBase
     private readonly IContentVersionRepository _versions;
     private readonly IMarkdownRenderer _renderer;
     private readonly IMediaExtendedRepository _mediaUsage;
+    private readonly IContentTypeRepository _contentTypes;
+    private readonly IFieldTypeRegistry _registry;
+    private readonly IWebhookBackgroundDispatcher _webhooks;
 
     public ContentController(
         IContentEntryRepository entries,
@@ -39,7 +47,10 @@ public class ContentController : ControllerBase
         IMediaAltTextGuardRepository altTextGuard,
         IContentVersionRepository versions,
         IMarkdownRenderer renderer,
-        IMediaExtendedRepository mediaUsage)
+        IMediaExtendedRepository mediaUsage,
+        IContentTypeRepository contentTypes,
+        IFieldTypeRegistry registry,
+        IWebhookBackgroundDispatcher webhooks)
     {
         _entries      = entries;
         _rbac         = rbac;
@@ -47,7 +58,20 @@ public class ContentController : ControllerBase
         _versions     = versions;
         _renderer     = renderer;
         _mediaUsage   = mediaUsage;
+        _contentTypes = contentTypes;
+        _registry     = registry;
+        _webhooks     = webhooks;
     }
+
+    /// <summary>Payload for content.* webhook events (issue #54).</summary>
+    private static object ContentEventPayload(ContentEntry entry) => new
+    {
+        id              = entry.Id,
+        slug            = entry.Slug,
+        locale          = entry.Locale,
+        contentTypeName = entry.ContentTypeName,
+        status          = entry.Status,
+    };
 
     // ── Read ─────────────────────────────────────────────────────────────────
 
@@ -75,6 +99,10 @@ public class ContentController : ControllerBase
         var entry = await _entries.GetByIdAsync(id);
         if (entry is null) return NotFound();
 
+        // The admin editor works on the *latest* version (a draft may be newer than
+        // the published one); entry.FieldsJson is the published version's fields.
+        var latest = (await _versions.ListWithAuthorAsync(id, 1, 1)).FirstOrDefault();
+
         return Ok(new ContentEntryDetailResponse(
             entry.Id,
             entry.ContentTypeId,
@@ -86,7 +114,10 @@ public class ContentController : ControllerBase
             entry.CreatedAt,
             entry.UpdatedAt,
             MarkdownBody: entry.FieldsJson,
-            RenderedBody: entry.RenderedFieldsJson));
+            RenderedBody: entry.RenderedFieldsJson,
+            FieldsJson:      latest?.FieldsJson ?? entry.FieldsJson ?? "{}",
+            LatestVersionId: latest?.Id,
+            ContentTypeName: entry.ContentTypeName));
     }
 
     // ── Write ─────────────────────────────────────────────────────────────────
@@ -113,17 +144,94 @@ public class ContentController : ControllerBase
             }
         }
 
+        // Resolve the content type: by DB id, or by registry name (the admin SPA only
+        // knows names). A registered type gets its ContentType row created on first use.
+        long contentTypeId;
+        if (request.ContentTypeId is > 0)
+        {
+            contentTypeId = request.ContentTypeId.Value;
+        }
+        else if (!string.IsNullOrWhiteSpace(request.ContentTypeName))
+        {
+            var resolved = await EnsureContentTypeAsync(request.ContentTypeName);
+            if (resolved is null)
+                return UnprocessableEntity(new { error = $"Content type '{request.ContentTypeName}' is not registered." });
+            contentTypeId = resolved.Value;
+        }
+        else
+        {
+            return UnprocessableEntity(new { error = "contentTypeId or contentTypeName is required." });
+        }
+
+        if (request.FieldsJson is not null && !IsJsonObject(request.FieldsJson))
+            return UnprocessableEntity(new { error = "fieldsJson must be a JSON object." });
+
         var userId = _rbac.GetUserId(User) ?? 0;
         var entry  = new ContentEntry
         {
-            ContentTypeId = request.ContentTypeId,
+            ContentTypeId = contentTypeId,
             Slug          = request.Slug,
             Locale        = request.Locale ?? "en-US",
             OwnerId       = userId,
         };
 
         var id = await _entries.CreateAsync(entry);
+
+        // Every entry gets an initial version so workflow transitions (which log a
+        // ContentVersionId) and the editor's field load always have something to use.
+        await _versions.CreateAsync(new ContentVersion
+        {
+            ContentEntryId = id,
+            FieldsJson     = request.FieldsJson ?? "{}",
+            Status         = "Draft",
+            AuthorId       = userId,
+            ChangeNote     = "Created",
+        });
+
         return CreatedAtAction(nameof(GetById), new { id }, new ContentEntryCreateResponse(id));
+    }
+
+    /// <summary>
+    /// Resolve a registry content type name to its ContentType row id, creating the
+    /// row from the registry definition if it does not exist yet. Null if unregistered.
+    /// </summary>
+    private async Task<long?> EnsureContentTypeAsync(string name)
+    {
+        var existing = await _contentTypes.GetByNameAsync(name);
+        if (existing is not null) return existing.Id;
+
+        var def = _registry.GetByName(name);
+        if (def is null) return null;
+
+        var schema = def.Fields.Select(f => new
+        {
+            name     = f.Name,
+            label    = f.Label,
+            type     = f.Type.ToString(),
+            required = f.Required,
+        });
+
+        return await _contentTypes.UpsertAsync(new ContentType
+        {
+            Name            = def.Name,
+            DisplayName     = def.DisplayName,
+            TemplateId      = def.TemplateId,
+            AllowWorkflow   = def.AllowWorkflow,
+            FieldSchemaJson = JsonSerializer.Serialize(schema),
+        });
+    }
+
+    private static bool IsJsonObject(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind == JsonValueKind.Object;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -148,7 +256,24 @@ public class ContentController : ControllerBase
                 return Forbidden("You do not have permission to edit content in this section.");
         }
 
-        await _entries.UpdateAsync(entry);
+        if (request.FieldsJson is not null)
+        {
+            if (!IsJsonObject(request.FieldsJson))
+                return UnprocessableEntity(new { error = "fieldsJson must be a JSON object." });
+
+            // Each save is an immutable version (BRD FR-AUTH-03: version history).
+            // The published version is untouched until the next publish.
+            await _versions.CreateAsync(new ContentVersion
+            {
+                ContentEntryId = id,
+                FieldsJson     = request.FieldsJson,
+                Status         = "Draft",
+                AuthorId       = _rbac.GetUserId(User) ?? 0,
+                ChangeNote     = request.ChangeNote,
+            });
+        }
+
+        await _entries.UpdateAsync(entry);   // bumps UpdatedAt
         return NoContent();
     }
 
@@ -174,6 +299,8 @@ public class ContentController : ControllerBase
         }
 
         await _entries.ArchiveAsync(id, _rbac.GetUserId(User) ?? 0);
+        entry.Status = "Archived";
+        _webhooks.Enqueue(WebhookEvents.ContentArchived, ContentEventPayload(entry));
         return NoContent();
     }
 
@@ -197,7 +324,7 @@ public class ContentController : ControllerBase
                 return Forbidden("You do not have permission to submit content in this section.");
         }
 
-        return NoContent(); // Workflow service wired in a later story.
+        return await TransitionAsync(entry, "InReview");
     }
 
     /// <summary>
@@ -213,7 +340,25 @@ public class ContentController : ControllerBase
     {
         var entry = await _entries.GetByIdAsync(id);
         if (entry is null) return NotFound();
-        return NoContent();
+
+        return await TransitionAsync(entry, "Approved");
+    }
+
+    /// <summary>
+    /// Return content to the author (InReview → Draft). A comment is required.
+    /// Requires CanPublish (reviewers).
+    /// </summary>
+    [HttpPost("{id:long}/return")]
+    [Authorize(Policy = CmsRoles.Policies.CanPublish)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ContentTransitionErrorResponse), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Return(long id, [FromBody] ContentReturnRequest? request)
+    {
+        var entry = await _entries.GetByIdAsync(id);
+        if (entry is null) return NotFound();
+
+        return await TransitionAsync(entry, "Draft", request?.Comment);
     }
 
     /// <summary>
@@ -243,15 +388,33 @@ public class ContentController : ControllerBase
                     .ToList()));
         }
 
+        var latestVersion = (await _versions.ListWithAuthorAsync(id, 1, 1)).FirstOrDefault();
+        if (latestVersion is null)
+            return UnprocessableEntity(new ContentTransitionErrorResponse("Content has no versions to publish."));
+
         // Issue #66: regenerate RenderedFieldsJson on publish (BRD FR-AUTH-02a).
-        var versions = await _versions.ListWithAuthorAsync(id, 1, 1);
-        var latestVersion = versions.FirstOrDefault();
-        if (latestVersion != null)
+        var renderedJson = RenderFieldsJson(latestVersion.FieldsJson, _renderer);
+        await _versions.UpdateRenderedFieldsAsync(latestVersion.Id, renderedJson);
+
+        // Already published: re-point at the latest version without a status transition
+        // (usp_Workflow_Transition has no Published→Published edge).
+        if (entry.Status == "Published")
         {
-            var renderedJson = RenderFieldsJson(latestVersion.FieldsJson, _renderer);
-            await _versions.UpdateRenderedFieldsAsync(latestVersion.Id, renderedJson);
+            entry.PublishedVersionId = latestVersion.Id;
+            await _entries.UpdateAsync(entry);
+            _webhooks.Enqueue(WebhookEvents.ContentPublished, ContentEventPayload(entry));
+            return NoContent();
         }
 
+        // Draft→Published (direct publish) and Approved→Published are both allowed by
+        // usp_Workflow_Transition; anything else (InReview, Archived) is rejected there.
+        var result = await TransitionAsync(entry, "Published", version: latestVersion);
+        if (result is not NoContentResult) return result;
+
+        entry.Status             = "Published";
+        entry.PublishedVersionId = latestVersion.Id;
+        await _entries.UpdateAsync(entry);
+        _webhooks.Enqueue(WebhookEvents.ContentPublished, ContentEventPayload(entry));
         return NoContent();
     }
 
@@ -265,7 +428,58 @@ public class ContentController : ControllerBase
     {
         var entry = await _entries.GetByIdAsync(id);
         if (entry is null) return NotFound();
-        return NoContent();
+
+        // Published → Approved (same edge the scheduled-expiry worker uses).
+        var result = await TransitionAsync(entry, "Approved");
+        if (result is NoContentResult)
+        {
+            entry.Status = "Approved";
+            _webhooks.Enqueue(WebhookEvents.ContentUnpublished, ContentEventPayload(entry));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Archive via the workflow state machine (Published/Approved → Archived), logging a
+    /// WorkflowTransition row. Requires CanPublish. Issue #37.
+    /// DELETE /api/v1/content/{id} remains the unconditional soft-delete for authors.
+    /// </summary>
+    [HttpPost("{id:long}/archive")]
+    [Authorize(Policy = CmsRoles.Policies.CanPublish)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ContentTransitionErrorResponse), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ArchiveTransition(long id)
+    {
+        var entry = await _entries.GetByIdAsync(id);
+        if (entry is null) return NotFound();
+
+        var result = await TransitionAsync(entry, "Archived");
+        if (result is NoContentResult)
+        {
+            entry.Status = "Archived";
+            _webhooks.Enqueue(WebhookEvents.ContentArchived, ContentEventPayload(entry));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Run a workflow transition from the entry's current status to <paramref name="toStatus"/>.
+    /// 422 with a plain-language message when the state machine rejects it.
+    /// </summary>
+    private async Task<IActionResult> TransitionAsync(
+        ContentEntry entry, string toStatus, string? comment = null, ContentVersionWithAuthor? version = null)
+    {
+        version ??= (await _versions.ListWithAuthorAsync(entry.Id, 1, 1)).FirstOrDefault();
+        if (version is null)
+            return UnprocessableEntity(new ContentTransitionErrorResponse("Content has no versions."));
+
+        var (ok, error) = await _entries.TransitionAsync(
+            entry.Id, version.Id, entry.Status, toStatus, _rbac.GetUserId(User) ?? 0, comment);
+
+        return ok
+            ? NoContent()
+            : UnprocessableEntity(new ContentTransitionErrorResponse(error ?? "Transition not permitted."));
     }
 
     /// <summary>
@@ -459,12 +673,29 @@ public class ContentController : ControllerBase
 
 // ── Request / response DTOs ───────────────────────────────────────────────────
 
+/// <summary>
+/// Create request. Supply either <see cref="ContentTypeId"/> (DB id) or
+/// <see cref="ContentTypeName"/> (registry name, e.g. "standard_page"). Optional
+/// <see cref="FieldsJson"/> seeds the initial version.
+/// </summary>
 public sealed record ContentEntryCreateRequest(
-    long    ContentTypeId,
     string  Slug,
-    string? Locale = null);
+    long?   ContentTypeId   = null,
+    string? ContentTypeName = null,
+    string? Locale          = null,
+    string? FieldsJson      = null);
 
-public sealed record ContentEntryUpdateRequest();   // fields TBD in content-model story
+/// <summary>
+/// Update request. <see cref="FieldsJson"/> (a JSON object of field values) is saved as
+/// a new Draft version; omit it to only touch UpdatedAt.
+/// </summary>
+public sealed record ContentEntryUpdateRequest(string? FieldsJson = null, string? ChangeNote = null);
+
+/// <summary>Body for POST /api/v1/content/{id}/return — a comment is required.</summary>
+public sealed record ContentReturnRequest(string? Comment);
+
+/// <summary>422 body when usp_Workflow_Transition rejects a state change.</summary>
+public sealed record ContentTransitionErrorResponse(string Error);
 
 public sealed record ContentEntryUpdateSlugRequest(string Slug);
 
@@ -540,5 +771,9 @@ public sealed record ContentEntryDetailResponse(
     DateTime  UpdatedAt,
     // FR-AUTH-02a/02b: both forms always present for RichText fields
     string?   MarkdownBody,
-    string?   RenderedBody);
+    string?   RenderedBody,
+    // Latest version's field values (what the admin editor loads) and its id
+    string    FieldsJson,
+    long?     LatestVersionId,
+    string?   ContentTypeName);
 

@@ -51,6 +51,13 @@ public class ContentEntry
     /// </summary>
     [PetaPoco.Ignore]
     public string? RenderedFieldsJson { get; set; }
+
+    /// <summary>
+    /// Content type machine name (ContentType.Name), from the LEFT JOIN in
+    /// usp_ContentEntry_GetById. Null in queries that don't join ContentType.
+    /// </summary>
+    [PetaPoco.Ignore]
+    public string? ContentTypeName { get; set; }
 }
 
 [TableName("ContentVersion")]

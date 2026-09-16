@@ -141,6 +141,7 @@ public class WebhooksController : ControllerBase
         WebhookEvents.ContentUnpublished,
         WebhookEvents.ContentArchived,
         WebhookEvents.MediaUploaded,
+        WebhookEvents.NavigationUpdated,
     };
 }
 

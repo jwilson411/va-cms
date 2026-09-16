@@ -12,6 +12,12 @@ namespace VA.CMS.API.Controllers;
 /// POST /api/auth/dev-login
 ///   Header: X-Dev-User: {upn}
 ///   Returns: { accessToken, expiresIn, tokenType }
+///   Also sets the httpOnly refresh cookie so the admin SPA's silent-refresh
+///   flow (GET /api/auth/refresh) works exactly as it does after an AD login.
+///
+/// GET /api/auth/dev-users
+///   Returns: { users: [upn, ...] } — the DevBypassAllowedUsers list, so the
+///   admin SPA login page can offer a dev user picker. 404 unless DevBypass is active.
 ///
 /// This endpoint is only registered and reachable when Auth:Mode=DevBypass.
 /// Program.cs refuses to start with DevBypass when ASPNETCORE_ENVIRONMENT=Production.
@@ -27,24 +33,45 @@ namespace VA.CMS.API.Controllers;
 [Route("api/auth")]
 public class DevBypassController : ControllerBase
 {
-    private readonly AuthOptions     _authOptions;
-    private readonly IUserRepository _users;
-    private readonly IJwtService     _jwt;
-    private readonly IWebHostEnvironment _env;
+    private readonly AuthOptions          _authOptions;
+    private readonly IUserRepository      _users;
+    private readonly IJwtService          _jwt;
+    private readonly IRefreshTokenService _refreshTokens;
+    private readonly IWebHostEnvironment  _env;
     private readonly ILogger<DevBypassController> _logger;
 
     public DevBypassController(
-        AuthOptions     authOptions,
-        IUserRepository users,
-        IJwtService     jwt,
-        IWebHostEnvironment env,
+        AuthOptions          authOptions,
+        IUserRepository      users,
+        IJwtService          jwt,
+        IRefreshTokenService refreshTokens,
+        IWebHostEnvironment  env,
         ILogger<DevBypassController> logger)
     {
-        _authOptions = authOptions;
-        _users       = users;
-        _jwt         = jwt;
-        _env         = env;
-        _logger      = logger;
+        _authOptions   = authOptions;
+        _users         = users;
+        _jwt           = jwt;
+        _refreshTokens = refreshTokens;
+        _env           = env;
+        _logger        = logger;
+    }
+
+    private bool DevBypassActive =>
+        !_env.IsProduction() && _authOptions.Mode == AuthMode.DevBypass;
+
+    /// <summary>
+    /// Lists the UPNs permitted for DevBypass sign-in. Used by the admin SPA login
+    /// page to render a dev user picker. 404 when DevBypass is not active so the
+    /// SPA falls back to the normal AD login flow.
+    /// </summary>
+    [HttpGet("dev-users")]
+    [AllowAnonymous]
+    public IActionResult DevUsers()
+    {
+        if (!DevBypassActive)
+            return NotFound();
+
+        return Ok(new { users = _authOptions.DevBypassAllowedUsers });
     }
 
     /// <summary>
@@ -83,7 +110,7 @@ public class DevBypassController : ControllerBase
 
         // Upsert the user row
         var userId = await _users.UpsertAsync(
-            externalId:  $"devbypass:{upn}",
+            externalId:  $"{DevBypassRoles.ExternalIdPrefix}{upn}",
             email:       upn,
             displayName: upn.Split('@')[0]);
 
@@ -94,19 +121,14 @@ public class DevBypassController : ControllerBase
             return Unauthorized("User account is disabled.");
         }
 
-        // Issue JWT — developer role for broad local access
-        var roles = new[]
-        {
-            new UserRoleAssignment
-            {
-                RoleId   = 0,
-                RoleName = CmsRoles.Developer,
-                SectionId         = null,
-                SectionSlugPrefix = null,
-            },
-        };
+        // Issue JWT — SystemAdmin + Developer so the whole admin SPA is usable locally
+        var accessToken = _jwt.IssueAccessToken(user, DevBypassRoles.Build());
 
-        var accessToken = _jwt.IssueAccessToken(user, roles);
+        // Issue refresh token in httpOnly cookie (8 hr) — same as the AD callback,
+        // so the SPA can silently refresh on reload instead of bouncing to login.
+        var refreshToken = _refreshTokens.Issue(userId);
+        var cookieOpts   = AuthCookieHelper.BuildCookieOptions(isProduction: _env.IsProduction());
+        Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, refreshToken, cookieOpts);
 
         _logger.LogInformation("DevBypass: issued JWT for '{Upn}'.", upn);
 

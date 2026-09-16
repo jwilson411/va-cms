@@ -48,6 +48,15 @@ public class LocalStorageBackend : IStorageBackend
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
+    public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default)
+    {
+        var fullPath = Path.Combine(_options.LocalRootPath, storagePath);
+        if (!File.Exists(fullPath)) return Task.FromResult<Stream?>(null);
+        return Task.FromResult<Stream?>(
+            new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, useAsync: true));
+    }
+
     private static void EnsureDirectory(string fullPath)
     {
         var dir = Path.GetDirectoryName(fullPath)

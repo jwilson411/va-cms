@@ -16,7 +16,15 @@
 const getApiBase = (): string =>
   process.env.NEXT_PUBLIC_API_URL ??
   process.env.CMS_API_URL ??
-  'http://localhost:5000';
+  'http://localhost:5100';
+
+/**
+ * CMS slugs may contain "/" (e.g. "health-care/eligibility"). Encode each
+ * segment individually so the slash survives as a path separator for the
+ * API's catch-all route instead of becoming %2F.
+ */
+const encodeSlugPath = (slug: string): string =>
+  slug.split('/').map(encodeURIComponent).join('/');
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -81,7 +89,7 @@ export const STANDARD_PAGE_CACHE_TAG = 'cms-standard-page';
 export async function fetchStandardPage(
   slug: string,
 ): Promise<ContentEntry<StandardPageFields> | null> {
-  const url = `${getApiBase()}/api/v1/content/${encodeURIComponent(slug)}?type=standard_page`;
+  const url = `${getApiBase()}/api/v1/content/${encodeSlugPath(slug)}?type=standard_page`;
 
   try {
     const res = await fetch(url, {
@@ -144,7 +152,7 @@ export const NEWS_ARTICLE_CACHE_TAG = 'cms-news-article';
 export async function fetchNewsArticle(
   slug: string,
 ): Promise<ContentEntry<NewsArticleFields> | null> {
-  const url = `${getApiBase()}/api/v1/content/${encodeURIComponent(slug)}?type=news_article`;
+  const url = `${getApiBase()}/api/v1/content/${encodeSlugPath(slug)}?type=news_article`;
 
   try {
     const res = await fetch(url, {

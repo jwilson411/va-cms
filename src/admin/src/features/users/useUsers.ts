@@ -12,6 +12,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 const API_BASE = '/api/v1/admin';
 
@@ -62,7 +63,7 @@ export interface ContentSectionRow {
 // ── Helper ─────────────────────────────────────────────────────────────────────
 
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     ...init,
     headers: {
       'Content-Type': 'application/json',

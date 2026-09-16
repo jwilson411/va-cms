@@ -20,6 +20,7 @@ import type {
   ContentEntryUpdateBody,
   ContentEntryCreateBody,
 } from './formTypes';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 const ADMIN_CONTENT_TYPES_API = '/api/v1/admin/content-types';
 const CONTENT_API = '/api/v1/content';
@@ -29,7 +30,7 @@ const AUTO_SAVE_INTERVAL_MS = 60_000;
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
   });
@@ -37,25 +38,45 @@ async function fetchJson<T>(url: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Error text from an API failure body ({ error } / plain text), else the status. */
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  try {
+    const text = await res.text();
+    if (text) {
+      try {
+        const data = JSON.parse(text) as { error?: string };
+        if (data.error) return data.error;
+      } catch {
+        return text;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return fallback;
+}
+
 async function patchJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} patching ${url}`);
+  if (!res.ok) throw new Error(await readApiError(res, `HTTP ${res.status} patching ${url}`));
+  // PATCH /content/{id} and /slug answer 204 No Content — nothing to parse.
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} posting to ${url}`);
+  if (!res.ok) throw new Error(await readApiError(res, `HTTP ${res.status} posting to ${url}`));
   return res.json() as Promise<T>;
 }
 
@@ -350,9 +371,24 @@ export function useContentEntryForm({
             }
           }
         } else {
-          // Create mode — POST
-          // contentTypeId not available in this hook; caller must handle create
-          // This path is reached when the entry was just created
+          // Create mode — POST creates the entry plus its first version. The slug
+          // is required by the API; fall back to a slugified title if the user
+          // cleared it.
+          const titleValue = currentValues['title'];
+          const createSlug =
+            slugRef.current ||
+            (typeof titleValue === 'string' ? slugify(titleValue) : '');
+          if (!createSlug) {
+            setSlugError('A URL slug is required.');
+            setSaveResult({ ok: false, error: 'A URL slug is required.' });
+            return;
+          }
+          const createBody: ContentEntryCreateBody = {
+            contentTypeName,
+            slug: createSlug,
+            fieldsJson: JSON.stringify(currentValues),
+          };
+          await createMutation.mutateAsync(createBody);
         }
 
         const now = formatHHMM(new Date());
@@ -366,7 +402,7 @@ export function useContentEntryForm({
         setIsSaving(false);
       }
     },
-    [validateAll, updateMutation, updateSlugMutation, existingEntry],
+    [validateAll, updateMutation, updateSlugMutation, createMutation, existingEntry, contentTypeName],
   );
 
   // ── Auto-save every 60 seconds (edit mode only) ──────────────────────────────

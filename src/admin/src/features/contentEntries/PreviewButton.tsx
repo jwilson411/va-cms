@@ -18,6 +18,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 const PREVIEW_TOKEN_API = (entryId: number) =>
   `/api/v1/content/${entryId}/preview-token`;
@@ -67,7 +68,7 @@ export function PreviewButton({
 
     try {
       // AC2: Obtain signed preview token — no publish required.
-      const res = await fetch(PREVIEW_TOKEN_API(entryId), {
+      const res = await authorizedFetch(PREVIEW_TOKEN_API(entryId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

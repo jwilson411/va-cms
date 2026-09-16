@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useContentEntries, useContentTypesForPicker, useDuplicateEntry } from './useContentEntries';
 import type {
   ContentEntryListFilters,
@@ -15,12 +16,15 @@ interface ContentTypePickerModalProps {
   types: ContentTypeSummaryForPicker[];
   isLoading: boolean;
   onClose: () => void;
+  /** Called with the chosen type; the page navigates to the create form. */
+  onSelect: (type: ContentTypeSummaryForPicker) => void;
 }
 
 function ContentTypePickerModal({
   types,
   isLoading,
   onClose,
+  onSelect,
 }: ContentTypePickerModalProps): JSX.Element {
   return (
     // Overlay: USWDS modal-style
@@ -60,8 +64,8 @@ function ContentTypePickerModal({
                   className="usa-button usa-button--outline"
                   aria-label={`Create new ${ct.displayName}`}
                   onClick={() => {
-                    // Navigation to create form wired in a later story (#30+)
                     onClose();
+                    onSelect(ct);
                   }}
                 >
                   {ct.displayName}
@@ -140,6 +144,7 @@ function SortHeader({
 // ── Main list component ───────────────────────────────────────────────────────
 
 export function ContentEntryListPage(): JSX.Element {
+  const navigate = useNavigate();
   // Filter state
   const [filters, setFilters] = useState<ContentEntryListFilters>({});
   const [sortBy,  setSortBy]  = useState<SortBy>('UpdatedAt');
@@ -405,6 +410,7 @@ export function ContentEntryListPage(): JSX.Element {
                             type="button"
                             className="usa-button usa-button--unstyled"
                             aria-label={`Edit ${row.title}`}
+                            onClick={() => navigate(`/admin/content/${row.id}/edit`)}
                           >
                             Edit
                           </button>
@@ -499,6 +505,7 @@ export function ContentEntryListPage(): JSX.Element {
           types={contentTypes}
           isLoading={typesLoading}
           onClose={() => setPickerOpen(false)}
+          onSelect={(ct) => navigate(`/admin/content/new/${encodeURIComponent(ct.name)}`)}
         />
       )}
     </main>

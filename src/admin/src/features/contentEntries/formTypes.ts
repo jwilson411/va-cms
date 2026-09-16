@@ -57,10 +57,15 @@ export interface ContentEntryUpdateBody {
   changeNote?: string;
 }
 
-/** Shape of API POST /api/v1/content body (create). */
+/**
+ * Shape of API POST /api/v1/content body (create).
+ * The API resolves contentTypeName to its ContentType row (creating it from the
+ * registry on first use) and stores fieldsJson as the entry's initial version.
+ */
 export interface ContentEntryCreateBody {
-  contentTypeId: number;
+  contentTypeName: string;
   slug: string;
+  fieldsJson: string;
   locale?: string;
 }
 

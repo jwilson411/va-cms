@@ -38,7 +38,7 @@ function mockCreate(
   mockUseCreatePin.mockReturnValue({
     mutate: mutateMock,
     isPending: opts.isPending ?? false,
-  } as ReturnType<typeof hooks.useCreateSearchPin>);
+  } as unknown as ReturnType<typeof hooks.useCreateSearchPin>);
   return mutateMock;
 }
 
@@ -47,7 +47,7 @@ function mockDelete() {
   mockUseDeletePin.mockReturnValue({
     mutate: mutateMock,
     isPending: false,
-  } as ReturnType<typeof hooks.useDeleteSearchPin>);
+  } as unknown as ReturnType<typeof hooks.useDeleteSearchPin>);
   return mutateMock;
 }
 
@@ -60,7 +60,7 @@ describe('SearchPinsPage', () => {
       data: { items: [] },
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useSearchPins>);
+    } as unknown as ReturnType<typeof hooks.useSearchPins>);
     mockCreate();
     mockDelete();
   });
@@ -72,7 +72,7 @@ describe('SearchPinsPage', () => {
       data: undefined,
       isLoading: true,
       isError: false,
-    } as ReturnType<typeof hooks.useSearchPins>);
+    } as unknown as ReturnType<typeof hooks.useSearchPins>);
 
     render(<SearchPinsPage />);
     expect(screen.getByText(/Loading pinned results/i)).toBeTruthy();
@@ -85,7 +85,7 @@ describe('SearchPinsPage', () => {
       data: undefined,
       isLoading: false,
       isError: true,
-    } as ReturnType<typeof hooks.useSearchPins>);
+    } as unknown as ReturnType<typeof hooks.useSearchPins>);
 
     render(<SearchPinsPage />);
     expect(screen.getByRole('alert')).toBeTruthy();
@@ -106,7 +106,7 @@ describe('SearchPinsPage', () => {
       data: { items: [buildPin({ id: 1, queryString: 'pin one' }), buildPin({ id: 2, queryString: 'pin two' })] },
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useSearchPins>);
+    } as unknown as ReturnType<typeof hooks.useSearchPins>);
 
     render(<SearchPinsPage />);
     expect(screen.getByText('pin one')).toBeTruthy();
@@ -120,7 +120,7 @@ describe('SearchPinsPage', () => {
       },
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useSearchPins>);
+    } as unknown as ReturnType<typeof hooks.useSearchPins>);
 
     render(<SearchPinsPage />);
     expect(screen.getByText('My Entry')).toBeTruthy();
@@ -132,7 +132,7 @@ describe('SearchPinsPage', () => {
       data: { items: [buildPin({ entryTitle: null })] },
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useSearchPins>);
+    } as unknown as ReturnType<typeof hooks.useSearchPins>);
 
     render(<SearchPinsPage />);
     expect(screen.getByText('Untitled')).toBeTruthy();
@@ -192,7 +192,7 @@ describe('SearchPinsPage', () => {
       data: { items: [buildPin()] },
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useSearchPins>);
+    } as unknown as ReturnType<typeof hooks.useSearchPins>);
 
     render(<SearchPinsPage />);
     fireEvent.click(screen.getByRole('button', { name: /Remove pin for query/i }));
@@ -206,7 +206,7 @@ describe('SearchPinsPage', () => {
       data: { items: [buildPin({ id: 7 })] },
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useSearchPins>);
+    } as unknown as ReturnType<typeof hooks.useSearchPins>);
 
     render(<SearchPinsPage />);
     fireEvent.click(screen.getByRole('button', { name: /Remove pin for query/i }));
@@ -220,7 +220,7 @@ describe('SearchPinsPage', () => {
       data: { items: [buildPin()] },
       isLoading: false,
       isError: false,
-    } as ReturnType<typeof hooks.useSearchPins>);
+    } as unknown as ReturnType<typeof hooks.useSearchPins>);
 
     render(<SearchPinsPage />);
     fireEvent.click(screen.getByRole('button', { name: /Remove pin for query/i }));

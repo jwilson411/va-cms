@@ -2,12 +2,21 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import '@uswds/uswds/css/uswds.css';
+import './styles/admin.css';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AdminLayout } from './components/AdminLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { LoginPage } from './pages/LoginPage';
 import { ContentTypeBrowserPage } from './pages/ContentTypeBrowserPage';
-import { ContentEntryListPage } from './features/contentEntries';
+import {
+  ContentEntryListPage,
+  ContentEntryCreateRoute,
+  ContentEntryEditRoute,
+} from './features/contentEntries';
+import { SearchPinsPage } from './features/searchPins';
+import { AdminSettingsPage } from './pages/AdminSettingsPage';
 import { MediaLibraryPage } from './features/media';
 import { SearchAnalyticsPage } from './features/searchAnalytics';
 import { UserListPage, UserDetailPage } from './features/users';
@@ -32,12 +41,20 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               element={
                 <ProtectedRoute>
                   <Routes>
+                   <Route element={<AdminLayout />}>
                     {/* Issue #26: Admin content type browser (FR-SCHEMA-06) */}
                     <Route path="/admin/content-types" element={<ContentTypeBrowserPage />} />
                     {/* Issue #42: Media library browser */}
                     <Route path="/admin/media" element={<MediaLibraryPage />} />
                     {/* Issue #29: Admin content entry list (FR-AUTH-01) */}
                     <Route path="/admin/content" element={<ContentEntryListPage />} />
+                    {/* Issue #30/#37: create + edit forms with workflow actions */}
+                    <Route path="/admin/content/new/:contentTypeName" element={<ContentEntryCreateRoute />} />
+                    <Route path="/admin/content/:entryId/edit" element={<ContentEntryEditRoute />} />
+                    {/* Issue #52: Search pins (FR-SEARCH-04) */}
+                    <Route path="/admin/search/pins" element={<SearchPinsPage />} />
+                    {/* Issue #67: AD group → role mappings */}
+                    <Route path="/admin/settings" element={<AdminSettingsPage />} />
                     {/* Issue #51: Search analytics full page (FR-SEARCH-06) */}
                     <Route path="/admin/search/analytics" element={<SearchAnalyticsPage />} />
                     {/* Issue #56: User directory and role assignment admin UI (FR-USERS-03/04) */}
@@ -50,6 +67,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     {/* Issue #48: Redirect management table (FR-NAV-06) */}
                     <Route path="/admin/redirects" element={<RedirectsPage />} />
                     <Route path="*" element={<DashboardPage />} />
+                   </Route>
                   </Routes>
                 </ProtectedRoute>
               }

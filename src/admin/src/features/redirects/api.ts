@@ -4,6 +4,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 import type {
   CreateRedirectRequest,
   RedirectAdminDto,
@@ -17,12 +18,12 @@ async function apiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  const token = sessionStorage.getItem('cms_access_token') ?? '';
-  const res = await fetch(path, {
+  // authorizedFetch attaches the in-memory JWT (the token is never in
+  // sessionStorage — see AuthContext); without it every call was a bare 401.
+  const res = await authorizedFetch(path, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
       ...(options?.headers ?? {}),
     },
   });

@@ -19,7 +19,8 @@
  *  - useEditor() initialises the editor, returning { loading, get }
  *  - Milkdown renders the contenteditable
  *  - listener plugin + listenerCtx.markdownUpdated() fires on each Markdown change
- *  - replaceAll(markdown) re-sets content imperatively
+ *  - replaceAll(markdown) re-sets content imperatively when the value prop
+ *    changes outside the editor (async load in edit mode, toolbar inserts)
  *  - getMarkdown()(ctx) serialises current state back to Markdown
  */
 
@@ -31,14 +32,15 @@ import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { replaceAll } from '@milkdown/utils';
 import type { FieldDefinitionDto, FieldValues } from './formTypes';
 import { MediaLibraryModal } from './MediaLibraryModal';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
 const PREVIEW_RENDER_URL = '/api/v1/preview/render';
 
-/** POST /api/v1/preview/render → { html: string } */
+/** POST /api/v1/preview/render → { renderedHtml: string } (issue #66 contract) */
 async function fetchPreviewHtml(markdown: string): Promise<string> {
-  const response = await fetch(PREVIEW_RENDER_URL, {
+  const response = await authorizedFetch(PREVIEW_RENDER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ markdown }),
@@ -46,8 +48,8 @@ async function fetchPreviewHtml(markdown: string): Promise<string> {
   if (!response.ok) {
     throw new Error(`Preview render failed: ${response.status}`);
   }
-  const data = (await response.json()) as { html: string };
-  return data.html;
+  const data = (await response.json()) as { renderedHtml?: string; html?: string };
+  return data.renderedHtml ?? data.html ?? '';
 }
 
 // ── Inner Milkdown editor (must sit inside MilkdownProvider) ─────────────────
@@ -73,19 +75,36 @@ function MilkdownEditorInner({
 }: MilkdownEditorInnerProps): JSX.Element {
   const onMarkdownChangeRef = useRef(onMarkdownChange);
   onMarkdownChangeRef.current = onMarkdownChange;
+  // Last markdown the editor itself emitted — lets the sync effect below tell
+  // "parent echoed our own change back" (ignore) from "value changed elsewhere"
+  // (push into the editor), without re-creating the editor.
+  const lastEmittedRef = useRef(initialValue ?? '');
 
-  const { loading } = useEditor((root) => {
+  const { loading, get } = useEditor((root) => {
     return Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, root);
         ctx.set(defaultValueCtx, initialValue ?? '');
         ctx.get(listenerCtx).markdownUpdated((_ctx, md) => {
+          lastEmittedRef.current = md;
           onMarkdownChangeRef.current(md);
         });
       })
       .use(commonmark)
       .use(listener);
   }, []);  // no deps — re-initialising would reset content
+
+  // Push external value changes into the live editor: the entry's saved body
+  // arriving after mount (edit mode), toolbar inserts, or a version restore.
+  useEffect(() => {
+    if (loading) return;
+    const md = initialValue ?? '';
+    if (md === lastEmittedRef.current) return;
+    const editor = get();
+    if (!editor) return;
+    lastEmittedRef.current = md;
+    editor.action(replaceAll(md));
+  }, [initialValue, loading, get]);
 
   return (
     <div
