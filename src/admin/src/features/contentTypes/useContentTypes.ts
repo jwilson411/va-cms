@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ContentTypeSummaryDto, ContentTypeDetailDto } from './types';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 const API_BASE = '/api/v1/admin/content-types';
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
   });

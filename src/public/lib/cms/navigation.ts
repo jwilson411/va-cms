@@ -10,7 +10,7 @@
  *     invalidate the cache when an admin saves the menu (via the API's
  *     revalidation webhook).
  *
- * NEXT_PUBLIC_API_URL must be set (e.g. http://localhost:5000) in .env.local
+ * NEXT_PUBLIC_API_URL must be set (e.g. http://localhost:5100) in .env.local
  * for local development.  In production it is the internal API base URL.
  */
 
@@ -47,7 +47,7 @@ export async function fetchPrimaryNav(): Promise<NavItem[]> {
   const apiBase =
     process.env.NEXT_PUBLIC_API_URL ??
     process.env.CMS_API_URL ??
-    'http://localhost:5000';
+    'http://localhost:5100';
 
   const url = `${apiBase}/api/v1/navigation/primary`;
 

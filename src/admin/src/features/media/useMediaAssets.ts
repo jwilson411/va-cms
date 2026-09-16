@@ -4,11 +4,12 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { MediaListDto, MediaDetailDto, MediaPatchBody } from './mediaTypes';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 const MEDIA_API = '/api/v1/media';
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { credentials: 'include' });
+  const res = await authorizedFetch(url, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
   return res.json() as Promise<T>;
 }
@@ -65,7 +66,7 @@ export function useUpdateMediaMetadata(id: number | null) {
   const qc = useQueryClient();
   return useMutation<void, Error, MediaPatchBody>({
     mutationFn: async (body) => {
-      const res = await fetch(`${MEDIA_API}/${id!}`, {
+      const res = await authorizedFetch(`${MEDIA_API}/${id!}`, {
         method:      'PATCH',
         credentials: 'include',
         headers:     { 'Content-Type': 'application/json' },

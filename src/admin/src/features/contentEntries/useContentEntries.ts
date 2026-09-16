@@ -6,12 +6,13 @@ import type {
   SortDir,
   ContentTypeSummaryForPicker,
 } from './types';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 const ADMIN_API = '/api/v1/admin/content-entries';
 const CONTENT_TYPES_API = '/api/v1/admin/content-types';
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
   });
@@ -78,7 +79,7 @@ export function useDuplicateEntry() {
 
   return useMutation<DuplicateEntryResponse, Error, number>({
     mutationFn: async (entryId: number) => {
-      const res = await fetch(`/api/v1/content/${entryId}/duplicate`, {
+      const res = await authorizedFetch(`/api/v1/content/${entryId}/duplicate`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

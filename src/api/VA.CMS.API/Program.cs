@@ -370,12 +370,18 @@ var skipMigrations = builder.Configuration["SKIP_MIGRATIONS"] == "true";
 
 if (!skipMigrations)
 {
-var migrationsPath = System.IO.Path.GetFullPath(
-    System.IO.Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "migrations"));
-
-if (!Directory.Exists(migrationsPath))
-    migrationsPath = System.IO.Path.GetFullPath(
-        System.IO.Path.Combine(AppContext.BaseDirectory, "migrations"));
+// Walk up from bin/<Config>/<tfm>/ until a "migrations" folder is found (repo root
+// in source checkouts), otherwise expect it beside the binaries in a deployment.
+var migrationsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "migrations");
+for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+{
+    var candidate = System.IO.Path.Combine(dir.FullName, "migrations");
+    if (Directory.Exists(candidate))
+    {
+        migrationsPath = candidate;
+        break;
+    }
+}
 
 EnsureDatabase.For.SqlDatabase(connectionString);
 

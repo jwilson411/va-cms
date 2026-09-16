@@ -39,6 +39,30 @@ SharePoint 2016 on-prem is aging out. Drupal 11 (the only cleanly TRM-authorized
 
 ## Local Development Setup
 
+Three processes run locally, all on fixed ports:
+
+| Process | Command | URL |
+|---|---|---|
+| API (ASP.NET Core) | `cd src/api && dotnet run --project VA.CMS.API` | http://localhost:5100 (Swagger at `/swagger`) |
+| Admin SPA (Vite) | `cd src/admin && npm install && npm run dev` | http://localhost:5173 (proxies `/api` → 5100) |
+| Public site (Next.js) | `cd src/public && npm install && npm run dev` | http://localhost:3000 |
+
+The API listens on **5100** rather than 5000 because macOS AirPlay Receiver binds port 5000
+and silently answers 403 to anything proxied there.
+
+### Prerequisites
+
+- **.NET 8 runtime/SDK.** The projects target `net8.0`; a newer SDK can *build* them but
+  cannot *run* them (`dotnet run` / `dotnet test` fail with "You must install or update .NET",
+  and `DOTNET_ROLL_FORWARD` is not a safe workaround). Check `dotnet --list-runtimes` for
+  `Microsoft.NETCore.App 8.x`. On a Mac with Homebrew's .NET 10 shadowing a
+  `/usr/local/share/dotnet` install that has 8.x, prefix commands with:
+
+  ```bash
+  export DOTNET_ROOT=/usr/local/share/dotnet PATH="/usr/local/share/dotnet:$PATH"
+  ```
+- **Node 20+** and **Docker**.
+
 ### Authentication: DevBypass mode (no Azure AD required)
 
 Developers can run the full API locally without configuring an Azure AD app registration.
@@ -57,12 +81,22 @@ before starting the API. The connection string points to the local Docker SQL Se
 **2. Start the local SQL Server container (if not already running):**
 
 ```bash
+docker compose up -d        # port 14333, SA password VaCms_Dev!2026
+```
+
+or equivalently:
+
+```bash
 docker run -d --name va-cms-sqlserver \
   -e ACCEPT_EULA=Y \
-  -e SA_PASSWORD=VaCms_Dev!2026 \
+  -e MSSQL_SA_PASSWORD=VaCms_Dev!2026 \
   -p 14333:1433 \
   mcr.microsoft.com/mssql/server:2022-latest
 ```
+
+If your container uses a different SA password, change only the `Password=` in your local
+`appsettings.Development.json` (it is gitignored). Note the integration tests that need a
+database use Testcontainers and spin up their own SQL Server, so they don't depend on this one.
 
 **3. Run the API:**
 
@@ -71,17 +105,26 @@ cd src/api
 dotnet run --project VA.CMS.API
 ```
 
-DbUp migrations run automatically on startup.
+DbUp migrations run automatically on startup (scripts are discovered from the repo-root
+`migrations/` folder).
 
-**4. Authenticate using the DevBypass header:**
+**4. Sign in to the admin SPA:**
+
+Start the admin app (`cd src/admin && npm run dev`) and open http://localhost:5173. When the
+API is in DevBypass mode the login page shows a **Development sign-in** panel listing the
+`DevBypassAllowedUsers`; pick one and you land on the dashboard. Dev users are issued the
+`SystemAdmin` + `Developer` roles so every admin screen is usable. (`GET /api/auth/login`
+redirects to `/login` in DevBypass mode instead of challenging Azure AD.)
+
+**5. Or authenticate from the command line using the DevBypass header:**
 
 ```bash
 # Obtain a JWT for a sample user
-curl -s -X POST http://localhost:5000/api/auth/dev-login \
+curl -s -X POST http://localhost:5100/api/auth/dev-login \
   -H "X-Dev-User: alice@va.gov" | jq .
 
 # Use the returned accessToken on protected endpoints
-curl -s http://localhost:5000/api/v1/admin/health/db \
+curl -s http://localhost:5100/api/v1/admin/health/db \
   -H "Authorization: Bearer <accessToken>"
 ```
 
@@ -89,7 +132,7 @@ You can also pass `X-Dev-User` directly on any API call — the DevBypass middle
 auto-injects a JWT so you can skip the explicit dev-login step:
 
 ```bash
-curl -s http://localhost:5000/api/v1/admin/health/db \
+curl -s http://localhost:5100/api/v1/admin/health/db \
   -H "X-Dev-User: alice@va.gov"
 ```
 

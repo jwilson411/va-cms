@@ -20,6 +20,7 @@ import type {
   ContentEntryUpdateBody,
   ContentEntryCreateBody,
 } from './formTypes';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 const ADMIN_CONTENT_TYPES_API = '/api/v1/admin/content-types';
 const CONTENT_API = '/api/v1/content';
@@ -29,7 +30,7 @@ const AUTO_SAVE_INTERVAL_MS = 60_000;
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
   });
@@ -38,7 +39,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 async function patchJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
@@ -49,7 +50,7 @@ async function patchJson<T>(url: string, body: unknown): Promise<T> {
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await authorizedFetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',

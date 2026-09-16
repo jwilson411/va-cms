@@ -9,7 +9,7 @@ services:
       MSSQL_SA_PASSWORD: "VaCms_Dev!2026"
       MSSQL_PID: Developer
     ports:
-      - "1433:1433"
+      - "14333:1433"
     volumes:
       - va-cms-sqldata:/var/opt/mssql
     healthcheck:

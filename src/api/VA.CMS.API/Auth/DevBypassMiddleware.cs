@@ -70,7 +70,7 @@ public class DevBypassMiddleware
 
         // Upsert the user row (creates on first use, updates last-login on subsequent calls)
         var userId = await users.UpsertAsync(
-            externalId:  $"devbypass:{upn}",
+            externalId:  $"{DevBypassRoles.ExternalIdPrefix}{upn}",
             email:       upn,
             displayName: upn.Split('@')[0]);
 
@@ -83,20 +83,9 @@ public class DevBypassMiddleware
             return;
         }
 
-        // Issue a real CMS JWT so all downstream auth/authz middleware works normally
-        // DevBypass users are given the Developer role so they can access all dev endpoints
-        var roles = new[]
-        {
-            new UserRoleAssignment
-            {
-                RoleId   = 0,
-                RoleName = CmsRoles.Developer,
-                SectionId         = null,
-                SectionSlugPrefix = null,
-            },
-        };
-
-        var token = _jwt.IssueAccessToken(user, roles);
+        // Issue a real CMS JWT so all downstream auth/authz middleware works normally.
+        // DevBypass users get the shared SystemAdmin + Developer role set (DevBypassRoles).
+        var token = _jwt.IssueAccessToken(user, DevBypassRoles.Build());
 
         // Inject the token as if the client sent it
         context.Request.Headers["Authorization"] = $"Bearer {token}";

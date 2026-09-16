@@ -28,6 +28,7 @@ public class AuthController : ControllerBase
     private readonly IRefreshTokenService   _refreshTokens;
     private readonly IWebHostEnvironment    _env;
     private readonly IAdGroupRoleResolver   _groupResolver;
+    private readonly AuthOptions            _authOptions;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
@@ -36,6 +37,7 @@ public class AuthController : ControllerBase
         IRefreshTokenService    refreshTokens,
         IWebHostEnvironment     env,
         IAdGroupRoleResolver    groupResolver,
+        AuthOptions             authOptions,
         ILogger<AuthController> logger)
     {
         _users         = users;
@@ -43,6 +45,7 @@ public class AuthController : ControllerBase
         _refreshTokens = refreshTokens;
         _env           = env;
         _groupResolver = groupResolver;
+        _authOptions   = authOptions;
         _logger        = logger;
     }
 
@@ -54,6 +57,12 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public IActionResult Login([FromQuery] string? returnUrl)
     {
+        // DevBypass: the "AzureAd" scheme is not registered, so Challenge() would
+        // throw. Send the browser to the admin SPA's /login page instead, which
+        // offers the dev user picker (backed by /api/auth/dev-users).
+        if (_authOptions.Mode == AuthMode.DevBypass && !_env.IsProduction())
+            return Redirect("/login");
+
         var props = new AuthenticationProperties
         {
             RedirectUri = Url.Action(nameof(Callback), "Auth", new { returnUrl }),
@@ -147,6 +156,15 @@ public class AuthController : ControllerBase
 
         // Explicit roles
         var explicitRoles = await _users.GetRolesAsync(userId.Value);
+
+        // DevBypass users have no UserRole rows — re-grant the DevBypassRoles set so a
+        // refreshed token keeps the same permissions dev-login originally issued.
+        if (_authOptions.Mode == AuthMode.DevBypass
+            && !_env.IsProduction()
+            && user.ExternalId.StartsWith(DevBypassRoles.ExternalIdPrefix, StringComparison.Ordinal))
+        {
+            explicitRoles = explicitRoles.Concat(DevBypassRoles.Build()).ToList();
+        }
 
         // On refresh, we do not have a full ClaimsPrincipal with AD group claims
         // (the refresh token is a CMS-issued opaque token, not an AAD token).

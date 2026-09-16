@@ -1,6 +1,6 @@
-@VA.CMS.API_HostAddress = http://localhost:5223
+@VA.CMS.API_HostAddress = http://localhost:5100
 
-GET {{VA.CMS.API_HostAddress}}/weatherforecast/
+GET {{VA.CMS.API_HostAddress}}/health
 Accept: application/json
 
 ###

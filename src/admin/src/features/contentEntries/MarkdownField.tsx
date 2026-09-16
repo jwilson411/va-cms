@@ -31,6 +31,7 @@ import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { replaceAll } from '@milkdown/utils';
 import type { FieldDefinitionDto, FieldValues } from './formTypes';
 import { MediaLibraryModal } from './MediaLibraryModal';
+import { authorizedFetch } from '../../lib/authorizedFetch';
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ const PREVIEW_RENDER_URL = '/api/v1/preview/render';
 
 /** POST /api/v1/preview/render → { html: string } */
 async function fetchPreviewHtml(markdown: string): Promise<string> {
-  const response = await fetch(PREVIEW_RENDER_URL, {
+  const response = await authorizedFetch(PREVIEW_RENDER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ markdown }),

@@ -16,7 +16,7 @@
 
 import { test as base, expect, Page, BrowserContext } from '@playwright/test';
 
-const API_URL = process.env.API_URL ?? 'http://localhost:5000';
+const API_URL = process.env.API_URL ?? 'http://localhost:5100';
 const DEV_USER = 'alice@va.gov';
 
 export interface AuthFixtures {

@@ -6,6 +6,8 @@
  *   - Silent refresh before token expiry via GET /api/auth/refresh
  *   - If AD account disabled: refresh returns 401 → state cleared → login redirect
  *   - Login redirects to GET /api/auth/login (which initiates AD OIDC flow)
+ *   - Local dev (Auth:Mode=DevBypass): devLogin(upn) posts to /api/auth/dev-login
+ *     and receives the same { accessToken, expiresIn } shape plus the refresh cookie
  */
 
 import React, {
@@ -16,6 +18,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { setAuthToken } from '../lib/authorizedFetch';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +40,11 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   /** Initiate AD OIDC login — navigates the browser to /api/auth/login. */
   login: () => void;
+  /**
+   * DevBypass sign-in (local development only). Posts X-Dev-User to
+   * /api/auth/dev-login; the API returns 401/404 unless Auth:Mode=DevBypass.
+   */
+  devLogin: (upn: string) => Promise<void>;
   /** Clear in-memory token and revoke refresh cookie. */
   logout: () => Promise<void>;
   /** True if the SPA has a valid, non-expired access token. */
@@ -87,6 +95,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const applyTokenResponse = useCallback(
     (data: AuthTokenResponse) => {
       const expiresAt = new Date(Date.now() + data.expiresIn * 1000);
+      setAuthToken(data.accessToken); // publish for authorizedFetch()
       setState({
         // Token stored ONLY in React state — no localStorage, no sessionStorage.
         accessToken: data.accessToken,
@@ -101,6 +110,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const clearAuth = useCallback(() => {
     if (refreshTimerRef.current !== null)
       clearTimeout(refreshTimerRef.current);
+    setAuthToken(null);
     setState({ accessToken: null, expiresAt: null, loading: false });
   }, []);
 
@@ -114,9 +124,10 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       });
 
       if (res.status === 401) {
-        // AD account disabled or refresh token expired — force re-login.
+        // AD account disabled or refresh token expired. Clear state only —
+        // <ProtectedRoute> owns the redirect to login, so mounting the provider
+        // on /login itself doesn't bounce straight back to /api/auth/login.
         clearAuth();
-        login();
         return;
       }
 
@@ -147,6 +158,26 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     window.location.href = `${API_BASE}/auth/login`;
   }, []);
 
+  const devLogin = useCallback(
+    async (upn: string) => {
+      setState((prev) => ({ ...prev, loading: true }));
+      try {
+        const res = await fetch(`${API_BASE}/auth/dev-login`, {
+          method: 'POST',
+          headers: { 'X-Dev-User': upn },
+          credentials: 'include', // receive httpOnly refresh cookie
+        });
+        if (!res.ok) throw new Error(`Dev login failed: ${res.status}`);
+        const data: AuthTokenResponse = await res.json();
+        applyTokenResponse(data);
+      } catch (err) {
+        clearAuth();
+        throw err;
+      }
+    },
+    [applyTokenResponse, clearAuth],
+  );
+
   const logout = useCallback(async () => {
     try {
       await fetch(`${API_BASE}/auth/logout`, {
@@ -173,6 +204,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const value: AuthContextValue = {
     ...state,
     login,
+    devLogin,
     logout,
     isAuthenticated: state.accessToken !== null,
     authFetch,

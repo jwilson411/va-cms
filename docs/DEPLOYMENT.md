@@ -49,8 +49,8 @@ npm install && npm run dev
 
 Default admin: `http://localhost:3000/admin`  
 Default public: `http://localhost:3001`  
-API: `http://localhost:5000/api/v1`  
-Swagger: `http://localhost:5000/swagger`
+API: `http://localhost:5100/api/v1`  
+Swagger: `http://localhost:5100/swagger`
 
 ## Production Deployment (IIS + Windows Server)
 
