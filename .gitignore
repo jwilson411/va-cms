@@ -21,3 +21,7 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Build caches / scratch
+*.tsbuildinfo
+body.txt

@@ -7,6 +7,12 @@ public interface IContentEntryRepository
 {
     Task<ContentEntry?> GetByIdAsync(long id);
     Task<ContentEntry?> GetBySlugAsync(string slug, string locale = "en-US");
+
+    /// <summary>
+    /// Public delivery lookup: the Published entry for a slug joined with its
+    /// published version and content type. Null when there is no published entry.
+    /// </summary>
+    Task<PublishedContentEntry?> GetPublishedBySlugAsync(string slug, string locale = "en-US");
     Task<Page<ContentEntry>> ListAsync(int page, int pageSize, string? status = null, long? contentTypeId = null);
     Task<long> CreateAsync(ContentEntry entry);
     Task UpdateAsync(ContentEntry entry);

@@ -480,7 +480,7 @@ internal sealed class Issue23UserStub : IUserRepository
         ]);
 }
 
-internal sealed class Issue23ContentEntryStub : IContentEntryRepository
+internal class Issue23ContentEntryStub : IContentEntryRepository
 {
     private readonly ContentEntry _entry = new()
     {
@@ -499,6 +499,9 @@ internal sealed class Issue23ContentEntryStub : IContentEntryRepository
 
     public Task<ContentEntry?> GetBySlugAsync(string slug, string locale = "en-US")
         => Task.FromResult<ContentEntry?>(null);
+
+    public virtual Task<PublishedContentEntry?> GetPublishedBySlugAsync(string slug, string locale = "en-US")
+        => Task.FromResult<PublishedContentEntry?>(null);
 
     public Task<PetaPoco.Page<ContentEntry>> ListAsync(
         int page, int pageSize, string? status = null, long? contentTypeId = null)

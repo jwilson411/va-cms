@@ -39,6 +39,35 @@ public class ContentEntryRepository : IContentEntryRepository
         return MapContentEntry(reader);
     }
 
+    public async Task<PublishedContentEntry?> GetPublishedBySlugAsync(string slug, string locale = "en-US")
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_ContentEntry_GetPublishedBySlug @Slug, @Locale";
+        cmd.Parameters.AddWithValue("@Slug", slug);
+        cmd.Parameters.AddWithValue("@Locale", locale);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) return null;
+
+        var ordTemplate = reader.GetOrdinal("TemplateId");
+        var ordRendered = reader.GetOrdinal("RenderedFieldsJson");
+        return new PublishedContentEntry
+        {
+            Id                 = reader.GetInt64(reader.GetOrdinal("Id")),
+            ContentTypeId      = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
+            ContentTypeName    = reader.GetString(reader.GetOrdinal("ContentTypeName")),
+            TemplateId         = reader.IsDBNull(ordTemplate) ? null : reader.GetString(ordTemplate),
+            Slug               = reader.GetString(reader.GetOrdinal("Slug")),
+            Locale             = reader.GetString(reader.GetOrdinal("Locale")),
+            Status             = reader.GetString(reader.GetOrdinal("Status")),
+            VersionNumber      = reader.GetInt32(reader.GetOrdinal("VersionNumber")),
+            FieldsJson         = reader.GetString(reader.GetOrdinal("FieldsJson")),
+            RenderedFieldsJson = reader.IsDBNull(ordRendered) ? null : reader.GetString(ordRendered),
+            PublishedAt        = reader.GetDateTime(reader.GetOrdinal("PublishedAt")),
+        };
+    }
+
     private static ContentEntry MapContentEntry(Microsoft.Data.SqlClient.SqlDataReader reader)
     {
         var entry = new ContentEntry

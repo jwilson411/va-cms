@@ -1,5 +1,8 @@
 /**
- * app/news/[slug]/page.tsx — News Article route.
+ * app/news/[...slug]/page.tsx — News Article route.
+ *
+ * Catch-all: CMS slugs may contain "/" (e.g. demo/news/va-cms-launched),
+ * so /news/a/b/c resolves the slug "a/b/c".
  *
  * Issue #59 — Build News Article public template
  * AC: Template renders: Banner, Header, Breadcrumb, article header (title,
@@ -23,8 +26,11 @@ import { NewsArticleTemplate } from '@/components/templates/NewsArticleTemplate'
 import type { BreadcrumbItem } from '@/components/uswds/UswdsBreadcrumb';
 
 interface PageProps {
-  params: { slug: string };
+  params: { slug: string[] };
 }
+
+/** Join the catch-all segments back into the CMS slug. */
+const slugFromParams = (params: PageProps['params']): string => params.slug.join('/');
 
 /**
  * Canonical URL for this article — used in JSON-LD and <link rel="canonical">.
@@ -40,10 +46,10 @@ function buildCanonicalUrl(slug: string): string {
  * Runs on the server alongside the page component.
  */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const article = await fetchNewsArticle(params.slug);
+  const article = await fetchNewsArticle(slugFromParams(params));
   if (!article) return { title: 'Page Not Found' };
 
-  const canonicalUrl = buildCanonicalUrl(params.slug);
+  const canonicalUrl = buildCanonicalUrl(slugFromParams(params));
 
   return {
     title: `${article.fields.title} | Department of Veterans Affairs`,
@@ -77,7 +83,7 @@ export default async function NewsArticlePage({
   params,
 }: PageProps): Promise<React.ReactElement> {
   const [article, navigation] = await Promise.all([
-    fetchNewsArticle(params.slug),
+    fetchNewsArticle(slugFromParams(params)),
     fetchPrimaryNav(),
   ]);
 
@@ -96,7 +102,7 @@ export default async function NewsArticlePage({
     { label: article.fields.title },
   ];
 
-  const canonicalUrl = buildCanonicalUrl(params.slug);
+  const canonicalUrl = buildCanonicalUrl(slugFromParams(params));
 
   return (
     <NewsArticleTemplate
