@@ -154,8 +154,11 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   // ── Public API ─────────────────────────────────────────────────────────
 
   const login = useCallback(() => {
-    // Navigate to the API's login endpoint — it will redirect to Azure AD.
-    window.location.href = `${API_BASE}/auth/login`;
+    // Navigate to the API's login endpoint — it will redirect to Azure AD (or to
+    // /login in DevBypass). Pass the page we were on so sign-in can return to it.
+    const here = `${window.location.pathname}${window.location.search}`;
+    const returnUrl = here !== '/' && !here.startsWith('/login') ? `?returnUrl=${encodeURIComponent(here)}` : '';
+    window.location.href = `${API_BASE}/auth/login${returnUrl}`;
   }, []);
 
   const devLogin = useCallback(

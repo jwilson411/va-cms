@@ -61,7 +61,13 @@ public class AuthController : ControllerBase
         // throw. Send the browser to the admin SPA's /login page instead, which
         // offers the dev user picker (backed by /api/auth/dev-users).
         if (_authOptions.Mode == AuthMode.DevBypass && !_env.IsProduction())
-            return Redirect("/login");
+        {
+            // Only forward a same-site path so this can never become an open redirect.
+            var safeReturn = returnUrl is not null && Url.IsLocalUrl(returnUrl) ? returnUrl : null;
+            return Redirect(safeReturn is null
+                ? "/login"
+                : $"/login?returnUrl={Uri.EscapeDataString(safeReturn)}");
+        }
 
         var props = new AuthenticationProperties
         {

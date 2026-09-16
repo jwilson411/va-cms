@@ -16,6 +16,16 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import usFlagSmall from '@uswds/uswds/img/us_flag_small.png';
 
+/**
+ * Destination after sign-in: the ?returnUrl if it is a same-site admin path
+ * (never a protocol-relative or absolute URL), otherwise /admin.
+ */
+function safeReturnUrl(search: string): string {
+  const raw = new URLSearchParams(search).get('returnUrl');
+  if (raw && raw.startsWith('/') && !raw.startsWith('//') && !raw.startsWith('/login')) return raw;
+  return '/admin';
+}
+
 /** Fetch the DevBypass user list; resolves to [] when the API is not in DevBypass mode. */
 async function fetchDevUsers(): Promise<string[]> {
   try {
@@ -53,11 +63,11 @@ export function LoginPage(): JSX.Element {
     }
   };
 
-  // If the user already has a valid token (e.g., landed here via direct link
-  // but a refresh cookie is still valid), redirect them away from the login page.
+  // Once signed in (or already signed in via a valid refresh cookie), leave the
+  // login page for the originally requested admin path, or the dashboard.
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      window.location.href = '/admin';
+      window.location.href = safeReturnUrl(window.location.search);
     }
   }, [loading, isAuthenticated]);
 
