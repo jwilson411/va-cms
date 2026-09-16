@@ -50,6 +50,12 @@ Three processes run locally, all on fixed ports:
 The API listens on **5100** rather than 5000 because macOS AirPlay Receiver binds port 5000
 and silently answers 403 to anything proxied there.
 
+Both front ends compile USWDS 3.x from Sass with the VA theme tokens (VA Blue `#003e73`,
+VA Gold `#f9c642`, Public Sans) defined once in `src/theme/uswds/_va-settings.scss`.
+`npm run dev` / `npm run build` first copy the USWDS fonts and images into each app's
+gitignored `public/uswds/` (`npm run uswds:assets`). Smoke-test pages that render themed
+USWDS components live at http://localhost:5173/admin/theme and http://localhost:3000/theme.
+
 ### Prerequisites
 
 - **.NET 8 runtime/SDK.** The projects target `net8.0`; a newer SDK can *build* them but

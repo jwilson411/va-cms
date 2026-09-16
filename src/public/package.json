@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "predev": "npm run uswds:assets",
     "dev": "next dev",
+    "prebuild": "npm run uswds:assets",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:a11y": "playwright test tests/accessibility"
+    "test:a11y": "playwright test tests/accessibility",
+    "uswds:assets": "node ../theme/uswds/copy-assets.mjs"
   },
   "dependencies": {
     "@testing-library/dom": "^10.4.2",
@@ -32,6 +35,7 @@
     "axe-core": "^4.10.2",
     "jest-axe": "^9.0.0",
     "jsdom": "^25.0.1",
+    "sass": "^1.104.1",
     "typescript": "^5.7.3",
     "vitest": "^2.1.9"
   }

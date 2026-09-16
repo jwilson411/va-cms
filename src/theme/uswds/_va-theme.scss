@@ -1,0 +1,12 @@
+/*
+----------------------------------------
+VA theme for USWDS 3.x  (issue #17)
+----------------------------------------
+Compiles the whole USWDS framework with the VA settings applied.
+`va-settings` must load first so `uswds-core` is configured before
+`uswds` (which @uses it) is forwarded. Tokens live in _va-settings.scss.
+----------------------------------------
+*/
+
+@use "va-settings";
+@forward "uswds";

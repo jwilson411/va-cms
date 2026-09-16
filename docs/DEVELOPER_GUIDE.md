@@ -564,7 +564,12 @@ k6 run --vus 50 --duration 60s content-api.js
 
 - **API:** Follow Microsoft ASP.NET Core conventions. Controllers are thin — logic lives in domain services.
 - **React:** Functional components only. Hooks for all state. No class components.
-- **USWDS:** Import from `@uswds/uswds`. Use CSS custom properties for any overrides. Never override with `!important`.
+- **USWDS:** Both apps compile USWDS 3.x from Sass with the VA theme (`src/theme/uswds/_va-settings.scss`
+  — VA Blue `#003e73` as `primary`, VA Gold `#f9c642` as `accent-warm`, Public Sans for every font role).
+  Change tokens there, never in app code. App-specific styles are `.scss` files that
+  `@use "<relative path>/theme/uswds/va-settings" as *;` and use `color("primary")`, `units(2)`, etc.
+  rather than hard-coded hex values. Never override with `!important`. USWDS fonts/images are served
+  from each app's `public/uswds/` (copied by `npm run uswds:assets`, run automatically before dev/build).
 - **TypeScript:** `strict: true`. No `any` except in test utilities. Explicit return types on all exported functions.
 - **SQL:** All queries via EF Core LINQ or raw `SqlQuery<>` with parameterized inputs. No string interpolation in SQL.
 - **Secrets:** Never log secrets, connection strings, or tokens. Use `IOptionsMonitor<>` with validation.

@@ -1,0 +1,79 @@
+/*
+----------------------------------------
+VA settings for USWDS 3.x  (issue #17)
+----------------------------------------
+Single source of truth for the VA brand tokens applied to USWDS.
+This file only *configures* `uswds-core` (settings, functions, mixins) and
+emits no CSS, so any stylesheet can pull the themed tokens in:
+
+  @use "../../../theme/uswds/va-settings" as *;
+  .thing { color: color("primary"); }      // → VA Blue
+
+The full framework CSS is compiled once per app through `_va-theme.scss`:
+
+  src/admin/src/styles/uswds-theme.scss   (Vite)
+  src/public/styles/uswds-theme.scss      (Next.js)
+
+Each bundler adds `node_modules/@uswds/uswds/packages` to its Sass
+load paths so `uswds-core` / `uswds` resolve here.
+
+Custom hex values are allowed for theme color settings (USWDS applies
+them with the `set-theme` flag); `$theme-show-compile-warnings` is off
+so every non-token hex below doesn't emit an "Override" warning.
+
+Palette sources:
+  - VA Blue #003e73 and VA Gold #f9c642 are required by issue #17
+  - the remaining steps come from the VA.gov (Formation) palette:
+    primary #0071bb, primary-darkest #112e51, cool-blue-lightest #dce4ef,
+    cool-blue-lighter #8ba6ca, gold #fdb81e, gold-lighter #fad980,
+    gold-lightest #fff1d2, secondary (red) #e31c3d / #cd2026 / #981b1e /
+    #e59393 / #f9dede
+  - steps VA doesn't define fall back to USWDS system tokens
+----------------------------------------
+*/
+
+@use "uswds-core" with (
+  // ── Assets ──────────────────────────────────────────────────────────────
+  // Root-relative so Vite and Next resolve them identically. Each app copies
+  // @uswds/uswds/dist/{fonts,img} into its public/uswds/ before dev/build
+  // (see src/theme/uswds/copy-assets.mjs).
+  $theme-image-path: "/uswds/img",
+  $theme-font-path: "/uswds/fonts",
+  $theme-show-compile-warnings: false,
+  $theme-show-notifications: false,
+
+  // ── Typography: Public Sans for every role ──────────────────────────────
+  // USWDS defaults to Source Sans Pro for sans and Merriweather for headings;
+  // VA uses Public Sans. Pointing every role at "sans" means USWDS emits
+  // @font-face only for Public Sans (+ Roboto Mono for code).
+  $theme-font-type-sans: "public-sans",
+  $theme-font-role-ui: "sans",
+  $theme-font-role-body: "sans",
+  $theme-font-role-heading: "sans",
+  $theme-font-role-alt: "sans",
+
+  // ── Primary: VA Blue ────────────────────────────────────────────────────
+  $theme-color-primary-lighter: #dce4ef,
+  $theme-color-primary-light: #8ba6ca,
+  $theme-color-primary: #003e73,
+  $theme-color-primary-vivid: #0071bb,
+  $theme-color-primary-dark: #112e51,
+  $theme-color-primary-darker: "blue-warm-90",
+
+  // ── Secondary: VA Red ───────────────────────────────────────────────────
+  $theme-color-secondary-lighter: #f9dede,
+  $theme-color-secondary-light: #e59393,
+  $theme-color-secondary: #e31c3d,
+  $theme-color-secondary-vivid: #e31c3d,
+  $theme-color-secondary-dark: #cd2026,
+  $theme-color-secondary-darker: #981b1e,
+
+  // ── Accent warm: VA Gold ────────────────────────────────────────────────
+  $theme-color-accent-warm-lighter: #fff1d2,
+  $theme-color-accent-warm-light: #fad980,
+  $theme-color-accent-warm: #f9c642,
+  $theme-color-accent-warm-dark: #fdb81e,
+  $theme-color-accent-warm-darker: "gold-50v"
+);
+
+@forward "uswds-core";
