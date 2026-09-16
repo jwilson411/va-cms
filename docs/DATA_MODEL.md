@@ -237,6 +237,23 @@ Tracks each status change on a content entry.
 | Comment | NVARCHAR(2000) | Required when returning to draft |
 | CreatedAt | DATETIME2 | |
 
+### Notification
+In-app inbox row for a workflow event (issue #38, FR-WORKFLOW-02/03). Written by
+`usp_Notification_CreateForWorkflowEvent` right after a successful transition; one row per recipient.
+
+| Column | Type | Notes |
+|---|---|---|
+| Id | BIGINT IDENTITY | PK |
+| RecipientUserId | BIGINT | FK → User |
+| EventType | NVARCHAR(50) | `ReviewRequested` (→ publish-capable users, global or section-matching), `ContentApproved` / `ContentReturned` (→ entry owner). The actor is never notified. |
+| ContentEntryId | BIGINT | FK → ContentEntry — the panel links to `/admin/content/{id}/edit` |
+| ContentTitle | NVARCHAR(500) | Snapshot of the latest version's `$.title` (falls back to slug) |
+| Message | NVARCHAR(1000) | Rendered description, e.g. `alice submitted "Page" for review` |
+| ActorId | BIGINT | FK → User (nullable) |
+| Comment | NVARCHAR(2000) | Reviewer's return comment |
+| IsRead / ReadAt | BIT / DATETIME2 | Set by `usp_Notification_MarkRead` / `MarkAllRead` (own rows only) |
+| CreatedAt | DATETIME2 | Index `(RecipientUserId, IsRead, CreatedAt DESC)` |
+
 ### AuditLog
 Immutable log of all system mutations.
 

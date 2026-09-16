@@ -18,6 +18,7 @@ using VA.CMS.Infrastructure.ContentTypes.BuiltIn;
 using VA.CMS.Infrastructure.ContentTypes.CustomFields;
 using VA.CMS.Infrastructure.Services;
 using VA.CMS.Infrastructure.Storage;
+using VA.CMS.API.Notifications;
 using VA.CMS.API.Webhooks;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -331,6 +332,10 @@ builder.Services.AddHttpClient("WebhookClient")
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();
 builder.Services.AddSingleton<IWebhookBackgroundDispatcher, WebhookBackgroundDispatcher>();
+
+// Issue #38: In-app notification center for workflow events (BRD FR-WORKFLOW-02/03)
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<IWorkflowNotifier, WorkflowNotifier>();
 
 // Issue #35: Scheduled publish / expiry background worker (BRD FR-AUTH-04)
 builder.Services.AddHostedService<VA.CMS.Infrastructure.Services.ScheduledPublishWorker>();

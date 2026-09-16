@@ -17,7 +17,8 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:5100',
+      // VITE_API_PROXY lets a second checkout/worktree point at an API on another port.
+      '/api': process.env.VITE_API_PROXY ?? 'http://localhost:5100',
     },
   },
 });
