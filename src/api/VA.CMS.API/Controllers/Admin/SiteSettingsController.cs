@@ -30,19 +30,42 @@ public class SiteSettingsController : ControllerBase
     private readonly IAuditLogRepository          _audit;
     private readonly IRbacService                 _rbac;
     private readonly IWebhookBackgroundDispatcher _webhooks;
+    private readonly IHostEnvironment             _env;
 
     public SiteSettingsController(
         ISiteSettingRepository       repo,
         ISiteSettingsService         settings,
         IAuditLogRepository          audit,
         IRbacService                 rbac,
-        IWebhookBackgroundDispatcher webhooks)
+        IWebhookBackgroundDispatcher webhooks,
+        IHostEnvironment             env)
     {
         _repo     = repo;
         _settings = settings;
         _audit    = audit;
         _rbac     = rbac;
         _webhooks = webhooks;
+        _env      = env;
+    }
+
+    /// <summary>
+    /// Environment-aware rules on top of the DataType check (#173). notifications.adminBaseUrl is
+    /// embedded in every workflow email, so outside Development it must be an absolute https://
+    /// origin — a startup rule cannot enforce that (the value lives in the database), so the
+    /// write is refused instead and /health/ready reports the default until it is set.
+    /// </summary>
+    public static string? ValidatePolicy(SiteSettingDefinition definition, string? value, bool isDevelopment)
+    {
+        if (!string.Equals(definition.Key, SiteSettingKeys.NotificationsAdminBaseUrl, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        if (!Uri.TryCreate(value?.Trim(), UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            return $"'{definition.Key}' must be an absolute http(s) URL, e.g. https://cms-admin.va.gov.";
+
+        if (!isDevelopment && uri.Scheme != Uri.UriSchemeHttps)
+            return $"'{definition.Key}' must use https:// outside Development; it is embedded in every workflow email.";
+
+        return null;
     }
 
     /// <summary>List every setting with its current value, default, type and description.</summary>
@@ -72,7 +95,7 @@ public class SiteSettingsController : ControllerBase
             ? request.Value?.Trim().ToLowerInvariant()
             : request.Value;
 
-        var validationError = SiteSettingParser.Validate(definition, value);
+        var validationError = SiteSettingParser.Validate(definition, value) ?? ValidatePolicy(definition, value, _env.IsDevelopment());
         if (validationError is not null)
             return BadRequest(new { error = validationError });
 

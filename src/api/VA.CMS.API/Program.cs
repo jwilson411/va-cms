@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using VA.CMS.API;
 using VA.CMS.API.Auth;
 using VA.CMS.API.GraphQL;
 using VA.CMS.API.Middleware;
@@ -24,12 +26,17 @@ using VA.CMS.API.Webhooks;
 var builder = WebApplication.CreateBuilder(args);
 
 // -----------------------------------------------------------------------
+// Fail-fast configuration validation (#173)
+// Every environment/secret rule is evaluated here, before a single service is
+// registered, and reported as one numbered list. See StartupValidation for the
+// rules and docs/DEPLOYMENT.md "Startup validation" for the operator view.
+// -----------------------------------------------------------------------
+StartupValidation.Run(builder.Configuration, builder.Environment);
+
+// -----------------------------------------------------------------------
 // Configuration
 // -----------------------------------------------------------------------
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException(
-        "Connection string 'DefaultConnection' is missing. " +
-        "Copy appsettings.Development.json.example to appsettings.Development.json and fill in values.");
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
 
 var authOptions = builder.Configuration
     .GetSection(AuthOptions.SectionName)
@@ -42,14 +49,43 @@ var jwtOptions = builder.Configuration
 
 if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey))
 {
-    if (builder.Environment.IsProduction())
-        throw new InvalidOperationException("Jwt:SigningKey is required in Production. Set it via environment variable.");
-
+    // Development only — StartupValidation refuses an empty key everywhere else.
     jwtOptions.SigningKey = Convert.ToBase64String(
         System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
     Console.WriteLine("⚠  Jwt:SigningKey not configured — using a randomly generated key. " +
                       "Tokens will not survive a restart. Set Jwt:SigningKey for persistence.");
 }
+
+// Options classes are also registered through the options pipeline with
+// ValidateDataAnnotations().ValidateOnStart() (#173). StartupValidation has already
+// evaluated the same annotations; this keeps IOptions<T> consumers and the host's own
+// start-up check on one source of truth.
+builder.Services.AddOptions<JwtOptions>()
+    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+    .PostConfigure(o => { if (string.IsNullOrWhiteSpace(o.SigningKey)) o.SigningKey = jwtOptions.SigningKey; })
+    .ValidateDataAnnotations()
+    .Validate(o => StartupValidation.ValidateSigningKey(o.SigningKey, isDevelopment: false) is null,
+              "Jwt:SigningKey is missing, shorter than 32 bytes or an example placeholder.")
+    .ValidateOnStart();
+builder.Services.AddOptions<AuthOptions>()
+    .Bind(builder.Configuration.GetSection(AuthOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<StorageOptions>()
+    .Bind(builder.Configuration.GetSection(StorageOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(o => o.Validate(builder.Environment.IsDevelopment() ? null : builder.Environment.ContentRootPath) is null,
+              "Storage options are invalid (see StorageOptions.Validate).")
+    .ValidateOnStart();
+builder.Services.AddOptions<MediaScannerOptions>()
+    .Bind(builder.Configuration.GetSection(MediaScannerOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<EmailOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOptions.SectionName))
+    .Validate(o => StartupValidation.ValidateSmtp(o, builder.Environment.IsDevelopment()) is null,
+              "Email:Smtp options are invalid (see StartupValidation.ValidateSmtp).")
+    .ValidateOnStart();
 
 // -----------------------------------------------------------------------
 // Host hardening (#162): explicit AllowedHosts outside Development; forwarded
@@ -69,40 +105,19 @@ if (corsOrigins.Length > 0)
 // -----------------------------------------------------------------------
 // Authentication
 // -----------------------------------------------------------------------
-// -----------------------------------------------------------------------
-// Session policy guards (#164, VA 6500): DevBypass and the fake AD handlers exist
-// for local development only — a Staging box misconfigured into DevBypass is a
-// deployment with no authentication. Everything below refuses to start outside
-// ASPNETCORE_ENVIRONMENT=Development rather than merely outside Production.
-// -----------------------------------------------------------------------
-if (authOptions.Mode == AuthMode.DevBypass && !builder.Environment.IsDevelopment())
-{
-    throw new InvalidOperationException(
-        $"Auth:Mode=DevBypass is only permitted in the Development environment (current: {builder.Environment.EnvironmentName}). " +
-        "Set Auth:Mode=AzureAd (or WindowsAuth) and configure real AD credentials.");
-}
-if (authOptions.Mode == AuthMode.DevBypass && authOptions.DevBypassAllowedUsers.Length == 0)
-{
-    throw new InvalidOperationException(
-        "Auth:DevBypassAllowedUsers is empty: with DevBypass every UPN would be accepted. " +
-        "List the developer UPNs allowed to sign in (see appsettings.Development.json.example).");
-}
-// Outside Development the refresh cookie is Secure and would never come back over
-// plain HTTP. When Kestrel's own bindings are configured and none is https://, and
-// no TLS-terminating proxy is trusted for X-Forwarded-Proto, every sign-in would
-// silently fail — refuse to start instead. IIS in-process hosting sets no urls.
-if (VA.CMS.API.HostHardeningOptions.ValidateHttpsAvailable(builder.Configuration, builder.Environment.IsDevelopment()) is { } httpsError)
-    throw new InvalidOperationException(httpsError);
+// Session policy guards (#164, VA 6500): DevBypass and the fake AD handlers exist for
+// local development only. StartupValidation has already refused them outside
+// ASPNETCORE_ENVIRONMENT=Development, so the switch below only wires what was allowed.
 
 // JWT bearer validation shared by every auth mode. OnTokenValidated consults the
 // session revocation guard (#163) so a token minted before a deactivation or role
 // change is refused even though its signature and lifetime are fine.
-void ConfigureJwtBearer(JwtBearerOptions options)
-{
-    var jwtSvc = new JwtService(jwtOptions);
-    options.TokenValidationParameters = jwtSvc.GetValidationParameters();
-    options.Events = SessionRevocationJwtEvents.Build();
-}
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IJwtService>((options, jwt) =>
+    {
+        options.TokenValidationParameters = jwt.GetValidationParameters();
+        options.Events = SessionRevocationJwtEvents.Build();
+    });
 
 switch (authOptions.Mode)
 {
@@ -117,14 +132,11 @@ switch (authOptions.Mode)
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
             })
-            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwtBearer);
+            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { });
         break;
 
     case AuthMode.WindowsAuth:
         var useFakeNegotiate = builder.Configuration["WINDOWS_AUTH_FAKE_NEGOTIATE"] == "true";
-        if (useFakeNegotiate && !builder.Environment.IsDevelopment())
-            throw new InvalidOperationException(
-                "WINDOWS_AUTH_FAKE_NEGOTIATE is only permitted in the Development environment.");
 
         var authBuilder = builder.Services
             .AddAuthentication(options =>
@@ -143,27 +155,14 @@ switch (authOptions.Mode)
             authBuilder.AddNegotiate();
         }
 
-        authBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwtBearer);
+        authBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { });
         break;
 
     case AuthMode.AzureAd:
     default:
         // The OIDC redirect URI (AzureAd:CallbackPath, default /signin-oidc) is owned by the
-        // OIDC handler. /api/auth/callback is the app's own post-login action, so the two must
-        // never coincide — the handler would swallow the second GET with "state is null" (#154).
-        var aadCallbackPath = builder.Configuration["AzureAd:CallbackPath"];
-        if (!string.IsNullOrEmpty(aadCallbackPath)
-            && aadCallbackPath.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"AzureAd:CallbackPath '{aadCallbackPath}' collides with the API routes. Leave it unset " +
-                $"(defaults to {AzureAdSchemes.CallbackPath}) and register that path as the redirect URI " +
-                "in the app registration.");
-        }
-
+        // OIDC handler; StartupValidation refuses a CallbackPath under /api/ (#154).
         var useFakeOidc = builder.Configuration["AZUREAD_FAKE_OIDC"] == "true";
-        if (useFakeOidc && !builder.Environment.IsDevelopment())
-            throw new InvalidOperationException("AZUREAD_FAKE_OIDC is only permitted in the Development environment.");
 
         var aadBuilder = builder.Services
             .AddAuthentication(options =>
@@ -199,7 +198,7 @@ switch (authOptions.Mode)
             o.SlidingExpiration   = false;
         });
 
-        aadBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwtBearer);
+        aadBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { });
         break;
 }
 
@@ -320,8 +319,8 @@ builder.Services.AddScoped<ISearchPinRepository, SearchPinRepository>();
 builder.Services.AddScoped<ITaxonomyRepository, TaxonomyRepository>();
 
 // Auth services
-builder.Services.AddSingleton(authOptions);
-builder.Services.AddSingleton(jwtOptions);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<AuthOptions>>().Value);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<JwtOptions>>().Value);
 builder.Services.AddSingleton<IJwtService, JwtService>();
 // #163: refresh tokens are rows in [RefreshToken] (rotation, replay detection, revocation);
 // InMemoryRefreshTokenService exists for tests only.
@@ -332,14 +331,12 @@ builder.Services.AddSingleton<IRbacService, RbacService>();
 // -----------------------------------------------------------------------
 // Storage backend (issue #40: BRD FR-MEDIA-07 / FR-SECURITY-06)
 // -----------------------------------------------------------------------
+// On-prem only: local disk or a UNC share. Anything else (the former azure_blob stub)
+// was refused by StartupValidation rather than failing on the first upload (#170).
 var storageOptions = builder.Configuration
     .GetSection(StorageOptions.SectionName)
     .Get<StorageOptions>() ?? new StorageOptions();
-// On-prem only: local disk or a UNC share. Anything else (the former azure_blob stub)
-// is refused here rather than failing on the first upload (#170).
-if (storageOptions.Validate(builder.Environment.IsDevelopment() ? null : builder.Environment.ContentRootPath) is { } storageError)
-    throw new InvalidOperationException(storageError);
-builder.Services.AddSingleton(storageOptions);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<StorageOptions>>().Value);
 
 IStorageBackend storageBackend = storageOptions.Backend.Trim().ToLowerInvariant() switch
 {
@@ -349,18 +346,13 @@ IStorageBackend storageBackend = storageOptions.Backend.Trim().ToLowerInvariant(
 builder.Services.AddSingleton<IStorageBackend>(storageBackend);
 builder.Services.AddSingleton<IImageProcessingService, ImageProcessingService>();
 // Virus scanning (#159, BRD FR-MEDIA-04, NIST SI-3): Media:Scanner selects ICAP (enterprise
-// engines), ClamAV (dev/CI) or Disabled. Disabled is refused in Production; FailClosed
-// defaults to true outside Development so an unreachable engine rejects uploads.
+// engines), ClamAV (dev/CI) or Disabled. Disabled is refused in Production by
+// StartupValidation; FailClosed defaults to true outside Development so an unreachable
+// engine rejects uploads.
 var scannerOptions = builder.Configuration
     .GetSection(MediaScannerOptions.SectionName)
     .Get<MediaScannerOptions>() ?? new MediaScannerOptions();
-if (scannerOptions.Mode == MediaScannerMode.Disabled && builder.Environment.IsProduction())
-{
-    throw new InvalidOperationException(
-        "Media:Scanner:Mode=Disabled is not permitted in Production. Configure Mode=Icap (host, port, service path) " +
-        "or Mode=ClamAv so uploads are scanned for malware (NIST SI-3).");
-}
-builder.Services.AddSingleton(scannerOptions);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<MediaScannerOptions>>().Value);
 builder.Services.AddSingleton<IVirusScanService>(scannerOptions.Mode switch
 {
     MediaScannerMode.Icap   => new IcapVirusScanService(scannerOptions),
@@ -410,8 +402,7 @@ builder.Services.AddScoped<IWorkflowNotifier, WorkflowNotifier>();
 var emailOptions = builder.Configuration
     .GetSection(EmailOptions.SectionName)
     .Get<EmailOptions>() ?? new EmailOptions();
-emailOptions.Validate();
-builder.Services.AddSingleton(emailOptions);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<EmailOptions>>().Value);
 if (emailOptions.IsEnabled)
     builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 else
@@ -472,10 +463,6 @@ builder.Services.AddCustomFieldType<GeoPointFieldType>();
 // -----------------------------------------------------------------------
 // Build
 // -----------------------------------------------------------------------
-// Last of the fail-fast checks (#162): a wildcard Host header is only acceptable in Development.
-if (VA.CMS.API.HostHardeningOptions.ValidateAllowedHosts(builder.Configuration["AllowedHosts"], builder.Environment.IsDevelopment()) is { } hostsError)
-    throw new InvalidOperationException(hostsError);
-
 var app = builder.Build();
 
 // -----------------------------------------------------------------------

@@ -144,7 +144,7 @@ AllowedHosts=cms.va.gov;cms-admin.va.gov          # required outside Development
 ForwardedHeaders__KnownProxies__0=10.1.2.3       # IIS ARR / load balancer addresses whose X-Forwarded-* is trusted
 ForwardedHeaders__KnownNetworks__0=10.1.0.0/16   # (CIDR); leave both empty when the API terminates TLS itself
 # Cors__AllowedOrigins__0=https://www.va.gov     # only if the public site or SPA lives on a different origin
-ConnectionStrings__DefaultConnection=Server=SQLSERVER;Database=VACMS;User Id=vacms_app;Password=<pw>;TrustServerCertificate=False;
+ConnectionStrings__DefaultConnection=Server=SQLSERVER;Database=VACMS;User Id=vacms_app;Password=<pw>;Encrypt=True;TrustServerCertificate=False;
 Auth__Mode=WindowsAuth                           # on-prem default: IIS Windows Authentication (Kerberos)
 # Alternative — AD FS OpenID Connect (Auth__Mode=AzureAd; see "Identity provider" below):
 # AzureAd__Instance=https://adfs.va.gov/
@@ -158,10 +158,10 @@ Media__Scanner__Host=avscan.va.gov
 Media__Scanner__Port=1344
 Media__Scanner__ServicePath=/avscan              # the engine's RESPMOD service (vendor-specific)
 Media__Scanner__FailClosed=true                  # unreachable engine ⇒ upload rejected (503), nothing stored
-Email__SmtpHost=mail.va.gov
-Email__SmtpPort=587
-Email__FromAddress=noreply-cms@va.gov
-Jwt__SigningKey=<256-bit-random-key>
+Email__Smtp__Host=mail.va.gov                    # sender address/name and the on/off switch are site settings
+Email__Smtp__Port=587
+Email__Smtp__Security=StartTls                   # None is refused outside Development (#173)
+Jwt__SigningKey=<256-bit-random-key>             # `openssl rand -base64 48`; 32+ bytes, never the example value (#173)
 
 # Public site (Next.js)
 NEXT_PUBLIC_API_URL=https://cms.youragency.va.gov/api/v1
@@ -259,9 +259,51 @@ plaintext `AzureAd__ClientSecret`: `AzureAd__ClientCredentials__0__SourceType=St
 access to the private key). If a secret must be used, inject it from the deployment tool's secret store
 at start-up; never commit it to `appsettings*.json`.
 
-**Secrets on the host.** All other secrets (`Jwt__SigningKey`, `ConnectionStrings__DefaultConnection`,
-SMTP credentials, `REVALIDATE_SECRET`) are environment variables set on the IIS application pool by the
-deployment tool, or `dotnet user-secrets`-style files protected with DPAPI — no cloud vault is involved.
+**Secrets on the host (#173).** All other secrets (`Jwt__SigningKey`, `ConnectionStrings__DefaultConnection`,
+SMTP credentials, `REVALIDATE_SECRET`, the Splunk HEC token) never live in the repository or in a checked-in
+`appsettings*.json`. Two on-prem options, in order of preference:
+
+1. **Environment variables on the IIS application pool**, injected by the deployment tool (Jenkins credential
+   binding, Ansible vault, or the VA's approved secret store) at deploy time. `web.config`
+   `<environmentVariables>` is acceptable only when the file is written by the deployment tool and ACL'd to
+   the app-pool identity and administrators.
+2. **A DPAPI-protected `appsettings.Production.json`** outside the web root, encrypted with
+   `System.Security.Cryptography.ProtectedData` under the app-pool identity's user scope, and decrypted by a
+   small configuration provider at start-up. The plaintext file must never be written to disk on the host.
+
+No cloud vault is involved. Certificates (TLS, the AD FS client credential) live in the Windows certificate
+store (`LocalMachine\My`) with private-key read access granted to the app-pool identity only.
+
+**Token signing.** The API signs access and preview tokens with HS256 today, so `Jwt__SigningKey` has to be
+present on every node. For a multi-node production deployment consider RS256 with a certificate from the VA
+PKI: the private key stays in the certificate store of the signing host and only the public key is
+distributed. This is a planned change, not a configuration switch.
+
+#### Startup validation (#173)
+
+The API evaluates its configuration before registering a single service and refuses to start with **one
+numbered list of every problem** (`StartupValidation.cs`; `ASPNETCORE_ENVIRONMENT` decides which rules
+apply). The rules:
+
+| Rule | Development | Everywhere else |
+|---|---|---|
+| `ConnectionStrings__DefaultConnection` present | required | required |
+| `TrustServerCertificate=True`, `Encrypt=False` or `User Id=sa` in the connection string | allowed | **refused in Production** |
+| `Jwt__SigningKey` ≥ 32 bytes, not an example placeholder, not trivially low-entropy | empty ⇒ random per-process key | required |
+| `Auth__Mode=DevBypass`, `WINDOWS_AUTH_FAKE_NEGOTIATE`, `AZUREAD_FAKE_OIDC` | allowed (DevBypass needs an allow-list) | refused |
+| `AzureAd__CallbackPath` under `/api/` | refused | refused |
+| `AllowedHosts=*` or empty | allowed | refused |
+| Kestrel bound to `http://` only with no trusted proxy | allowed | refused (Secure cookies would never return) |
+| `Storage__Backend` other than `local`/`unc`; UNC root not a UNC path; local root inside the web root | backend/root checks | all checks |
+| `Media__Scanner__Mode=Disabled` | allowed | **refused in Production**; engines need `Host` |
+| `Email__Smtp__Security=None`; half-configured credentials; bad port | port/credential checks | all checks |
+| DataAnnotations on every options class (`[Range]`, `[Required]`) | checked | checked |
+
+Every options class is also registered with `AddOptions<T>().Bind().ValidateDataAnnotations().ValidateOnStart()`,
+so `IOptions<T>` consumers and the host's own start-up validation share one source of truth. The one rule that
+cannot be a startup rule — `notifications.adminBaseUrl`, which is embedded in every workflow email — lives in the
+database instead: the Settings screen refuses a non-`https://` value outside Development, and `/health/ready`
+reports the setting until it has been changed from its `http://localhost:5173` default.
 
 # Migrations are NOT applied by the API. Run them as the deployment account before starting the app pool:
 vacms db migrate --connection "<deployment-account connection string>"
