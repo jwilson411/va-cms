@@ -277,11 +277,11 @@ public sealed class Issue153TestFactory : WebApplicationFactory<Program>
             Replace<IDbMonitorRepository>(services,      _ => new AuthTestStubs.StubDbMonitorRepository());
             Replace<IAdGroupMappingRepository>(services, _ => Mappings);
 
+            // The stub user repo knows no Windows UPNs, so let logins auto-provision (#155).
+            var settings = StaticSiteSettings.Defaults.With(SiteSettingKeys.AuthAutoProvisionUsers, true);
             if (_accessTokenMinutes is { } minutes)
-            {
-                services.AddSingleton<ISiteSettingsService>(
-                    StaticSiteSettings.Defaults.With(SiteSettingKeys.AuthAccessTokenMinutes, minutes));
-            }
+                settings = settings.With(SiteSettingKeys.AuthAccessTokenMinutes, minutes);
+            services.AddSingleton<ISiteSettingsService>(settings);
         });
     }
 

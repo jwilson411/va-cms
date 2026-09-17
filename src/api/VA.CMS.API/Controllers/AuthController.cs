@@ -134,6 +134,19 @@ public class AuthController : ControllerBase
         if (string.IsNullOrEmpty(upn) || string.IsNullOrEmpty(oid))
             return Unauthorized("Could not determine user identity from AD token.");
 
+        // #155: unless auto-provisioning is on, only identities an administrator has
+        // already created may sign in. Unknown tenant users get a clear message on
+        // the SPA login page rather than an empty, role-less session.
+        if (!_settings.GetBool(SiteSettingKeys.AuthAutoProvisionUsers)
+            && await _users.GetByExternalIdAsync(oid) is null)
+        {
+            _logger.LogWarning(
+                "AzureAd login rejected: {Upn} (oid {Oid}) is not a provisioned CMS user and auth.autoProvisionUsers is off.",
+                upn, oid);
+            await HttpContext.SignOutAsync(AzureAdSchemes.Cookie);
+            return LocalRedirect("/login?error=not_provisioned");
+        }
+
         // Upsert user row
         var userId = await _users.UpsertAsync(oid, upn, displayName);
 

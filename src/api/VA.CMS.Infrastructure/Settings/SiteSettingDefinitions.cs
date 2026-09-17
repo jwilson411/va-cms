@@ -70,6 +70,10 @@ public static class SiteSettingKeys
     public const string AuthRefreshTokenHours   = "auth.refreshTokenHours";
     public const string AuthPreviewTokenMinutes = "auth.previewTokenMinutes";
     public const string AuthAzureAdSignOut      = "auth.azureAdSignOut";
+    public const string AuthAutoProvisionUsers  = "auth.autoProvisionUsers";
+
+    // Navigation / redirects (Server)
+    public const string RedirectsAllowedExternalHosts = "redirects.allowedExternalHosts";
 
     // Workflow (Server)
     public const string WorkflowScheduledPublishPollSeconds = "workflow.scheduledPublishPollSeconds";
@@ -113,6 +117,7 @@ public static class SiteSettingCategories
     public const string Auth          = "Auth";
     public const string Workflow      = "Workflow";
     public const string Webhooks      = "Webhooks";
+    public const string Navigation    = "Navigation";
     public const string Search        = "Search";
     public const string Api           = "Api";
     public const string Notifications = "Notifications";
@@ -217,6 +222,14 @@ public static class SiteSettingDefinitions
         B(SiteSettingKeys.AuthAzureAdSignOut, true, SiteSettingCategories.Auth, SiteSettingScope.Server,
           "On logout in AzureAd mode, also send the browser to the Azure AD end-session endpoint so the AAD session " +
           "is cleared (VA 6500 AC-12). Off clears only the CMS cookies; the next login may sign in silently.", 40),
+        B(SiteSettingKeys.AuthAutoProvisionUsers, false, SiteSettingCategories.Auth, SiteSettingScope.Server,
+          "Create a CMS user row for any tenant identity on its first AzureAd/WindowsAuth login. Off rejects unknown " +
+          "identities until an administrator has created the user (DevBypass logins are governed by DevBypassAllowedUsers).", 50),
+
+        // ── Navigation / redirects ──────────────────────────────────────────
+        J(SiteSettingKeys.RedirectsAllowedExternalHosts, Array.Empty<string>(), SiteSettingCategories.Navigation, SiteSettingScope.Server,
+          "JSON array of host names a redirect ToPath may point at (e.g. [\"www.va.gov\", \"*.va.gov\"]). " +
+          "Empty means redirects may only target site-relative paths.", 10),
 
         // ── Workflow ────────────────────────────────────────────────────────
         I(SiteSettingKeys.WorkflowScheduledPublishPollSeconds, 60, SiteSettingCategories.Workflow, SiteSettingScope.Server,

@@ -32,6 +32,13 @@ public static class CmsRoles
         /// <summary>Any authenticated user with at least one CMS role.</summary>
         public const string AnyRole = "cms:any";
 
+        /// <summary>
+        /// Authenticated by some scheme but no CMS role required. Only for the
+        /// login endpoints that turn an external identity into a CMS session
+        /// (e.g. Negotiate on /windows-login); everything else needs a role (#155).
+        /// </summary>
+        public const string AuthenticatedOnly = "cms:authenticated";
+
         /// <summary>Can read content (all roles).</summary>
         public const string CanRead = "cms:read";
 

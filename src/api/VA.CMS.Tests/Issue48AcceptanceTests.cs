@@ -31,7 +31,8 @@ public class Issue48AcceptanceTests(DatabaseFixture fixture)
 
     private RedirectAdminController Controller()
     {
-        var controller = new RedirectAdminController(NavRepo(), StaticSiteSettings.Defaults);
+        var controller = new RedirectAdminController(
+            NavRepo(), new ContentEntryRepository(fixture.CreateDb()), StaticSiteSettings.Defaults);
         // Simulate no authenticated user claim — CreatedById will be 0 for tests
         return controller;
     }

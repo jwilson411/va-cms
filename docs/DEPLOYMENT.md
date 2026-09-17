@@ -172,6 +172,13 @@ never placed in a URL or response body; the SPA obtains it through `GET /api/aut
 Logout: `POST /api/auth/logout` revokes the refresh session and, when the `auth.azureAdSignOut` site setting is
 on (default), returns `{ "signOutUrl": "/api/auth/signout" }`, which the SPA navigates to.
 
+**First sign-in.** `auth.autoProvisionUsers` defaults to off, so a fresh deployment rejects every tenant
+identity until a user row exists. Bootstrap the first administrator with SQL before go-live
+(`INSERT INTO [User] (ExternalId, Email, DisplayName, IsActive)` using the account's Entra object ID — or its UPN
+in WindowsAuth mode — then `INSERT INTO UserRole` for SystemAdmin), or temporarily set the site setting to `true`,
+sign in, assign the role, and switch it back. Signed-in users with no CMS role get 403 from every `/api/v1`
+endpoint and a "no access" page in the admin SPA.
+
 **Client credential.** Prefer a certificate or a Key Vault reference over a plaintext `AzureAd__ClientSecret`:
 
 - Certificate — set `AzureAd__ClientCredentials__0__SourceType=StoreWithThumbprint`,

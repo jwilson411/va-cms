@@ -35,6 +35,36 @@ interface AuthState {
   expiresAt: Date | null;
   /** True while an auth operation (refresh, login redirect) is in progress. */
   loading: boolean;
+  /**
+   * CMS role names carried by the access token (section scope stripped). Read for
+   * UI decisions only — the API enforces every policy itself (#155).
+   */
+  roles: string[];
+}
+
+/** Claim type ASP.NET uses for ClaimTypes.Role; the API's JwtService emits roles under it. */
+const ROLE_CLAIM = 'http://schemas.microsoft.com/ws/2008/06/identity/claims/role';
+
+/**
+ * Decode the role claims from a JWT payload without verifying the signature —
+ * the token came from the API over the same origin and is only used to decide
+ * what to render. Scoped roles look like "ContentOwner:section:7:prefix:hr/".
+ */
+export function rolesFromToken(token: string): string[] {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return [];
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '='))) as Record<string, unknown>;
+    const raw = json[ROLE_CLAIM];
+    const list = Array.isArray(raw) ? raw : typeof raw === 'string' ? [raw] : [];
+    return list
+      .filter((r): r is string => typeof r === 'string')
+      .map((r) => r.split(':')[0])
+      .filter((r) => r.length > 0);
+  } catch {
+    return [];
+  }
 }
 
 interface AuthContextValue extends AuthState {
@@ -75,6 +105,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     accessToken: null,
     expiresAt: null,
     loading: true,
+    roles: [],
   });
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -101,6 +132,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
         accessToken: data.accessToken,
         expiresAt,
         loading: false,
+        roles: rolesFromToken(data.accessToken),
       });
       scheduleRefresh(expiresAt);
     },
@@ -111,7 +143,7 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     if (refreshTimerRef.current !== null)
       clearTimeout(refreshTimerRef.current);
     setAuthToken(null);
-    setState({ accessToken: null, expiresAt: null, loading: false });
+    setState({ accessToken: null, expiresAt: null, loading: false, roles: [] });
   }, []);
 
   // ── Silent refresh ─────────────────────────────────────────────────────

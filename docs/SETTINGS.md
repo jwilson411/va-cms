@@ -118,6 +118,12 @@ Defaults are the values that were previously hard-coded.
 | `auth.refreshTokenHours` | 8 (also the `cms_rt` cookie Max-Age) |
 | `auth.previewTokenMinutes` | 60 |
 | `auth.azureAdSignOut` | true — logout also sends the browser to the Azure AD end-session endpoint (`GET /api/auth/signout`); off clears only the CMS cookies |
+| `auth.autoProvisionUsers` | false — unknown AzureAd/WindowsAuth identities are rejected (`/login?error=not_provisioned` / 403) until an administrator creates the user row; DevBypass is governed by `DevBypassAllowedUsers` instead |
+
+### Navigation (Server)
+| Key | Default |
+|---|---|
+| `redirects.allowedExternalHosts` | `[]` — host names (exact, or `*.example.gov`) a redirect `ToPath` may point at over https; empty means site-relative targets only |
 
 ### Workflow
 | Key | Default | Scope |

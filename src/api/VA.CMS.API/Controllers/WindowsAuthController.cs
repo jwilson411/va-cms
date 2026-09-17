@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Controllers;
 
@@ -35,6 +36,7 @@ public class WindowsAuthController : ControllerBase
     private readonly IWebHostEnvironment  _env;
     private readonly IAdGroupRoleResolver _groupResolver;
     private readonly AuthOptions          _authOptions;
+    private readonly ISiteSettingsService _settings;
     private readonly ILogger<WindowsAuthController> _logger;
 
     public WindowsAuthController(
@@ -44,6 +46,7 @@ public class WindowsAuthController : ControllerBase
         IWebHostEnvironment  env,
         IAdGroupRoleResolver groupResolver,
         AuthOptions          authOptions,
+        ISiteSettingsService settings,
         ILogger<WindowsAuthController> logger)
     {
         _users         = users;
@@ -52,6 +55,7 @@ public class WindowsAuthController : ControllerBase
         _env           = env;
         _groupResolver = groupResolver;
         _authOptions   = authOptions;
+        _settings      = settings;
         _logger        = logger;
     }
 
@@ -67,7 +71,8 @@ public class WindowsAuthController : ControllerBase
     // AzureAd /api/auth/callback endpoint so the SPA needs no mode-awareness.
     // ──────────────────────────────────────────────────────────────────────
     [HttpGet("windows-login")]
-    [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)]
+    [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme,
+               Policy = CmsRoles.Policies.AuthenticatedOnly)]
     public async Task<IActionResult> WindowsLogin()
     {
         // Guard: only active when Auth:Mode=WindowsAuth
@@ -93,6 +98,16 @@ public class WindowsAuthController : ControllerBase
         // enriched from a directory lookup. UPN is used as ExternalId since
         // there is no AAD Object ID in Windows Auth mode.
         var displayName = upn;
+
+        // #155: unless auto-provisioning is on, only pre-created users may sign in.
+        if (!_settings.GetBool(SiteSettingKeys.AuthAutoProvisionUsers)
+            && await _users.GetByExternalIdAsync(upn) is null)
+        {
+            _logger.LogWarning(
+                "WindowsAuth login rejected: {Upn} is not a provisioned CMS user and auth.autoProvisionUsers is off.", upn);
+            return StatusCode(StatusCodes.Status403Forbidden,
+                "This account has not been provisioned in the CMS. Contact your site administrator.");
+        }
 
         // Upsert the user row — ExternalId = UPN (canonical in Windows Auth mode).
         var userId = await _users.UpsertAsync(upn, upn, displayName);

@@ -224,13 +224,16 @@ public sealed class Issue154TestFactory : WebApplicationFactory<Program>
 {
     private readonly AuthMode _mode;
     private readonly bool     _aadSignOut;
+    private readonly bool     _autoProvision;
     private readonly string?  _callbackPath;
 
-    public Issue154TestFactory(AuthMode mode = AuthMode.AzureAd, bool aadSignOut = true, string? callbackPath = null)
+    public Issue154TestFactory(
+        AuthMode mode = AuthMode.AzureAd, bool aadSignOut = true, bool autoProvision = true, string? callbackPath = null)
     {
-        _mode         = mode;
-        _aadSignOut   = aadSignOut;
-        _callbackPath = callbackPath;
+        _mode          = mode;
+        _aadSignOut    = aadSignOut;
+        _autoProvision = autoProvision;
+        _callbackPath  = callbackPath;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -261,7 +264,9 @@ public sealed class Issue154TestFactory : WebApplicationFactory<Program>
             Replace<IDbMonitorRepository>(services,      _ => new AuthTestStubs.StubDbMonitorRepository());
             Replace<IAdGroupMappingRepository>(services, _ => mappings);
             services.AddSingleton<ISiteSettingsService>(
-                StaticSiteSettings.Defaults.With(SiteSettingKeys.AuthAzureAdSignOut, _aadSignOut));
+                StaticSiteSettings.Defaults
+                    .With(SiteSettingKeys.AuthAzureAdSignOut,     _aadSignOut)
+                    .With(SiteSettingKeys.AuthAutoProvisionUsers, _autoProvision));
         });
     }
 

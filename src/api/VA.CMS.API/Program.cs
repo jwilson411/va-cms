@@ -180,10 +180,6 @@ switch (authOptions.Mode)
 
 builder.Services.AddAuthorization(options =>
 {
-    options.FallbackPolicy = new AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser()
-        .Build();
-
     var allRoles = new[]
     {
         VA.CMS.API.Auth.CmsRoles.ContentOwner,
@@ -194,9 +190,21 @@ builder.Services.AddAuthorization(options =>
         VA.CMS.API.Auth.CmsRoles.ReadOnly,
     };
 
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.AnyRole, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(allRoles)));
+    // Default deny (#155): a principal with no CMS role gets 403 everywhere. The
+    // default policy covers bare [Authorize]; the fallback covers endpoints with no
+    // attribute at all. Anonymous endpoints opt out with [AllowAnonymous]; login
+    // endpoints that must accept a role-less external identity use AuthenticatedOnly.
+    var anyRole = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(allRoles))
+        .Build();
+    options.DefaultPolicy  = anyRole;
+    options.FallbackPolicy = anyRole;
+
+    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.AuthenticatedOnly, p =>
+        p.RequireAuthenticatedUser());
+
+    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.AnyRole, anyRole);
 
     options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanRead, p =>
         p.RequireAuthenticatedUser()
