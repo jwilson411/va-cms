@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Controllers;
 
@@ -21,10 +22,12 @@ namespace VA.CMS.API.Controllers;
 public class RedirectAdminController : ControllerBase
 {
     private readonly INavigationRepository _nav;
+    private readonly ISiteSettingsService  _settings;
 
-    public RedirectAdminController(INavigationRepository nav)
+    public RedirectAdminController(INavigationRepository nav, ISiteSettingsService settings)
     {
-        _nav = nav;
+        _nav      = nav;
+        _settings = settings;
     }
 
     // ── GET /api/v1/redirects ─────────────────────────────────────────────────
@@ -41,7 +44,7 @@ public class RedirectAdminController : ControllerBase
         [FromQuery] int pageSize = 50)
     {
         if (page < 1) page = 1;
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        pageSize = _settings.ClampPageSize(pageSize);
 
         var (rows, total) = await _nav.ListRedirectsAsync(isActive, page, pageSize);
         return Ok(new RedirectListResponse(

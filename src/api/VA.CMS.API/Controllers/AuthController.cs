@@ -120,7 +120,7 @@ public class AuthController : ControllerBase
 
         // Issue refresh token in httpOnly cookie (8 hr)
         var refreshToken = _refreshTokens.Issue(userId);
-        var cookieOpts   = AuthCookieHelper.BuildCookieOptions(isProduction: _env.IsProduction());
+        var cookieOpts   = AuthCookieHelper.BuildCookieOptions(isProduction: _env.IsProduction(), lifetime: _refreshTokens.Lifetime);
         Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, refreshToken, cookieOpts);
 
         return Ok(new

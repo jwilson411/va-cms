@@ -4,6 +4,7 @@ using System.Text;
 using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Controllers.Admin;
 
@@ -19,11 +20,13 @@ namespace VA.CMS.API.Controllers.Admin;
 [Authorize(Policy = CmsRoles.Policies.CanAdminSystem)]
 public class AuditLogController : ControllerBase
 {
-    private readonly IAuditLogRepository _audit;
+    private readonly IAuditLogRepository  _audit;
+    private readonly ISiteSettingsService _settings;
 
-    public AuditLogController(IAuditLogRepository audit)
+    public AuditLogController(IAuditLogRepository audit, ISiteSettingsService settings)
     {
-        _audit = audit;
+        _audit    = audit;
+        _settings = settings;
     }
 
     /// <summary>
@@ -38,7 +41,7 @@ public class AuditLogController : ControllerBase
     /// <param name="fromDate">ISO 8601 UTC date-time — include rows on or after.</param>
     /// <param name="toDate">ISO 8601 UTC date-time — include rows on or before.</param>
     /// <param name="page">1-based page number (default 1).</param>
-    /// <param name="pageSize">Rows per page, 1–100 (default 50).</param>
+    /// <param name="pageSize">Rows per page, 1–api.maxPageSize (default 50).</param>
     [HttpGet]
     [ProducesResponseType(typeof(AuditLogPage), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListAuditLog(
@@ -50,7 +53,7 @@ public class AuditLogController : ControllerBase
         [FromQuery] int page           = 1,
         [FromQuery] int pageSize       = 50)
     {
-        pageSize = Math.Clamp(pageSize, 1, 100);
+        pageSize = _settings.ClampPageSize(pageSize);
         page     = Math.Max(1, page);
 
         var result = await _audit.ListPagedAsync(

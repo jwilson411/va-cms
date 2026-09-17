@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Controllers.Admin;
 
@@ -23,10 +24,12 @@ namespace VA.CMS.API.Controllers.Admin;
 public class ContentEntryListController : ControllerBase
 {
     private readonly IContentEntryRepository _entries;
+    private readonly ISiteSettingsService    _settings;
 
-    public ContentEntryListController(IContentEntryRepository entries)
+    public ContentEntryListController(IContentEntryRepository entries, ISiteSettingsService settings)
     {
-        _entries = entries;
+        _entries  = entries;
+        _settings = settings;
     }
 
     /// <summary>
@@ -47,8 +50,8 @@ public class ContentEntryListController : ControllerBase
         [FromQuery] int      page          = 1,
         [FromQuery] int      pageSize      = 25)
     {
-        // Clamp pageSize to sensible bounds
-        pageSize = Math.Clamp(pageSize, 1, 100);
+        // Clamp pageSize to [1, api.maxPageSize]
+        pageSize = _settings.ClampPageSize(pageSize);
         page     = Math.Max(1, page);
 
         var result = await _entries.ListAdminAsync(
