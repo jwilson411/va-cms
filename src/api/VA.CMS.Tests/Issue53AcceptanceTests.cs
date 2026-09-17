@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using HotChocolate;
 using HotChocolate.Execution;
 using Microsoft.Extensions.DependencyInjection;
+using VA.CMS.API.Auth;
 using VA.CMS.API.GraphQL;
 using VA.CMS.API.GraphQL.DataLoaders;
 using VA.CMS.API.GraphQL.Types;
@@ -49,11 +51,18 @@ public class Issue53AcceptanceTests(DatabaseFixture fixture)
         services.AddScoped<IMediaAssetRepository,   MediaAssetRepository>();
         services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>();
         services.AddScoped<ITaxonomyRepository,      TaxonomyRepository>();
+        services.AddScoped<IMediaExtendedRepository,   MediaExtendedRepository>();
         // Page-size clamp comes from site settings (issue #147); defaults are enough here.
         services.AddSingleton<ISiteSettingsService>(StaticSiteSettings.Defaults);
 
+        // #156: the schema carries [Authorize] fields and an audience service.
+        services.AddLogging();
+        services.AddCmsAuthorization();
+        services.AddScoped<IGraphQLAudience, GraphQLAudience>();
+
         services
             .AddGraphQLServer()
+            .AddAuthorization()
             .AddQueryType<Query>()
             .AddDataLoader<ContentEntryByIdDataLoader>()
             .AddDataLoader<MediaAssetByIdDataLoader>();
@@ -63,6 +72,18 @@ public class Issue53AcceptanceTests(DatabaseFixture fixture)
                        .GetRequestExecutorAsync()
                        .GetAwaiter()
                        .GetResult();
+    }
+
+    /// <summary>These tests exercise the full (CanRead) surface, so run as an Editor.</summary>
+    private static Task<IExecutionResult> ExecuteAsEditorAsync(IRequestExecutor executor, string query)
+    {
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.Role, CmsRoles.Editor)], "Test"));
+        var request = OperationRequestBuilder.New()
+            .SetDocument(query)
+            .SetGlobalState(WellKnownContextData.UserState, new UserState(principal))
+            .Build();
+        return executor.ExecuteAsync(request);
     }
 
     // ── AC2: All four core types present in the schema ────────────────────────
@@ -227,7 +248,7 @@ public class Issue53AcceptanceTests(DatabaseFixture fixture)
     public async Task ContentEntries_Query_ExecutesWithoutError()
     {
         var executor = BuildExecutor();
-        var result = await executor.ExecuteAsync(@"
+        var result = await ExecuteAsEditorAsync(executor, @"
             {
                 contentEntries(first: 5) {
                     id
@@ -247,7 +268,7 @@ public class Issue53AcceptanceTests(DatabaseFixture fixture)
     public async Task MediaAssets_Query_ExecutesWithoutError()
     {
         var executor = BuildExecutor();
-        var result = await executor.ExecuteAsync(@"
+        var result = await ExecuteAsEditorAsync(executor, @"
             {
                 mediaAssets(first: 5) {
                     id
@@ -264,7 +285,7 @@ public class Issue53AcceptanceTests(DatabaseFixture fixture)
     public async Task NavigationMenu_Query_UnknownHandle_ReturnsNull()
     {
         var executor = BuildExecutor();
-        var result = await executor.ExecuteAsync(@"
+        var result = await ExecuteAsEditorAsync(executor, @"
             {
                 navigationMenu(handle: ""non-existent-handle-qxz"") {
                     id
@@ -281,7 +302,7 @@ public class Issue53AcceptanceTests(DatabaseFixture fixture)
     public async Task TaxonomyTerms_Query_UnknownHandle_ReturnsEmpty()
     {
         var executor = BuildExecutor();
-        var result = await executor.ExecuteAsync(@"
+        var result = await ExecuteAsEditorAsync(executor, @"
             {
                 taxonomyTerms(handle: ""non-existent-taxonomy-qxz"") {
                     id
@@ -298,7 +319,7 @@ public class Issue53AcceptanceTests(DatabaseFixture fixture)
     public async Task ContentEntry_ByNonExistentId_ReturnsNull()
     {
         var executor = BuildExecutor();
-        var result = await executor.ExecuteAsync(@"
+        var result = await ExecuteAsEditorAsync(executor, @"
             {
                 contentEntry(id: 999999999) {
                     id
@@ -313,7 +334,7 @@ public class Issue53AcceptanceTests(DatabaseFixture fixture)
     public async Task ContentEntries_FilterByStatus_Published_Executes()
     {
         var executor = BuildExecutor();
-        var result = await executor.ExecuteAsync(@"
+        var result = await ExecuteAsEditorAsync(executor, @"
             {
                 contentEntries(status: ""Published"", first: 10) {
                     id

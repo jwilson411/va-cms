@@ -75,9 +75,10 @@ public class Issue23AcceptanceTests
     }
 
     [Fact(Skip = "Requires live SQL Server container — run in Database collection")]
-    public async Task AC1_Six_Roles_Exist_In_Database()
+    public Task AC1_Six_Roles_Exist_In_Database()
     {
         // Covered by RbacDatabaseTests below (Database collection).
+        return Task.CompletedTask;
     }
 
     // ── AC2: Correct minimum role enforced per endpoint ───────────────────────
@@ -429,7 +430,6 @@ public sealed class Issue23TestFactory : WebApplicationFactory<Program>
         builder.UseSetting("AzureAd:TenantId",     "00000000-0000-0000-0000-000000000001");
         builder.UseSetting("AzureAd:ClientId",     "00000000-0000-0000-0000-000000000002");
         builder.UseSetting("AzureAd:ClientSecret", "test-secret");
-        builder.UseSetting("AzureAd:CallbackPath", "/api/auth/callback");
         builder.UseSetting("ConnectionStrings:DefaultConnection",
             "Server=localhost,14333;Database=VACMS_Dev;User Id=sa;Password=VaCms_Dev!2026;TrustServerCertificate=True;Connection Timeout=5;");
 
@@ -510,7 +510,7 @@ internal class Issue23ContentEntryStub : IContentEntryRepository
         long entryId, long versionId, string fromStatus, string toStatus, long actorId, string? comment = null)
         => Task.FromResult<(bool, string?)>((true, null));
 
-    public Task<PetaPoco.Page<ContentEntry>> ListAsync(
+    public virtual Task<PetaPoco.Page<ContentEntry>> ListAsync(
         int page, int pageSize, string? status = null, long? contentTypeId = null)
         => Task.FromResult(new PetaPoco.Page<ContentEntry>
         {

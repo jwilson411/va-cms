@@ -45,6 +45,22 @@ describe('LoginPage', () => {
     expect(screen.getByText('Checking session…')).toBeTruthy();
   });
 
+  it('shows the not-provisioned message when the API redirects back with ?error= (#155)', async () => {
+    mockFetch(401, {});
+    const origLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...origLocation, href: '', search: '?error=not_provisioned' },
+    });
+
+    renderWithAuth();
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(screen.getByText(/not set up in the CMS/)).toBeTruthy();
+
+    Object.defineProperty(window, 'location', { configurable: true, value: origLocation });
+  });
+
   it('renders sign-in button when not authenticated', async () => {
     // Refresh returns 401 — no valid session.
     mockFetch(401, {});

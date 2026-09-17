@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using VA.CMS.API.Auth;
+using VA.CMS.API.Navigation;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Settings;
@@ -15,18 +17,27 @@ namespace VA.CMS.API.Controllers;
 /// GET    /api/v1/redirects/{id}      — get a single redirect
 /// PATCH  /api/v1/redirects/{id}      — edit a redirect (FromPath / ToPath / StatusCode)
 /// DELETE /api/v1/redirects/{id}      — soft-deactivate a redirect
+///
+/// #155: reads need any CMS role; mutations need CanManageSite (SiteAdmin /
+/// SystemAdmin). FromPath must be site-relative and must not shadow a published
+/// slug; ToPath must be site-relative or an https URL on an allow-listed host.
 /// </summary>
 [ApiController]
 [Route("api/v1/redirects")]
-[Authorize]
+[Authorize(Policy = CmsRoles.Policies.CanRead)]
 public class RedirectAdminController : ControllerBase
 {
-    private readonly INavigationRepository _nav;
-    private readonly ISiteSettingsService  _settings;
+    private readonly INavigationRepository   _nav;
+    private readonly IContentEntryRepository _entries;
+    private readonly ISiteSettingsService    _settings;
 
-    public RedirectAdminController(INavigationRepository nav, ISiteSettingsService settings)
+    public RedirectAdminController(
+        INavigationRepository   nav,
+        IContentEntryRepository entries,
+        ISiteSettingsService    settings)
     {
         _nav      = nav;
+        _entries  = entries;
         _settings = settings;
     }
 
@@ -70,16 +81,13 @@ public class RedirectAdminController : ControllerBase
 
     /// <summary>Create a new redirect rule.</summary>
     [HttpPost]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(typeof(RedirectAdminDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateRedirect([FromBody] CreateRedirectRequest req)
     {
-        if (string.IsNullOrWhiteSpace(req.FromPath))
-            return BadRequest(new { error = "FromPath is required." });
-        if (string.IsNullOrWhiteSpace(req.ToPath))
-            return BadRequest(new { error = "ToPath is required." });
-        if (req.StatusCode is not (301 or 302))
-            return BadRequest(new { error = "StatusCode must be 301 or 302." });
+        if (await ValidateAsync(req.FromPath, req.ToPath, req.StatusCode) is { } error)
+            return BadRequest(new { error });
 
         var actorId = GetCurrentUserId();
         var redirect = new Redirect
@@ -101,17 +109,14 @@ public class RedirectAdminController : ControllerBase
 
     /// <summary>Edit an existing redirect's FromPath, ToPath, and/or StatusCode.</summary>
     [HttpPatch("{id:long}")]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateRedirect(long id, [FromBody] UpdateRedirectRequest req)
     {
-        if (string.IsNullOrWhiteSpace(req.FromPath))
-            return BadRequest(new { error = "FromPath is required." });
-        if (string.IsNullOrWhiteSpace(req.ToPath))
-            return BadRequest(new { error = "ToPath is required." });
-        if (req.StatusCode is not (301 or 302))
-            return BadRequest(new { error = "StatusCode must be 301 or 302." });
+        if (await ValidateAsync(req.FromPath, req.ToPath, req.StatusCode) is { } error)
+            return BadRequest(new { error });
 
         var existing = await _nav.GetRedirectByIdAsync(id);
         if (existing is null) return NotFound();
@@ -124,6 +129,7 @@ public class RedirectAdminController : ControllerBase
 
     /// <summary>Soft-deactivate a redirect (sets IsActive = false).</summary>
     [HttpDelete("{id:long}")]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeactivateRedirect(long id)
@@ -136,6 +142,35 @@ public class RedirectAdminController : ControllerBase
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /// <summary>Shared create/update validation; returns the first error or null.</summary>
+    private async Task<string?> ValidateAsync(string fromPath, string toPath, int statusCode)
+    {
+        if (string.IsNullOrWhiteSpace(fromPath))
+            return "FromPath is required.";
+        if (string.IsNullOrWhiteSpace(toPath))
+            return "ToPath is required.";
+        if (statusCode is not (301 or 302))
+            return "StatusCode must be 301 or 302.";
+
+        if (RedirectPathValidator.ValidateFromPath(fromPath) is { } fromError)
+            return fromError;
+
+        var allowedHosts = _settings.GetStringList(SiteSettingKeys.RedirectsAllowedExternalHosts);
+        if (RedirectPathValidator.ValidateToPath(toPath, allowedHosts) is { } toError)
+            return toError;
+
+        if (string.Equals(fromPath.Trim().TrimEnd('/'), toPath.Trim().TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+            return "FromPath and ToPath must differ.";
+
+        foreach (var slug in RedirectPathValidator.SlugCandidates(fromPath))
+        {
+            if (await _entries.GetPublishedBySlugAsync(slug) is not null)
+                return $"FromPath collides with published content at slug '{slug}'.";
+        }
+
+        return null;
+    }
 
     private long GetCurrentUserId()
     {

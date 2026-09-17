@@ -34,6 +34,8 @@ const CATEGORY_ORDER = [
   'Notifications',
   'Admin',
   'Auth',
+  'Navigation',
+  'Security',
   'Webhooks',
   'Api',
 ];
@@ -48,6 +50,8 @@ const CATEGORY_HELP: Record<string, string> = {
   Notifications: 'Admin bell polling.',
   Admin: 'Editor autosave and list page sizes in this admin app.',
   Auth: 'Token lifetimes. Signing keys and the auth mode stay in server configuration.',
+  Navigation: 'Which external hosts redirects may point at.',
+  Security: 'Content-Security-Policy enforcement and HSTS preload for API responses.',
   Webhooks: 'Delivery retry policy for registered webhooks.',
   Api: 'Limits applied across API list endpoints.',
 };

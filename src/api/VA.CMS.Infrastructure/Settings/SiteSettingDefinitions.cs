@@ -69,6 +69,15 @@ public static class SiteSettingKeys
     public const string AuthAccessTokenMinutes  = "auth.accessTokenMinutes";
     public const string AuthRefreshTokenHours   = "auth.refreshTokenHours";
     public const string AuthPreviewTokenMinutes = "auth.previewTokenMinutes";
+    public const string AuthAzureAdSignOut      = "auth.azureAdSignOut";
+    public const string AuthAutoProvisionUsers  = "auth.autoProvisionUsers";
+
+    // Navigation / redirects (Server)
+    public const string RedirectsAllowedExternalHosts = "redirects.allowedExternalHosts";
+
+    // Security headers (Server) — #162
+    public const string SecurityCspReportOnly = "security.cspReportOnly";
+    public const string SecurityHstsPreload   = "security.hstsPreload";
 
     // Workflow (Server)
     public const string WorkflowScheduledPublishPollSeconds = "workflow.scheduledPublishPollSeconds";
@@ -112,6 +121,8 @@ public static class SiteSettingCategories
     public const string Auth          = "Auth";
     public const string Workflow      = "Workflow";
     public const string Webhooks      = "Webhooks";
+    public const string Navigation    = "Navigation";
+    public const string Security      = "Security";
     public const string Search        = "Search";
     public const string Api           = "Api";
     public const string Notifications = "Notifications";
@@ -124,7 +135,9 @@ public static class SiteSettingDefinitions
     public static readonly string[] DefaultAllowedMimeTypes =
     {
         // Images
-        "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/svg+xml", "image/tiff", "image/bmp",
+        // image/svg+xml is deliberately absent (#158): SVG can carry scripts. An administrator may
+        // add it to media.allowedMimeTypes; uploads are then sanitized and served sandboxed.
+        "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/tiff", "image/bmp",
         // Documents
         "application/pdf",
         "application/msword",
@@ -177,8 +190,9 @@ public static class SiteSettingDefinitions
           "Optional DAP sub-agency code, e.g. VHA.", 30),
 
         // ── Features ────────────────────────────────────────────────────────
-        B(SiteSettingKeys.FeatureGraphQl, true, SiteSettingCategories.Features, SiteSettingScope.Server,
-          "Serve the GraphQL endpoint at /api/graphql. Off returns 404.", 10),
+        B(SiteSettingKeys.FeatureGraphQl, false, SiteSettingCategories.Features, SiteSettingScope.Server,
+          "Serve the GraphQL endpoint at /api/graphql (off by default — enable when a consumer needs it). " +
+          "Anonymous callers see Published content only; a CanRead JWT sees everything. Off returns 404.", 10),
         B(SiteSettingKeys.FeatureSwaggerUi, false, SiteSettingCategories.Features, SiteSettingScope.Server,
           "Serve Swagger UI at /swagger outside Development (always on in Development).", 20),
         B(SiteSettingKeys.FeatureWebhooks, true, SiteSettingCategories.Features, SiteSettingScope.Server,
@@ -213,6 +227,25 @@ public static class SiteSettingDefinitions
           "Lifetime of refresh tokens and the cms_rt cookie in hours.", 20),
         I(SiteSettingKeys.AuthPreviewTokenMinutes, 60, SiteSettingCategories.Auth, SiteSettingScope.Server,
           "Lifetime of shareable preview links in minutes.", 30),
+        B(SiteSettingKeys.AuthAzureAdSignOut, true, SiteSettingCategories.Auth, SiteSettingScope.Server,
+          "On logout in AzureAd mode, also send the browser to the Azure AD end-session endpoint so the AAD session " +
+          "is cleared (VA 6500 AC-12). Off clears only the CMS cookies; the next login may sign in silently.", 40),
+        B(SiteSettingKeys.AuthAutoProvisionUsers, false, SiteSettingCategories.Auth, SiteSettingScope.Server,
+          "Create a CMS user row for any tenant identity on its first AzureAd/WindowsAuth login. Off rejects unknown " +
+          "identities until an administrator has created the user (DevBypass logins are governed by DevBypassAllowedUsers).", 50),
+
+        // ── Security headers ────────────────────────────────────────────────
+        B(SiteSettingKeys.SecurityCspReportOnly, true, SiteSettingCategories.Security, SiteSettingScope.Server,
+          "Send the API's Content-Security-Policy as Report-Only (violations logged at POST /api/v1/security/csp-report, " +
+          "nothing blocked). Turn off to enforce once the report log is quiet.", 10),
+        B(SiteSettingKeys.SecurityHstsPreload, false, SiteSettingCategories.Security, SiteSettingScope.Server,
+          "Add 'preload' to Strict-Transport-Security (1 year, includeSubDomains). Only after the host name has been " +
+          "submitted to hstspreload.org — it cannot be undone quickly.", 20),
+
+        // ── Navigation / redirects ──────────────────────────────────────────
+        J(SiteSettingKeys.RedirectsAllowedExternalHosts, Array.Empty<string>(), SiteSettingCategories.Navigation, SiteSettingScope.Server,
+          "JSON array of host names a redirect ToPath may point at (e.g. [\"www.va.gov\", \"*.va.gov\"]). " +
+          "Empty means redirects may only target site-relative paths.", 10),
 
         // ── Workflow ────────────────────────────────────────────────────────
         I(SiteSettingKeys.WorkflowScheduledPublishPollSeconds, 60, SiteSettingCategories.Workflow, SiteSettingScope.Server,

@@ -48,6 +48,8 @@ export interface ArticleTag {
 }
 
 export interface NewsArticleTemplateProps {
+  /** Per-request CSP nonce for the JSON-LD script (#162). */
+  nonce?: string;
   /** Article title — rendered as H1 in the article header */
   title: string;
   /**
@@ -160,6 +162,7 @@ export function NewsArticleTemplate({
   navigation,
   site = DEFAULT_SITE_SETTINGS,
   canonicalUrl,
+  nonce,
 }: NewsArticleTemplateProps): React.ReactElement {
   const jsonLd = buildArticleJsonLd({
     title,
@@ -179,6 +182,7 @@ export function NewsArticleTemplate({
       {/* JSON-LD Article structured data injected into the document head */}
       <script
         type="application/ld+json"
+        nonce={nonce}
         // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: jsonLd }}
       />

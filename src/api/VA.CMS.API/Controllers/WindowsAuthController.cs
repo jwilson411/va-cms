@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Controllers;
 
@@ -19,7 +20,8 @@ namespace VA.CMS.API.Controllers;
 ///   2. IIS (or Negotiate middleware) challenges with 401 Negotiate
 ///   3. Browser responds with Kerberos/NTLM token
 ///   4. Negotiate middleware authenticates and populates User.Identity
-///   5. This action reads the UPN, upserts the User row, issues CMS JWT + refresh cookie
+///   5. This action reads the UPN, upserts the User row, merges AD-group-mapped
+///      roles (#67/#153), issues CMS JWT + refresh cookie
 ///
 /// The JWT and refresh token are identical in structure to the AzureAd path —
 /// downstream code is auth-mode-agnostic.
@@ -32,7 +34,9 @@ public class WindowsAuthController : ControllerBase
     private readonly IJwtService         _jwt;
     private readonly IRefreshTokenService _refreshTokens;
     private readonly IWebHostEnvironment  _env;
+    private readonly IAdGroupRoleResolver _groupResolver;
     private readonly AuthOptions          _authOptions;
+    private readonly ISiteSettingsService _settings;
     private readonly ILogger<WindowsAuthController> _logger;
 
     public WindowsAuthController(
@@ -40,14 +44,18 @@ public class WindowsAuthController : ControllerBase
         IJwtService          jwt,
         IRefreshTokenService refreshTokens,
         IWebHostEnvironment  env,
+        IAdGroupRoleResolver groupResolver,
         AuthOptions          authOptions,
+        ISiteSettingsService settings,
         ILogger<WindowsAuthController> logger)
     {
         _users         = users;
         _jwt           = jwt;
         _refreshTokens = refreshTokens;
         _env           = env;
+        _groupResolver = groupResolver;
         _authOptions   = authOptions;
+        _settings      = settings;
         _logger        = logger;
     }
 
@@ -59,12 +67,17 @@ public class WindowsAuthController : ControllerBase
     // middleware validates the ticket and populates User.Identity with the
     // Windows identity (Domain\Username or UPN).
     //
-    // Returns the same {accessToken, expiresIn, tokenType} shape as the
-    // AzureAd /api/auth/callback endpoint so the SPA needs no mode-awareness.
+    // Two callers:
+    //   - API clients / tests call it directly and get {accessToken, expiresIn, tokenType}.
+    //   - The browser arrives via GET /api/auth/login?returnUrl=… (on-prem flow); with
+    //     returnUrl present the cms_rt cookie is set and the response is a 302 to that
+    //     local path, and the SPA bootstraps through its silent refresh — no token in
+    //     a URL, body or history entry, exactly like the OIDC callback (#154).
     // ──────────────────────────────────────────────────────────────────────
     [HttpGet("windows-login")]
-    [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)]
-    public async Task<IActionResult> WindowsLogin()
+    [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme,
+               Policy = CmsRoles.Policies.AuthenticatedOnly)]
+    public async Task<IActionResult> WindowsLogin([FromQuery] string? returnUrl = null)
     {
         // Guard: only active when Auth:Mode=WindowsAuth
         if (_authOptions.Mode != AuthMode.WindowsAuth)
@@ -90,6 +103,16 @@ public class WindowsAuthController : ControllerBase
         // there is no AAD Object ID in Windows Auth mode.
         var displayName = upn;
 
+        // #155: unless auto-provisioning is on, only pre-created users may sign in.
+        if (!_settings.GetBool(SiteSettingKeys.AuthAutoProvisionUsers)
+            && await _users.GetByExternalIdAsync(upn) is null)
+        {
+            _logger.LogWarning(
+                "WindowsAuth login rejected: {Upn} is not a provisioned CMS user and auth.autoProvisionUsers is off.", upn);
+            return StatusCode(StatusCodes.Status403Forbidden,
+                "This account has not been provisioned in the CMS. Contact your site administrator.");
+        }
+
         // Upsert the user row — ExternalId = UPN (canonical in Windows Auth mode).
         var userId = await _users.UpsertAsync(upn, upn, displayName);
 
@@ -98,21 +121,28 @@ public class WindowsAuthController : ControllerBase
         if (user is null || !user.IsActive)
             return Unauthorized("Account is disabled.");
 
-        // Resolve role assignments and issue CMS JWT
-        var roles = await _users.GetRolesAsync(userId);
-        var accessToken = _jwt.IssueAccessToken(user, roles);
+        // Explicit roles merged with AD-group-mapped roles. Negotiate exposes the
+        // user's group SIDs; the resolver also translates them to DOMAIN\Group names
+        // on Windows so mappings may be keyed by either (#153).
+        var explicitRoles = await _users.GetRolesAsync(userId);
+        var adGroups      = _groupResolver.ExtractGroups(User);
+        var roles         = await _groupResolver.MergeRolesAsync(adGroups, explicitRoles);
+        var accessToken   = _jwt.IssueAccessToken(user, roles);
 
-        // Issue refresh token in httpOnly cookie (8 hr)
-        var refreshToken = _refreshTokens.Issue(userId);
+        // Issue refresh token in httpOnly cookie; the login-time groups travel with it
+        var refreshToken = _refreshTokens.Issue(userId, adGroups);
         var cookieOpts   = AuthCookieHelper.BuildCookieOptions(isProduction: _env.IsProduction(), lifetime: _refreshTokens.Lifetime);
         Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, refreshToken, cookieOpts);
 
         _logger.LogInformation("WindowsAuth login: issued JWT for {Upn} (userId={UserId})", upn, userId);
 
+        if (!string.IsNullOrEmpty(returnUrl))
+            return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl : "/");
+
         return Ok(new
         {
             accessToken,
-            expiresIn = 900, // 15 minutes in seconds
+            expiresIn = (int)_jwt.AccessTokenLifetime.TotalSeconds,
             tokenType = "Bearer",
         });
     }

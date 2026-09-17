@@ -419,7 +419,7 @@ public class TaxonomyRepositoryTests(DatabaseFixture fixture)
 public class AuditLogAppendOnlyTests(DatabaseFixture fixture)
 {
     [Fact]
-    public async Task AuditLog_IsAppendOnly_CannotUpdateOrDeleteViaApp()
+    public void AuditLog_IsAppendOnly_CannotUpdateOrDeleteViaApp()
     {
         // This test documents the constraint: the application layer should never
         // UPDATE or DELETE AuditLog rows. We assert that the repo only exposes

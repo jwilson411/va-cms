@@ -1,0 +1,54 @@
+# Dependabot (#160): weekly, grouped update PRs for every package ecosystem in
+# the repo. Security advisories still open PRs immediately regardless of the
+# schedule. NuGet versions are pinned centrally in src/api/Directory.Packages.props.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /src/api
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      dotnet:
+        patterns: ["*"]
+    labels: ["dependencies", "area:platform"]
+
+  - package-ecosystem: npm
+    directory: /src/admin
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      admin-spa:
+        patterns: ["*"]
+    labels: ["dependencies", "area:admin"]
+
+  - package-ecosystem: npm
+    directory: /src/public
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      public-site:
+        patterns: ["*"]
+    labels: ["dependencies", "area:public-site"]
+
+  - package-ecosystem: npm
+    directory: /tests/accessibility
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      a11y-tests:
+        patterns: ["*"]
+    labels: ["dependencies"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+    labels: ["dependencies"]

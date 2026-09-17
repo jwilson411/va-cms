@@ -46,11 +46,12 @@ public sealed class SmtpEmailSender : IEmailSender
         var smtp = _options.Smtp;
         using var client = new SmtpClient { Timeout = smtp.TimeoutSeconds * 1000 };
 
-        await client.ConnectAsync(smtp.Host, smtp.Port, ToSocketOptions(smtp.Security), cancellationToken);
+        // EmailOptions.Validate() has already required Host (and Password when Username is set).
+        await client.ConnectAsync(smtp.Host!, smtp.Port, ToSocketOptions(smtp.Security), cancellationToken);
         try
         {
             if (!string.IsNullOrEmpty(smtp.Username))
-                await client.AuthenticateAsync(smtp.Username, smtp.Password, cancellationToken);
+                await client.AuthenticateAsync(smtp.Username, smtp.Password ?? string.Empty, cancellationToken);
 
             foreach (var message in messages)
             {

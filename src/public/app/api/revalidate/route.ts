@@ -70,6 +70,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ revalidated: false, ignored: event || '(none)' });
   }
 
-  for (const tag of tags) revalidateTag(tag);
+  for (const tag of tags) revalidateTag(tag, 'max');
   return NextResponse.json({ revalidated: true, event, tags });
 }

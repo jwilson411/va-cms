@@ -26,18 +26,19 @@ import { StandardPageTemplate } from '@/components/templates/StandardPageTemplat
 import { BreadcrumbItem } from '@/components/uswds/UswdsBreadcrumb';
 
 interface PageProps {
-  params: { slug: string[] };
+  /** Next 15+: route params resolve asynchronously. */
+  params: Promise<{ slug: string[] }>;
 }
 
 /** Join the catch-all segments back into the CMS slug. */
-const slugFromParams = (params: PageProps['params']): string => params.slug.join('/');
+const slugFromParams = async (params: PageProps['params']): Promise<string> => (await params).slug.join('/');
 
 /**
  * Generate Next.js metadata (title tag) from the CMS page title.
  * Runs on the server alongside the page component.
  */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const [page, site] = await Promise.all([fetchStandardPage(slugFromParams(params)), fetchSiteSettings()]);
+  const [page, site] = await Promise.all([fetchStandardPage(await slugFromParams(params)), fetchSiteSettings()]);
   if (!page) return { title: 'Page Not Found' };
 
   return {
@@ -57,7 +58,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export default async function StandardPage({ params }: PageProps): Promise<React.ReactElement> {
   const [page, navigation, site] = await Promise.all([
-    fetchStandardPage(slugFromParams(params)),
+    fetchStandardPage(await slugFromParams(params)),
     fetchPrimaryNav(),
     fetchSiteSettings(),
   ]);

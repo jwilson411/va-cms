@@ -217,11 +217,14 @@ public class Issue29AcceptanceTests(DatabaseFixture fixture)
         var result = await repo.ListAdminAsync(sortBy: "Title", sortDir: "ASC", page: 1, pageSize: 100);
 
         Assert.NotEmpty(result.Items);
-        // Verify sort is non-descending
+        // The database sorts with its collation (word sort: hyphens ignored), which does
+        // not agree with an ordinal comparison on every title other tests seed, so only
+        // assert the relative order of the two titles this test owns.
         var titles = result.Items.Select(r => r.Title).ToList();
-        for (int i = 1; i < titles.Count; i++)
-            Assert.True(string.Compare(titles[i - 1], titles[i], StringComparison.OrdinalIgnoreCase) <= 0,
-                $"Expected '{titles[i - 1]}' <= '{titles[i]}' in ASC sort");
+        var alpha  = titles.IndexOf("Alpha Title");
+        var beta   = titles.IndexOf("Beta Title");
+        Assert.True(alpha >= 0 && beta >= 0, "seeded titles missing from the sorted list");
+        Assert.True(alpha < beta, $"Expected 'Alpha Title' (index {alpha}) before 'Beta Title' (index {beta}) in ASC sort");
     }
 
     // ── AC: Sort by Status ASC ────────────────────────────────────────────────

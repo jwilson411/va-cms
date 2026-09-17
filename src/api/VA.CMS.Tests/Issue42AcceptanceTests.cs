@@ -107,7 +107,7 @@ public class Issue42AcceptanceTests(DatabaseFixture fixture)
 
         var page = await AssetRepo().ListAsync(1, 1);
 
-        Assert.Equal(1, page.Items.Count);
+        Assert.Single(page.Items);
     }
 
     // ── AC2: search by filename / alt text ───────────────────────────────────

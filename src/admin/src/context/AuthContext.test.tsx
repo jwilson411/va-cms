@@ -142,4 +142,43 @@ describe('AuthContext', () => {
 
     expect(screen.getByTestId('token')).toHaveTextContent('null');
   });
+
+  it('logout navigates to signOutUrl when the API returns one (AzureAd mode, #154)', async () => {
+    const origLocation = window.location;
+    const assign = vi.fn();
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...origLocation, assign },
+    });
+
+    mockFetch(200, {
+      accessToken: 'valid.token.here',
+      expiresIn: 900,
+      tokenType: 'Bearer',
+    });
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId('is-auth')).toHaveTextContent('true'),
+    );
+
+    mockFetch(200, { signOutUrl: '/api/auth/signout' });
+
+    await userEvent.click(screen.getByText('Logout'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('is-auth')).toHaveTextContent('false'),
+    );
+    expect(assign).toHaveBeenCalledWith('/api/auth/signout');
+
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: origLocation,
+    });
+  });
 });

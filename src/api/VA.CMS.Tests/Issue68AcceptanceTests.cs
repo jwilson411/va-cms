@@ -307,7 +307,6 @@ public sealed class Issue68TestFactory : WebApplicationFactory<Program>
         builder.UseSetting("AzureAd:TenantId",     "00000000-0000-0000-0000-000000000001");
         builder.UseSetting("AzureAd:ClientId",     "00000000-0000-0000-0000-000000000002");
         builder.UseSetting("AzureAd:ClientSecret", "test-secret");
-        builder.UseSetting("AzureAd:CallbackPath", "/api/auth/callback");
         builder.UseSetting("ConnectionStrings:DefaultConnection",
             "Server=localhost,14333;Database=VACMS_Dev;User Id=sa;Password=VaCms_Dev!2026;TrustServerCertificate=True;Connection Timeout=5;");
 
@@ -337,6 +336,7 @@ public sealed class Issue68ProductionTestFactory : WebApplicationFactory<Program
     {
         // Set environment to Production — this is what triggers the guard
         builder.UseEnvironment("Production");
+        builder.UseSetting("AllowedHosts", "localhost");   // #162: wildcard refused outside Development
 
         builder.UseSetting("SKIP_MIGRATIONS",   "true");
         builder.UseSetting("Auth:Mode",         "DevBypass");
@@ -347,7 +347,6 @@ public sealed class Issue68ProductionTestFactory : WebApplicationFactory<Program
         builder.UseSetting("AzureAd:TenantId",     "00000000-0000-0000-0000-000000000001");
         builder.UseSetting("AzureAd:ClientId",     "00000000-0000-0000-0000-000000000002");
         builder.UseSetting("AzureAd:ClientSecret", "test-secret");
-        builder.UseSetting("AzureAd:CallbackPath", "/api/auth/callback");
         builder.UseSetting("ConnectionStrings:DefaultConnection",
             "Server=localhost,14333;Database=VACMS_Dev;User Id=sa;Password=VaCms_Dev!2026;TrustServerCertificate=True;Connection Timeout=5;");
 

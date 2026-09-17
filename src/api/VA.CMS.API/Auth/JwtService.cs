@@ -22,6 +22,13 @@ public interface IJwtService
 
     /// <summary>Returns the token validation parameters used for middleware and manual validation.</summary>
     TokenValidationParameters GetValidationParameters();
+
+    /// <summary>
+    /// Lifetime of a freshly issued access token (auth.accessTokenMinutes). Login and
+    /// refresh responses report this as <c>expiresIn</c> so the SPA's silent-refresh
+    /// timer follows the configured value rather than a hard-coded 900s (#153).
+    /// </summary>
+    TimeSpan AccessTokenLifetime { get; }
 }
 
 public sealed class JwtService : IJwtService
@@ -30,6 +37,7 @@ public sealed class JwtService : IJwtService
     private readonly SymmetricSecurityKey _signingKey;
     private readonly ISiteSettingsService _settings;
 
+    /// <param name="options">Issuer, audience and HS256 signing key.</param>
     /// <param name="settings">Source of auth.accessTokenMinutes (issue #146); code default when null.</param>
     public JwtService(JwtOptions options, ISiteSettingsService? settings = null)
     {
@@ -37,6 +45,9 @@ public sealed class JwtService : IJwtService
         _signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.SigningKey));
         _settings = settings ?? StaticSiteSettings.Defaults;
     }
+
+    public TimeSpan AccessTokenLifetime =>
+        TimeSpan.FromMinutes(Math.Max(1, _settings.GetInt(SiteSettingKeys.AuthAccessTokenMinutes)));
 
     public string IssueAccessToken(User user, IEnumerable<UserRoleAssignment> roles)
     {
@@ -73,7 +84,7 @@ public sealed class JwtService : IJwtService
             audience: _options.Audience,
             claims:   claims,
             notBefore: DateTime.UtcNow,
-            expires:   DateTime.UtcNow.AddMinutes(Math.Max(1, _settings.GetInt(SiteSettingKeys.AuthAccessTokenMinutes))),
+            expires:   DateTime.UtcNow.Add(AccessTokenLifetime),
             signingCredentials: creds
         );
 

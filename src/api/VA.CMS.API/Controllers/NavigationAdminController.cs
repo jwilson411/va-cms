@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using VA.CMS.API.Auth;
 using VA.CMS.API.Webhooks;
 using System.Text.Json;
 using VA.CMS.Infrastructure.Data.Pocos;
@@ -26,7 +27,7 @@ namespace VA.CMS.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/navigation")]
-[Authorize]
+[Authorize(Policy = CmsRoles.Policies.CanRead)]
 [NotifyWebhook(WebhookEvents.NavigationUpdated)]   // any successful mutation → public nav cache revalidates
 public class NavigationAdminController : ControllerBase
 {
@@ -54,6 +55,7 @@ public class NavigationAdminController : ControllerBase
 
     /// <summary>Create a new navigation menu.</summary>
     [HttpPost]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(typeof(NavigationMenu), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateMenu([FromBody] CreateMenuRequest req)
@@ -72,6 +74,7 @@ public class NavigationAdminController : ControllerBase
 
     /// <summary>Rename a navigation menu.</summary>
     [HttpPatch("{handle}")]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -89,6 +92,7 @@ public class NavigationAdminController : ControllerBase
 
     /// <summary>Delete a navigation menu and all its items.</summary>
     [HttpDelete("{handle}")]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteMenu(string handle)
@@ -121,6 +125,7 @@ public class NavigationAdminController : ControllerBase
 
     /// <summary>Create a new navigation item in a menu.</summary>
     [HttpPost("{handle}/items")]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(typeof(NavItemAdminDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -163,6 +168,7 @@ public class NavigationAdminController : ControllerBase
 
     /// <summary>Update a navigation item (label, URL, visibility, target).</summary>
     [HttpPatch("{handle}/items/{id:long}")]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -202,6 +208,7 @@ public class NavigationAdminController : ControllerBase
 
     /// <summary>Delete a navigation item and all its children.</summary>
     [HttpDelete("{handle}/items/{id:long}")]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteItem(string handle, long id)
@@ -224,6 +231,7 @@ public class NavigationAdminController : ControllerBase
     /// Request body: array of { id, parentItemId, sortOrder }.
     /// </summary>
     [HttpPost("{handle}/reorder")]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

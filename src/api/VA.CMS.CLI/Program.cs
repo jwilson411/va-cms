@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.Data;
+using VA.CMS.Infrastructure.Data.Migrations;
 using VA.CMS.Infrastructure.Services;
 
 // ---------------------------------------------------------------------------
@@ -9,7 +10,10 @@ using VA.CMS.Infrastructure.Services;
 // Usage:
 //   vacms db seed --demo              Seed demo content (idempotent)
 //   vacms db seed --demo --reset      Drop all demo content and re-seed
-//   vacms db migrate                  Run pending DbUp migrations
+//   vacms db migrate                  Apply pending DbUp migrations (deployment account)
+//   vacms db migrate --check          Exit 2 when migrations are pending, 0 when current
+//   vacms db migrate --dry-run        List the scripts that would run, apply nothing
+//   vacms db provision-logins         Create/rotate the vacms_app + vacms_readonly logins
 //   vacms health --url <url>          HTTP health check (stub)
 //   vacms content-type scaffold <Name>   Scaffold a new content type definition
 //   vacms content-type --help         Show content-type command help
@@ -70,11 +74,10 @@ static async Task<int> RunAsync(string[] args)
         }
 
         if (args[1] == "migrate")
-        {
-            Console.Error.WriteLine("Use the API startup to run migrations (DbUp runs on startup).");
-            Console.Error.WriteLine("Or run the API with --migrate-only for an explicit migration run.");
-            return 1;
-        }
+            return await MigrateAsync(args);
+
+        if (args[1] == "provision-logins")
+            return await ProvisionLoginsAsync(args);
     }
 
     // ── content-type commands ────────────────────────────────────────────────
@@ -153,6 +156,116 @@ static async Task<int> RunAsync(string[] args)
     return 1;
 }
 
+// ── vacms db migrate ─────────────────────────────────────────────────────────
+// The deployment path (#157): run with an elevated connection string (DDL rights),
+// never with the API's EXECUTE-only login.
+//   --connection <cs>   Override the resolved connection string
+//   --migrations <dir>  Override migration script discovery
+//   --check             Report pending scripts; exit 2 if any, 0 if current
+//   --dry-run           Show what would run; apply nothing
+static async Task<int> MigrateAsync(string[] args)
+{
+    var connStr        = OptionValue(args, "--connection") ?? ResolveConnectionString();
+    var migrationsPath = OptionValue(args, "--migrations") ?? MigrationRunner.FindMigrationsPath();
+    var check          = args.Contains("--check");
+    var dryRun         = args.Contains("--dry-run");
+
+    if (check)
+    {
+        var status = await MigrationRunner.CheckAsync(connStr, migrationsPath);
+        if (status.Error is not null)
+        {
+            Console.Error.WriteLine(status.Error);
+            return 2;
+        }
+        Console.WriteLine($"Applied: {status.Applied.Count}   Pending: {status.Pending.Count}");
+        foreach (var name in status.Pending)
+            Console.WriteLine($"  pending  {name}");
+        return status.Pending.Count == 0 ? 0 : 2;
+    }
+
+    if (dryRun)
+    {
+        var pending = MigrationRunner.GetPendingViaJournal(connStr, migrationsPath);
+        Console.WriteLine(pending.Count == 0
+            ? "Database is current — nothing to apply."
+            : $"Would apply {pending.Count} script(s):");
+        foreach (var name in pending)
+            Console.WriteLine($"  {name}");
+        return 0;
+    }
+
+    Console.WriteLine($"Applying migrations from {migrationsPath} …");
+    var result = MigrationRunner.Upgrade(connStr, migrationsPath);
+    if (!result.Successful)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.Error.WriteLine($"Migration failed: {result.Error}");
+        Console.ResetColor();
+        return 1;
+    }
+
+    Console.ForegroundColor = ConsoleColor.Green;
+    Console.WriteLine($"Applied {result.Scripts.Count()} script(s); database is current.");
+    Console.ResetColor();
+    return 0;
+}
+
+// ── vacms db provision-logins ────────────────────────────────────────────────
+// Runs infra/sql/provision-logins.sql with the secrets supplied on the command
+// line (or VACMS_APP_PASSWORD / VACMS_READONLY_PASSWORD) against master.
+static async Task<int> ProvisionLoginsAsync(string[] args)
+{
+    var appPassword      = OptionValue(args, "--app-password")      ?? Environment.GetEnvironmentVariable("VACMS_APP_PASSWORD");
+    var readonlyPassword = OptionValue(args, "--readonly-password") ?? Environment.GetEnvironmentVariable("VACMS_READONLY_PASSWORD");
+    if (string.IsNullOrWhiteSpace(appPassword) || string.IsNullOrWhiteSpace(readonlyPassword))
+    {
+        Console.Error.WriteLine("Error: --app-password and --readonly-password (or VACMS_APP_PASSWORD / VACMS_READONLY_PASSWORD) are required.");
+        return 1;
+    }
+
+    var connStr = OptionValue(args, "--connection") ?? ResolveConnectionString();
+    var csb     = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connStr);
+    var dbName  = OptionValue(args, "--database") ?? csb.InitialCatalog;
+    if (string.IsNullOrWhiteSpace(dbName))
+    {
+        Console.Error.WriteLine("Error: could not determine the database name; pass --database <name>.");
+        return 1;
+    }
+
+    var scriptPath = OptionValue(args, "--script") ?? FindProvisionScript();
+    var script     = await File.ReadAllTextAsync(scriptPath);
+    csb.InitialCatalog = "master";
+
+    await SqlCmdScript.RunAsync(csb.ConnectionString, script, new Dictionary<string, string>
+    {
+        ["VacmsAppPassword"]      = appPassword,
+        ["VacmsReadonlyPassword"] = readonlyPassword,
+        ["DatabaseName"]          = dbName,
+    });
+
+    Console.ForegroundColor = ConsoleColor.Green;
+    Console.WriteLine($"Provisioned vacms_app and vacms_readonly on {csb.DataSource} (database {dbName}).");
+    Console.ResetColor();
+    return 0;
+}
+
+static string FindProvisionScript()
+{
+    for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+    {
+        var candidate = Path.Combine(dir.FullName, "infra", "sql", "provision-logins.sql");
+        if (File.Exists(candidate)) return candidate;
+    }
+    throw new FileNotFoundException("Could not locate infra/sql/provision-logins.sql; pass --script <path>.");
+}
+
+static string? OptionValue(string[] args, string name)
+{
+    var i = Array.IndexOf(args, name);
+    return i >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+}
+
 static string ResolveConnectionString()
 {
     // 1. Environment variable (highest priority — CI/CD / staging)
@@ -184,6 +297,10 @@ static void PrintHelp()
     Console.WriteLine("Commands:");
     Console.WriteLine("  db seed --demo              Seed demo content (idempotent)");
     Console.WriteLine("  db seed --demo --reset       Drop all demo content and re-seed");
+    Console.WriteLine("  db migrate                   Apply pending migrations (run as the deployment account)");
+    Console.WriteLine("  db migrate --check           Exit 2 if migrations are pending");
+    Console.WriteLine("  db migrate --dry-run         List scripts that would run");
+    Console.WriteLine("  db provision-logins          Create/rotate vacms_app + vacms_readonly (--app-password, --readonly-password)");
     Console.WriteLine("  content-type scaffold <Name> Scaffold a new content type definition file");
     Console.WriteLine("  content-type --help          Show content-type command details");
     Console.WriteLine("  health --url <url>           HTTP health probe");

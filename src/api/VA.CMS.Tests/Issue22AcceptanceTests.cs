@@ -74,7 +74,7 @@ public class Issue22AcceptanceTests
         var token = svc.Issue(userId: 1);
 
         // Immediately valid
-        Assert.Equal(1L, svc.Validate(token));
+        Assert.Equal(1L, svc.Validate(token)?.UserId);
     }
 
     // ── AC3: Silent refresh endpoint succeeds with valid cookie ──────────────
@@ -132,7 +132,7 @@ public class Issue22AcceptanceTests
         var token = svc.Issue(userId: 42);
 
         // Token is valid before revocation
-        Assert.Equal(42L, svc.Validate(token));
+        Assert.Equal(42L, svc.Validate(token)?.UserId);
 
         svc.Revoke(token);
 
@@ -179,7 +179,6 @@ public sealed class Issue22TestFactory : WebApplicationFactory<Program>
         builder.UseSetting("AzureAd:TenantId",     "00000000-0000-0000-0000-000000000001");
         builder.UseSetting("AzureAd:ClientId",     "00000000-0000-0000-0000-000000000002");
         builder.UseSetting("AzureAd:ClientSecret", "test-secret");
-        builder.UseSetting("AzureAd:CallbackPath", "/api/auth/callback");
         builder.UseSetting("ConnectionStrings:DefaultConnection",
             "Server=localhost,14333;Database=VACMS_Dev;User Id=sa;Password=VaCms_Dev!2026;TrustServerCertificate=True;Connection Timeout=5;");
 

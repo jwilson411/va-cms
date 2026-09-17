@@ -32,8 +32,8 @@ cp src/api/VA.CMS.API/appsettings.Development.json.example \
    src/api/VA.CMS.API/appsettings.Development.json
 # Edit: set ConnectionStrings:DefaultConnection
 
-# 4. Migrations run automatically on API startup (DbUp)
-# No separate migration command needed. On first run, all SQL scripts in /migrations/ execute.
+# 4. Migrations run automatically on API startup in Development (Database:MigrateOnStartup defaults
+#    to true there). Elsewhere, or to run them by hand: vacms db migrate
 
 # 5. Start API
 dotnet run --project VA.CMS.API
@@ -56,25 +56,47 @@ Swagger: `http://localhost:5100/swagger`
 
 ### 1. SQL Server Setup
 
-```sql
--- Create database
-CREATE DATABASE [VACMS]
-  COLLATE SQL_Latin1_General_CP1_CI_AS;
+Three identities touch the database, and only the first ever holds DDL rights:
 
--- Create application login (principle of least privilege)
-CREATE LOGIN [vacms_app] WITH PASSWORD = N'<strong_password>';
-USE [VACMS];
-CREATE USER [vacms_app] FOR LOGIN [vacms_app];
+| Identity | Used by | Rights |
+|---|---|---|
+| Deployment account (DBA / pipeline, e.g. `sa` or a `db_owner` + `securityadmin` login) | `vacms db provision-logins`, `vacms db migrate` | `CREATE DATABASE`, DDL, `CREATE LOGIN` |
+| `vacms_app` | the running API (`ConnectionStrings__DefaultConnection`) | `EXECUTE` on `dbo` procedures only; `SELECT/INSERT/UPDATE/DELETE` on tables denied; `UPDATE/DELETE` on `AuditLog` denied twice |
+| `vacms_readonly` | reporting / BI | `SELECT` only |
 
--- Grant required permissions (no DDL after migrations run)
-GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::dbo TO [vacms_app];
+**Step 1 — provision the logins** (once per SQL Server instance; rerun to rotate a password). Secrets come from the
+pipeline's secret store, never from a file in the repo. Either:
 
--- AuditLog is write-only for the app
-DENY UPDATE, DELETE ON dbo.AuditLog TO [vacms_app];
+```bash
+# SQLCMD
+sqlcmd -S SQLSERVER -d master -E \
+  -v VacmsAppPassword="$VACMS_APP_PASSWORD" VacmsReadonlyPassword="$VACMS_READONLY_PASSWORD" DatabaseName="VACMS" \
+  -i infra/sql/provision-logins.sql
 
--- Enable Full-Text Search
-EXEC sp_fulltext_database 'enable';
+# or the CLI (same script, no sqlcmd needed)
+VACMS_CONNECTION_STRING="Server=SQLSERVER;Database=VACMS;Integrated Security=True;Encrypt=True;" \
+  vacms db provision-logins --app-password "$VACMS_APP_PASSWORD" --readonly-password "$VACMS_READONLY_PASSWORD"
 ```
+
+The logins are created with `CHECK_POLICY = ON`. If the database already exists the script also maps the users and
+applies the grants; otherwise `V003__security_model.sql` does that during the next step.
+
+**Step 2 — migrate** as the deployment account. This creates the database on first run and applies every pending
+script in `migrations/` (DbUp journal: `dbo.SchemaVersions`):
+
+```bash
+vacms db migrate --connection "Server=SQLSERVER;Database=VACMS;Integrated Security=True;Encrypt=True;"
+vacms db migrate --check    --connection "…"    # exit 0 = current, 2 = pending (use as a deploy gate)
+vacms db migrate --dry-run  --connection "…"    # list what would run
+```
+
+**Step 3 — run the API as `vacms_app`.** `ConnectionStrings__DefaultConnection` uses `User Id=vacms_app`. At startup
+the API does **not** migrate; it calls `usp_Migrations_ListApplied`, compares with the scripts shipped beside the
+binaries, and refuses to start (exit 1, listing the pending scripts) if the database is behind. Set
+`Database__MigrateOnStartup=true` only in Development, where the connection is a DDL-capable dev login.
+
+Full-Text Search must be installed on the instance (`SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled')` = 1);
+the catalog is created by the migrations.
 
 ### 2. Build and Publish
 
@@ -106,29 +128,10 @@ Site: VA CMS (port 443, HTTPS)
 └── /api       → C:\inetpub\vacms\api\      (ASP.NET Core via AspNetCoreModule)
 ```
 
-**web.config for /admin (SPA fallback routing):**
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-  <system.webServer>
-    <rewrite>
-      <rules>
-        <rule name="SPA Fallback" stopProcessing="true">
-          <match url=".*" />
-          <conditions logicalGrouping="MatchAll">
-            <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
-            <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
-          </conditions>
-          <action type="Rewrite" url="/admin/index.html" />
-        </rule>
-      </rules>
-    </rewrite>
-    <staticContent>
-      <mimeMap fileExtension=".webmanifest" mimeType="application/manifest+json" />
-    </staticContent>
-  </system.webServer>
-</configuration>
-```
+**web.config for /admin:** `vite build` writes `dist/web.config` (SPA fallback rule plus the security
+headers and the admin Content-Security-Policy from `src/security/csp.ts`, #162). Deploy the `dist/` folder
+as-is; do not hand-edit the file — the build regenerates it and refuses to complete if `index.html` ever
+gains an inline script the CSP would block.
 
 ### 4. Environment Variables
 
@@ -137,12 +140,24 @@ Set on the IIS application pool or via Windows environment:
 ```
 # API (VA.CMS.API)
 ASPNETCORE_ENVIRONMENT=Production
+AllowedHosts=cms.va.gov;cms-admin.va.gov          # required outside Development; "*" refuses to start (#162)
+ForwardedHeaders__KnownProxies__0=10.1.2.3       # IIS ARR / load balancer addresses whose X-Forwarded-* is trusted
+ForwardedHeaders__KnownNetworks__0=10.1.0.0/16   # (CIDR); leave both empty when the API terminates TLS itself
+# Cors__AllowedOrigins__0=https://www.va.gov     # only if the public site or SPA lives on a different origin
 ConnectionStrings__DefaultConnection=Server=SQLSERVER;Database=VACMS;User Id=vacms_app;Password=<pw>;TrustServerCertificate=False;
-Auth__AzureAd__TenantId=<aad_tenant_id>
-Auth__AzureAd__ClientId=<app_registration_client_id>
-Auth__AzureAd__ClientSecret=<client_secret>
-Storage__Backend=local
-Storage__LocalPath=D:\vacms-uploads
+Auth__Mode=WindowsAuth                           # on-prem default: IIS Windows Authentication (Kerberos)
+# Alternative — AD FS OpenID Connect (Auth__Mode=AzureAd; see "Identity provider" below):
+# AzureAd__Instance=https://adfs.va.gov/
+# AzureAd__TenantId=adfs
+# AzureAd__ClientId=<adfs_application_group_client_id>
+# AzureAd__ClientCredentials__0__SourceType=StoreWithThumbprint …  (certificate in the Windows store)
+Storage__Backend=local                           # or unc (Storage__UncRootPath=\\files\va-cms); no cloud backends
+Storage__LocalRootPath=D:\vacms-uploads
+Media__Scanner__Mode=Icap                        # or ClamAv; Disabled is refused in Production
+Media__Scanner__Host=avscan.va.gov
+Media__Scanner__Port=1344
+Media__Scanner__ServicePath=/avscan              # the engine's RESPMOD service (vendor-specific)
+Media__Scanner__FailClosed=true                  # unreachable engine ⇒ upload rejected (503), nothing stored
 Email__SmtpHost=mail.va.gov
 Email__SmtpPort=587
 Email__FromAddress=noreply-cms@va.gov
@@ -150,13 +165,84 @@ Jwt__SigningKey=<256-bit-random-key>
 
 # Public site (Next.js)
 NEXT_PUBLIC_API_URL=https://cms.youragency.va.gov/api/v1
+CSP_REPORT_ONLY=true                             # report-only phase; set false to enforce once the report log is quiet
 ```
 
-# 4. Run migrations in production (DbUp runs automatically on startup)
-# Migrations run automatically when the API starts.
-# Verify the startup logs show "Successfully upgraded" before marking deployment complete.
-# To run manually (dry-run check):
-dotnet VA.CMS.API.dll --check-migrations
+#### Security headers (#162)
+
+Every API response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` /
+`frame-ancestors 'none'`, `Referrer-Policy`, a minimal `Permissions-Policy`, `Cross-Origin-Opener-Policy` and,
+on HTTPS outside Development, `Strict-Transport-Security` (1 year, includeSubDomains; `security.hstsPreload`
+adds `preload`). The API's Content-Security-Policy is `default-src 'none'` and is sent as **Report-Only**
+while the `security.cspReportOnly` site setting is on; violations from all three front ends arrive at
+`POST /api/v1/security/csp-report` and are logged as warnings. The admin SPA's policy (`script-src 'self'`,
+no inline scripts) is in the generated `web.config`; the public site's is nonce-based per request
+(`src/public/proxy.ts`) and switches from Report-Only to enforced with `CSP_REPORT_ONLY=false`.
+Swagger (`/swagger`) outside Development needs the `features.swaggerUi` setting **and** a bearer token with
+the Developer role. The three front ends are expected on the same origin; set `Cors__AllowedOrigins`
+only when that is not the case.
+
+#### Identity provider (on-prem only)
+
+This deployment has no cloud identity service. Two on-prem options:
+
+**Windows Integrated Authentication (recommended)** — `Auth__Mode=WindowsAuth`. Enable *Windows
+Authentication* (Negotiate/Kerberos, NTLM fallback) on the IIS site and register an SPN for the
+app-pool identity (`setspn -S HTTP/cms.va.gov VA\svc-vacms`). Login flow: `GET /api/auth/login` →
+302 `/api/auth/windows-login?returnUrl=…` (the browser completes the Kerberos exchange there) → the
+`cms_rt` refresh cookie is set → 302 back into the SPA, which obtains the JWT through `GET /api/auth/refresh`.
+No token ever appears in a URL or response body. Group-mapped roles come from the identity's group
+SIDs (mappings may be keyed by SID or `DOMAIN\Group`; see Admin → Settings → AD Group Mappings).
+
+**AD FS OpenID Connect** — `Auth__Mode=AzureAd` (the mode name is historical; it is the
+Microsoft.Identity.Web OIDC handler, which supports AD FS 2016+). Set `AzureAd__Instance=https://<adfs-host>/`
+and `AzureAd__TenantId=adfs`; create an AD FS *Application Group* (Server application + Web API) with:
+
+| Setting | Value |
+|---|---|
+| Redirect URI | `https://<host>/signin-oidc` — the OIDC handler's `AzureAd:CallbackPath` (leave unset to use this default; a value under `/api/` is rejected at startup) |
+| Post-logout redirect URI | `https://<host>/login` — where `GET /api/auth/signout` returns the browser after the end-session round trip |
+| Issued claims | `upn` (or `preferred_username`), `name`, and a stable id claim (`oid`/`sub`); add group claims if AD-group → role mappings are used |
+
+Login flow: `GET /api/auth/login` → AD FS → `/signin-oidc` (OIDC handler, sets the `cms_aad` session cookie) →
+`GET /api/auth/callback` (issues the `cms_rt` refresh cookie, then 302 into the SPA).
+Logout: `POST /api/auth/logout` revokes the refresh session and, when the `auth.azureAdSignOut` site setting is
+on (default), returns `{ "signOutUrl": "/api/auth/signout" }`, which the SPA navigates to.
+
+The `AzureAd` section binds from the **top-level** `AzureAd__*` variables (not `Auth__AzureAd__*`, which
+does not bind).
+
+**First sign-in.** `auth.autoProvisionUsers` defaults to off, so a fresh deployment rejects every identity
+until a user row exists. Bootstrap the first administrator with SQL before go-live
+(`INSERT INTO [User] (ExternalId, Email, DisplayName, IsActive)` — ExternalId is the UPN in WindowsAuth mode
+or the issued id claim for OIDC — then `INSERT INTO UserRole` for SystemAdmin), or temporarily set the site
+setting to `true`, sign in, assign the role, and switch it back. Signed-in users with no CMS role get 403
+from every `/api/v1` endpoint and a "no access" page in the admin SPA.
+
+**Client credential (OIDC only).** Use a certificate from the Windows certificate store rather than a
+plaintext `AzureAd__ClientSecret`: `AzureAd__ClientCredentials__0__SourceType=StoreWithThumbprint`,
+`AzureAd__ClientCredentials__0__CertificateStorePath=LocalMachine/My`,
+`AzureAd__ClientCredentials__0__CertificateThumbprint=<thumbprint>` (the app-pool identity needs read
+access to the private key). If a secret must be used, inject it from the deployment tool's secret store
+at start-up; never commit it to `appsettings*.json`.
+
+**Secrets on the host.** All other secrets (`Jwt__SigningKey`, `ConnectionStrings__DefaultConnection`,
+SMTP credentials, `REVALIDATE_SECRET`) are environment variables set on the IIS application pool by the
+deployment tool, or `dotnet user-secrets`-style files protected with DPAPI — no cloud vault is involved.
+
+# Migrations are NOT applied by the API. Run them as the deployment account before starting the app pool:
+vacms db migrate --connection "<deployment-account connection string>"
+# The API verifies the schema at startup and exits 1 with the list of pending scripts if it is behind.
+
+### 5. Malware scanning (NIST SI-3)
+
+Every upload is streamed to the configured engine before it is recorded. `Media__Scanner__Mode=Icap` speaks
+ICAP RESPMOD (Trend Micro, McAfee/Trellix, Symantec Protection Engine and similar enterprise scanners expose
+this; ask the AV team for the host, port and service path). `ClamAv` uses clamd's INSTREAM command and is what
+local development and CI use (`docker compose --profile clamav up -d`, then `Media__Scanner__Mode=ClamAv`).
+An infected file is deleted from storage, kept as an `IsVirusScanPassed = 0` tombstone row, and written to the
+audit log (`VirusDetected`); an unreachable engine with `FailClosed=true` rejects the upload with 503 and audits
+`VirusScanUnavailable`. Run `CLAMAV_HOST=localhost dotnet test --filter Eicar` to prove the wiring end to end.
 
 ### 6. SSL / TLS
 
@@ -188,7 +274,7 @@ Configure VA monitoring tools to poll `/api/health/ready` every 60 seconds.
 # 1. Put app in maintenance mode (IIS → stop site or swap to maintenance page)
 # 2. Backup DB
 # 3. Deploy new API build to staging directory
-# 4. Run migrations: dotnet VA.CMS.API.dll migrate
+# 4. Run migrations as the deployment account: vacms db migrate --connection "…"  (then: vacms db migrate --check)
 # 5. If migrations succeed: swap staging to production (xcopy or IIS virtual directory swap)
 # 6. Deploy new admin/public builds
 # 7. Restart app pool

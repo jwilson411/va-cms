@@ -163,7 +163,7 @@ public class SiteSettingsAcceptanceTests(DatabaseFixture fixture)
             "Server=localhost,1;Database=nope;User Id=sa;Password=x;Connection Timeout=1;TrustServerCertificate=True;"));
 
         Assert.Equal(15, svc.GetInt(SiteSettingKeys.AuthAccessTokenMinutes));
-        Assert.True(svc.GetBool(SiteSettingKeys.FeatureGraphQl));
+        Assert.False(svc.GetBool(SiteSettingKeys.FeatureGraphQl));   // off by default since #156
         Assert.Empty(svc.Snapshot);
         Assert.Null(svc.LoadedAtUtc);
         await Assert.ThrowsAnyAsync<Exception>(() => svc.RefreshAsync());   // explicit refresh surfaces the error
@@ -401,6 +401,9 @@ public class SiteSettingsAcceptanceTests(DatabaseFixture fixture)
 
         try
         {
+            // GraphQL is off by default (#156); switch it on to prove the gate opens, then off again.
+            await Repo().SetValueAsync(SiteSettingKeys.FeatureGraphQl, "true", 0);
+            await live.RefreshAsync();
             Assert.NotEqual(HttpStatusCode.NotFound,
                 (await client.PostAsJsonAsync("/api/graphql", new { query = "{ __typename }" })).StatusCode);
 

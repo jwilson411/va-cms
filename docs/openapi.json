@@ -1,5 +1,5 @@
 {
-  "openapi": "3.0.1",
+  "openapi": "3.0.4",
   "info": {
     "title": "VA CMS REST API",
     "description": "Headless content management API for VA CMS. BRD FR-DEV-01: OpenAPI 3.0 spec auto-generated from controllers.",
@@ -15,7 +15,7 @@
         "tags": [
           "AdminSettings"
         ],
-        "summary": "List all AD group → role mappings.",
+        "summary": "List all AD group \u2192 role mappings.",
         "responses": {
           "200": {
             "description": "OK",
@@ -52,7 +52,7 @@
         "tags": [
           "AdminSettings"
         ],
-        "summary": "Create (or re-acknowledge) an AD group → role mapping.\r\nIdempotent: if the (AdGroup, RoleId) pair already exists the call\r\nsucceeds and returns the existing record's Id.",
+        "summary": "Create (or re-acknowledge) an AD group \u2192 role mapping.\nIdempotent: if the (AdGroup, RoleId) pair already exists the call\nsucceeds and returns the existing record\u0027s Id.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -65,7 +65,7 @@
                 "$ref": "#/components/schemas/CreateAdGroupMappingRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/CreateAdGroupMappingRequest"
               }
@@ -121,7 +121,7 @@
         "tags": [
           "AdminSettings"
         ],
-        "summary": "Delete an AD group → role mapping by Id.",
+        "summary": "Delete an AD group \u2192 role mapping by Id.",
         "parameters": [
           {
             "name": "id",
@@ -136,6 +136,167 @@
         "responses": {
           "204": {
             "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit": {
+      "get": {
+        "tags": [
+          "AuditLog"
+        ],
+        "summary": "List audit log rows, newest first, with optional filters.\nAcceptance criteria:\n  - /admin/audit lists all AuditLog rows, newest first\n  - Filters: User (actorId), Action Type (action), Entity Type (entityType), Date Range (fromDate, toDate)",
+        "parameters": [
+          {
+            "name": "actorId",
+            "in": "query",
+            "description": "Filter by actor user ID.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Filter by action string (e.g. \u0022Publish\u0022, \u0022Deactivate\u0022).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityType",
+            "in": "query",
+            "description": "Filter by entity type (e.g. \u0022ContentEntry\u0022, \u0022User\u0022).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "description": "ISO 8601 UTC date-time \u2014 include rows on or after.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "description": "ISO 8601 UTC date-time \u2014 include rows on or before.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Rows per page, 1\u2013api.maxPageSize (default 50).",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogPage"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogPage"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit/export.csv": {
+      "get": {
+        "tags": [
+          "AuditLog"
+        ],
+        "summary": "Export filtered audit log rows as a CSV file (up to 1000 rows).\nAcceptance criteria: Exports filtered results to CSV.",
+        "parameters": [
+          {
+            "name": "actorId",
+            "in": "query",
+            "description": "Filter by actor user ID.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Filter by action string.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityType",
+            "in": "query",
+            "description": "Filter by entity type.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "description": "ISO 8601 UTC date-time \u2014 include rows on or after.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "description": "ISO 8601 UTC date-time \u2014 include rows on or before.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
           }
         }
       }
@@ -196,6 +357,18 @@
     },
     "/api/auth/logout": {
       "post": {
+        "tags": [
+          "Auth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/auth/signout": {
+      "get": {
         "tags": [
           "Auth"
         ],
@@ -283,7 +456,7 @@
         "tags": [
           "Content"
         ],
-        "summary": "Create a new content entry. Requires CanWrite.\r\nContentOwner: section scope enforced by checking slug against assigned section.",
+        "summary": "Create a new content entry. Requires CanWrite.\nContentOwner: section scope enforced by checking slug against assigned section.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -296,7 +469,7 @@
                 "$ref": "#/components/schemas/ContentEntryCreateRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/ContentEntryCreateRequest"
               }
@@ -370,17 +543,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ContentEntry"
+                  "$ref": "#/components/schemas/ContentEntryDetailResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ContentEntry"
+                  "$ref": "#/components/schemas/ContentEntryDetailResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ContentEntry"
+                  "$ref": "#/components/schemas/ContentEntryDetailResponse"
                 }
               }
             }
@@ -411,7 +584,7 @@
         "tags": [
           "Content"
         ],
-        "summary": "Update content entry fields. Requires CanWrite.\r\nContentOwner: section scope enforced against the entry's slug.",
+        "summary": "Update content entry fields. Requires CanWrite.\nContentOwner: section scope enforced against the entry\u0027s slug.",
         "parameters": [
           {
             "name": "id",
@@ -435,7 +608,7 @@
                 "$ref": "#/components/schemas/ContentEntryUpdateRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/ContentEntryUpdateRequest"
               }
@@ -492,7 +665,7 @@
         "tags": [
           "Content"
         ],
-        "summary": "Archive (soft-delete) a content entry. Requires CanWrite.\r\nContentOwner: section scope enforced.",
+        "summary": "Archive (soft-delete) a content entry. Requires CanWrite.\nContentOwner: section scope enforced.",
         "parameters": [
           {
             "name": "id",
@@ -556,7 +729,7 @@
         "tags": [
           "Content"
         ],
-        "summary": "Submit content for review (Draft → InReview). Requires CanWrite.",
+        "summary": "Submit content for review (Draft \u2192 InReview). Requires CanWrite.",
         "parameters": [
           {
             "name": "id",
@@ -620,7 +793,7 @@
         "tags": [
           "Content"
         ],
-        "summary": "Approve or publish content. Requires CanPublish (Editor, SiteAdmin, SystemAdmin).\r\nContentOwner and ReadOnly receive 403.",
+        "summary": "Approve or publish content. Requires CanPublish (Editor, SiteAdmin, SystemAdmin).\nContentOwner and ReadOnly receive 403.",
         "parameters": [
           {
             "name": "id",
@@ -679,12 +852,95 @@
         }
       }
     },
+    "/api/v1/content/{id}/return": {
+      "post": {
+        "tags": [
+          "Content"
+        ],
+        "summary": "Return content to the author (InReview \u2192 Draft). A comment is required.\nRequires CanPublish (reviewers).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentReturnRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentReturnRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentReturnRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentTransitionErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentTransitionErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentTransitionErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/content/{id}/publish": {
       "post": {
         "tags": [
           "Content"
         ],
-        "summary": "Direct publish. Requires CanPublish.",
+        "summary": "Direct publish. Requires CanPublish.\nIssue #43 \u2014 FR-MEDIA-05: blocks publish if any referenced image asset lacks alt text.\nIssue #66 \u2014 FR-AUTH-02a: regenerates RenderedFieldsJson on publish.\nIssue #39 \u2014 FR-WORKFLOW-02: notifies the entry owner (in-app \u002B email).",
         "parameters": [
           {
             "name": "id",
@@ -699,6 +955,26 @@
         "responses": {
           "204": {
             "description": "No Content"
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPublishBlockedResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPublishBlockedResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentPublishBlockedResponse"
+                }
+              }
+            }
           },
           "403": {
             "description": "Forbidden",
@@ -807,12 +1083,76 @@
         }
       }
     },
+    "/api/v1/content/{id}/archive": {
+      "post": {
+        "tags": [
+          "Content"
+        ],
+        "summary": "Archive via the workflow state machine (Published/Approved \u2192 Archived), logging a\nWorkflowTransition row. Requires CanPublish. Issue #37.\nDELETE /api/v1/content/{id} remains the unconditional soft-delete for authors.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentTransitionErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentTransitionErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentTransitionErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/content/{id}/slug": {
       "patch": {
         "tags": [
           "Content"
         ],
-        "summary": "Update a content entry's slug.\r\nValidates uniqueness within locale; creates a 301 redirect if the entry is Published.\r\nIssue #33: FR-NAV-05.",
+        "summary": "Update a content entry\u0027s slug.\nValidates uniqueness within locale; creates a 301 redirect if the entry is Published.\nIssue #33: FR-NAV-05.",
         "parameters": [
           {
             "name": "id",
@@ -836,7 +1176,7 @@
                 "$ref": "#/components/schemas/ContentEntryUpdateSlugRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/ContentEntryUpdateSlugRequest"
               }
@@ -915,7 +1255,7 @@
         "tags": [
           "Content"
         ],
-        "summary": "Duplicate a content entry (issue #36, BRD FR-AUTH-07).\r\nCreates a new Draft with '(Copy)' appended to title, slug cleared,\r\nall field values copied, media references shared (not re-uploaded).\r\nRequires CanWrite.",
+        "summary": "Duplicate a content entry (issue #36, BRD FR-AUTH-07).\nCreates a new Draft with \u0027(Copy)\u0027 appended to title, slug cleared,\nall field values copied, media references shared (not re-uploaded).\nRequires CanWrite.",
         "parameters": [
           {
             "name": "id",
@@ -1016,7 +1356,7 @@
         "tags": [
           "Content"
         ],
-        "summary": "Set or clear scheduled publish/expire times for a content entry.\r\nIssue #35: BRD FR-AUTH-04.\r\nContent owner can set a 'Publish at' datetime on a draft (AC1).\r\nContent owner can set an 'Expire at' datetime on a published entry (AC3).\r\nRequires CanWrite.",
+        "summary": "Set or clear scheduled publish/expire times for a content entry.\nIssue #35: BRD FR-AUTH-04.\nContent owner can set a \u0027Publish at\u0027 datetime on a draft (AC1).\nContent owner can set an \u0027Expire at\u0027 datetime on a published entry (AC3).\nRequires CanWrite.",
         "parameters": [
           {
             "name": "id",
@@ -1040,7 +1380,7 @@
                 "$ref": "#/components/schemas/ContentEntryScheduleRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/ContentEntryScheduleRequest"
               }
@@ -1114,12 +1454,95 @@
         }
       }
     },
+    "/api/v1/content/{id}/sync-media-usage": {
+      "post": {
+        "tags": [
+          "Content"
+        ],
+        "summary": "Sync media asset usage for a content entry.\nCalled by the admin SPA whenever the field state changes (draft save or publish).\n            \nAC (Issue #44 \u2014 FR-MEDIA-06):\n  MediaUsage rows created/removed when assets are added/removed from content fields.\n            \nReplaces all MediaUsage rows for this entry with the provided list.\nIdempotent: sending the same set twice produces the same result.\nRequires CanWrite.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncMediaUsageRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncMediaUsageRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncMediaUsageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/content-entries": {
       "get": {
         "tags": [
           "ContentEntryList"
         ],
-        "summary": "List content entries for the admin list screen.\r\nPaginated 25/page; supports filter by type, status, author, date range.\r\nSortable by Title, Status, UpdatedAt.",
+        "summary": "List content entries for the admin list screen.\nPaginated 25/page; supports filter by type, status, author, date range.\nSortable by Title, Status, UpdatedAt.",
         "parameters": [
           {
             "name": "contentTypeId",
@@ -1223,7 +1646,7 @@
         "tags": [
           "ContentType"
         ],
-        "summary": "Returns all registered content types with a summary of each type's fields.",
+        "summary": "Returns all registered content types with a summary of each type\u0027s fields.",
         "responses": {
           "200": {
             "description": "OK",
@@ -1262,7 +1685,7 @@
         "tags": [
           "ContentType"
         ],
-        "summary": "Returns the full definition for a single content type including its\r\nordered field list with name, type, required flag, and constraints.",
+        "summary": "Returns the full definition for a single content type including its\nordered field list with name, type, required flag, and constraints.",
         "parameters": [
           {
             "name": "name",
@@ -1322,7 +1745,7 @@
         "tags": [
           "ContentVersion"
         ],
-        "summary": "List all versions for a content entry.\r\nReturns: version number, author, date, change note, status.",
+        "summary": "List all versions for a content entry.\nReturns: version number, author, date, change note, status.",
         "parameters": [
           {
             "name": "entryId",
@@ -1480,7 +1903,7 @@
         "tags": [
           "ContentVersion"
         ],
-        "summary": "Restore a prior version. Sets the current draft fields to the selected version's\r\nFieldsJson by creating a NEW version row — history is never deleted.\r\nRequires CanWrite.",
+        "summary": "Restore a prior version. Sets the current draft fields to the selected version\u0027s\nFieldsJson by creating a NEW version row \u2014 history is never deleted.\nRequires CanWrite.",
         "parameters": [
           {
             "name": "entryId",
@@ -1609,7 +2032,7 @@
         "tags": [
           "DbHealth"
         ],
-        "summary": "Returns combined database health: index fragmentation, table sizes,\r\nand any queries running longer than 5 seconds.\r\nRequires SystemAdmin role.",
+        "summary": "Returns combined database health: index fragmentation, table sizes,\nand any queries running longer than 5 seconds.\nRequires SystemAdmin role.",
         "responses": {
           "200": {
             "description": "OK",
@@ -1634,15 +2057,82 @@
         }
       }
     },
+    "/api/auth/dev-users": {
+      "get": {
+        "tags": [
+          "DevBypass"
+        ],
+        "summary": "Lists the UPNs permitted for DevBypass sign-in. Used by the admin SPA login\npage to render a dev user picker. 404 when DevBypass is not active so the\nSPA falls back to the normal AD login flow.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/auth/dev-login": {
       "post": {
         "tags": [
           "DevBypass"
         ],
-        "summary": "Accepts an X-Dev-User header and issues a CMS JWT without AD.\r\nReturns 401 if DevBypass mode is not active.",
+        "summary": "Accepts an X-Dev-User header and issues a CMS JWT without AD.\nReturns 401 if DevBypass mode is not active.",
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/media/serve/{id}": {
+      "get": {
+        "tags": [
+          "Media"
+        ],
+        "summary": "Stream a stored file. Files are stored outside the web root (FR-SECURITY-06)\nso this is the only way they are exposed. ?variant=webp returns the generated\nWebP rendition when one exists.\n            \n#158 audience rule: anonymous callers only get assets that published content\nreferences (MediaUsage joined to a Published entry); anything else needs a\nCanRead bearer token and answers 404 otherwise. Every response is nosniff;\nraster images and SVG render inline under a sandbox CSP (SVG additionally\ndefault-src \u0027none\u0027); PDF renders inline without sandbox (browsers\u0027 PDF viewers\nrefuse a sandboxed document); everything else is an attachment. Caching is a\nshort public TTL with an ETag for public assets and private for the rest.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }
@@ -1652,7 +2142,7 @@
         "tags": [
           "Media"
         ],
-        "summary": "Upload a media file (multipart/form-data).\r\n            \r\nAC: POST /api/v1/media/upload accepts multipart file.\r\nAC: Storage backend selected by config (local, unc, azure_blob).\r\nAC: File stored outside web root.\r\nAC: File extension validated against MIME allow-list (BRD FR-SECURITY-06).\r\nAC: MediaAsset row created with path, MIME, size, dimensions.",
+        "summary": "Upload a media file (multipart/form-data).\n            \nAC: POST /api/v1/media/upload accepts multipart file.\nAC: Storage backend selected by config (local, unc).\nAC: File stored outside web root.\nAC: File extension validated against MIME allow-list (BRD FR-SECURITY-06).\nAC: MediaAsset row created with path, MIME, size, dimensions.",
         "requestBody": {
           "content": {
             "multipart/form-data": {
@@ -1753,6 +2243,26 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaErrorResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaErrorResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -1762,7 +2272,7 @@
         "tags": [
           "Media"
         ],
-        "summary": "List media assets.\r\n            \r\nAC (Issue #42):\r\n  - Grid and list view is a client-side toggle; server returns items.\r\n  - Search by filename, alt text (q param maps to searchTerm in SP).\r\n  - Filter by MIME type (mimeType param, e.g. \"image/\") and date range.\r\n  - Paginated (page, pageSize).",
+        "summary": "List media assets.\n            \nAC (Issue #42):\n  - Grid and list view is a client-side toggle; server returns items.\n  - Search by filename, alt text (q param maps to searchTerm in SP).\n  - Filter by MIME type (mimeType param, e.g. \u0022image/\u0022) and date range.\n  - Paginated (page, pageSize).",
         "parameters": [
           {
             "name": "q",
@@ -1846,7 +2356,7 @@
         "tags": [
           "Media"
         ],
-        "summary": "Get a single media asset with full metadata and usage list.\r\n            \r\nAC (Issue #42): Click to view detail: preview, alt text, usage list, metadata.",
+        "summary": "Get a single media asset with full metadata and usage list.\n            \nAC (Issue #42): Click to view detail: preview, alt text, usage list, metadata.",
         "parameters": [
           {
             "name": "id",
@@ -1925,7 +2435,7 @@
         "tags": [
           "Media"
         ],
-        "summary": "Update alt text, title, description, and/or tags for a media asset.\r\n            \r\nAC (Issue #42): Edit alt text inline in detail view.",
+        "summary": "Update alt text, title, description, and/or tags for a media asset.\n            \nAC (Issue #42): Edit alt text inline in detail view.",
         "parameters": [
           {
             "name": "id",
@@ -1949,7 +2459,7 @@
                 "$ref": "#/components/schemas/MediaPatchRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/MediaPatchRequest"
               }
@@ -2026,7 +2536,7 @@
         "tags": [
           "Media"
         ],
-        "summary": "Delete a media asset. Blocked (409) when the asset is referenced by any content entry.\r\n            \r\nAC (Epic #6 exit): Delete blocked when asset is in use.",
+        "summary": "Delete a media asset. Blocked (409) when the asset is referenced by any content entry.\nThe 409 body includes the list of content entries (title, slug, status) currently using the asset.\n            \nAC (Issue #44 \u2014 FR-MEDIA-06):\n  DELETE returns 409 with usage list if asset is in use.",
         "parameters": [
           {
             "name": "id",
@@ -2047,17 +2557,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/MediaErrorResponse"
+                  "$ref": "#/components/schemas/MediaDeleteBlockedResponse"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MediaErrorResponse"
+                  "$ref": "#/components/schemas/MediaDeleteBlockedResponse"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MediaErrorResponse"
+                  "$ref": "#/components/schemas/MediaDeleteBlockedResponse"
                 }
               }
             }
@@ -2130,7 +2640,7 @@
         "tags": [
           "Navigation"
         ],
-        "summary": "Return the navigation tree for the given handle as nested JSON.\r\nFlat rows from the SP are assembled into a parent→children hierarchy here\r\nso the public site only needs one HTTP call and zero tree-walking.\r\n            \r\nReturns 404 when the menu handle is not found in the database.\r\nReturns an empty items array [] when the menu exists but has no visible items.",
+        "summary": "Return the navigation tree for the given handle as nested JSON.\nFlat rows from the SP are assembled into a parent\u2192children hierarchy here\nso the public site only needs one HTTP call and zero tree-walking.\n            \nReturns 404 when the menu handle is not found in the database.\nReturns an empty items array [] when the menu exists but has no visible items.",
         "parameters": [
           {
             "name": "handle",
@@ -2183,6 +2693,919 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "NavigationAdmin"
+        ],
+        "summary": "Rename a navigation menu.",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMenuRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMenuRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMenuRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "NavigationAdmin"
+        ],
+        "summary": "Delete a navigation menu and all its items.",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/navigation": {
+      "get": {
+        "tags": [
+          "NavigationAdmin"
+        ],
+        "summary": "List all navigation menus.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NavigationMenu"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NavigationMenu"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NavigationMenu"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "NavigationAdmin"
+        ],
+        "summary": "Create a new navigation menu.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMenuRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMenuRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMenuRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavigationMenu"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavigationMenu"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavigationMenu"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/navigation/{handle}/items": {
+      "get": {
+        "tags": [
+          "NavigationAdmin"
+        ],
+        "summary": "List all items in a menu \u2014 includes hidden items.\nReturns items as a flat list ordered by ParentItemId, SortOrder.\nThe admin UI assembles the tree from this flat list.",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavItemsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavItemsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavItemsResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "NavigationAdmin"
+        ],
+        "summary": "Create a new navigation item in a menu.",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertItemRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertItemRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavItemAdminDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavItemAdminDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavItemAdminDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/navigation/{handle}/items/{id}": {
+      "patch": {
+        "tags": [
+          "NavigationAdmin"
+        ],
+        "summary": "Update a navigation item (label, URL, visibility, target).",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertItemRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertItemRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "NavigationAdmin"
+        ],
+        "summary": "Delete a navigation item and all its children.",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/navigation/{handle}/reorder": {
+      "post": {
+        "tags": [
+          "NavigationAdmin"
+        ],
+        "summary": "Apply drag-and-drop reorder: update SortOrder and ParentItemId for all items.\nValidates that no item exceeds 3 levels deep.\nRequest body: array of { id, parentItemId, sortOrder }.",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ReorderItemRequest"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ReorderItemRequest"
+                }
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ReorderItemRequest"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/navigation/{handle}/preview": {
+      "get": {
+        "tags": [
+          "NavigationAdmin"
+        ],
+        "summary": "Returns the menu tree as nested JSON \u2014 same shape as the public GET /navigation/{handle},\nbut includes hidden items so admins can preview the layout before saving.",
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavigationMenuPreviewResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavigationMenuPreviewResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NavigationMenuPreviewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Newest-first inbox for the current user, with the unread count for the badge.",
+        "parameters": [
+          {
+            "name": "unreadOnly",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/unread-count": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Unread count only \u2014 for the bell badge poll.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationUnreadCountResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationUnreadCountResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationUnreadCountResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/read": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Mark the listed notifications read. Ids that are not the caller\u0027s are ignored.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationMarkReadRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationMarkReadRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationMarkReadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationMarkReadResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationMarkReadResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationMarkReadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Mark every unread notification read.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationMarkReadResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationMarkReadResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationMarkReadResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/content/{id}/preview-token": {
@@ -2190,7 +3613,7 @@
         "tags": [
           "Preview"
         ],
-        "summary": "Issue a signed preview token for the given content entry.\r\nRequires an authenticated session (CanRead).  Returns a token valid for 60 minutes.\r\n            \r\nAC: Preview does not require publishing — a token is minted for any draft.",
+        "summary": "Issue a signed preview token for the given content entry.\nRequires an authenticated session (CanRead).  Returns a token valid for 60 minutes.\n            \nAC: Preview does not require publishing \u2014 a token is minted for any draft.",
         "parameters": [
           {
             "name": "id",
@@ -2251,7 +3674,7 @@
         "tags": [
           "Preview"
         ],
-        "summary": "Render arbitrary Markdown to HTML using the same Markdig DisableHtml() pipeline\r\nused at publish time.  Issue #65 — Milkdown split-pane live preview.\r\n            \r\nCalled by the admin SPA MarkdownField component, debounced 500ms, as the user\r\ntypes in the Milkdown editor.  Returns raw HTML fragment (not a full page).\r\n            \r\nDisableHtml() is enforced on the server side — raw HTML entries in the Markdown\r\nsource are stripped, matching the publish pipeline exactly.\r\n            \r\nRequires CanRead — no anonymous access.",
+        "summary": "Render arbitrary Markdown to HTML using the same Markdig DisableHtml() pipeline\nused at publish time.  Issue #65 \u2014 Milkdown split-pane live preview.\n            \nCalled by the admin SPA MarkdownField component, debounced 500ms, as the user\ntypes in the Milkdown editor.  Returns raw HTML fragment (not a full page).\n            \nDisableHtml() is enforced on the server side \u2014 raw HTML entries in the Markdown\nsource are stripped, matching the publish pipeline exactly.\n            \nRequires CanRead \u2014 no anonymous access.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2264,7 +3687,7 @@
                 "$ref": "#/components/schemas/PreviewRenderRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/PreviewRenderRequest"
               }
@@ -2320,7 +3743,7 @@
         "tags": [
           "Preview"
         ],
-        "summary": "Render the USWDS public preview page for a content entry.\r\nAuthentication: signed preview token (no session cookie required).\r\n            \r\nQuery params:\r\n  token  — required.  Signed preview token from POST /preview-token.\r\n  fields — optional. URL-encoded JSON of current field values from the admin form\r\n           (unsaved state).  When present, these values override the saved draft\r\n           for the preview — no publish required.\r\n            \r\nReturns an HTML document using the USWDS template.",
+        "summary": "Render the USWDS public preview page for a content entry.\nAuthentication: signed preview token (no session cookie required).\n            \nQuery params:\n  token  \u2014 required.  Signed preview token from POST /preview-token.\n  fields \u2014 optional. URL-encoded JSON of current field values from the admin form\n           (unsaved state).  When present, these values override the saved draft\n           for the preview \u2014 no publish required.\n            \nReturns an HTML document using the USWDS template.",
         "parameters": [
           {
             "name": "token",
@@ -2421,12 +3844,394 @@
         }
       }
     },
+    "/api/v1/content/{slug}": {
+      "get": {
+        "tags": [
+          "PublicContent"
+        ],
+        "summary": "Get a published content entry by slug for public rendering.\nReturns 404 when no published entry exists for the slug, or when\ntype is supplied and does not match the entry\u0027s content type.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "en-US"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedContentResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedContentResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedContentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/redirects": {
+      "get": {
+        "tags": [
+          "RedirectAdmin"
+        ],
+        "summary": "List redirects with pagination.\nOptional query string: isActive=true|false (omit for all).",
+        "parameters": [
+          {
+            "name": "isActive",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectListResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectListResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "RedirectAdmin"
+        ],
+        "summary": "Create a new redirect rule.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRedirectRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRedirectRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRedirectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectAdminDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectAdminDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectAdminDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/redirects/{id}": {
+      "get": {
+        "tags": [
+          "RedirectAdmin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectAdminDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectAdminDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectAdminDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "RedirectAdmin"
+        ],
+        "summary": "Edit an existing redirect\u0027s FromPath, ToPath, and/or StatusCode.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRedirectRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRedirectRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRedirectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "RedirectAdmin"
+        ],
+        "summary": "Soft-deactivate a redirect (sets IsActive = false).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/search": {
       "get": {
         "tags": [
           "Search"
         ],
-        "summary": "Full-text search over published content.\r\n            \r\nParameters:\r\n  q          — required; the search query string.\r\n  type       — optional; filter by ContentTypeId (exact match).\r\n  from       — optional; ISO 8601 UTC date — only entries published on/after.\r\n  to         — optional; ISO 8601 UTC date — only entries published on/before.\r\n  tag        — optional; taxonomy term ID — only entries tagged with this term.\r\n  page       — optional; 1-based page number (default 1).\r\n  pageSize   — optional; results per page, 1–100 (default 25).\r\n            \r\nResponse body:\r\n  {\r\n    \"query\":      \"...\",\r\n    \"page\":       1,\r\n    \"pageSize\":   25,\r\n    \"totalItems\": N,\r\n    \"items\": [\r\n      {\r\n        \"id\":              123,\r\n        \"title\":           \"...\",\r\n        \"slug\":            \"...\",\r\n        \"contentTypeId\":   1,\r\n        \"contentTypeName\": \"Standard Page\",\r\n        \"excerpt\":         \"...\",\r\n        \"publishedAt\":     \"2026-01-01T00:00:00Z\",\r\n        \"rank\":            N\r\n      },\r\n      ...\r\n    ]\r\n  }\r\n            \r\nWhen Full-Text Search is not installed on the SQL Server instance,\r\nthe SP returns an empty result set — this endpoint returns 200 with 0 items.",
+        "summary": "Full-text search over published content.\n            \nParameters:\n  q          \u2014 required; the search query string.\n  type       \u2014 optional; filter by ContentTypeId (exact match).\n  from       \u2014 optional; ISO 8601 UTC date \u2014 only entries published on/after.\n  to         \u2014 optional; ISO 8601 UTC date \u2014 only entries published on/before.\n  tag        \u2014 optional; taxonomy term ID \u2014 only entries tagged with this term.\n  page       \u2014 optional; 1-based page number (default 1).\n  pageSize   \u2014 optional; results per page, 1\u2013search.maxPageSize (default search.defaultPageSize).\n            \nResponse body:\n  {\n    \u0022query\u0022:      \u0022...\u0022,\n    \u0022page\u0022:       1,\n    \u0022pageSize\u0022:   25,\n    \u0022totalItems\u0022: N,\n    \u0022items\u0022: [\n      {\n        \u0022id\u0022:              123,\n        \u0022title\u0022:           \u0022...\u0022,\n        \u0022slug\u0022:            \u0022...\u0022,\n        \u0022contentTypeId\u0022:   1,\n        \u0022contentTypeName\u0022: \u0022Standard Page\u0022,\n        \u0022excerpt\u0022:         \u0022...\u0022,\n        \u0022publishedAt\u0022:     \u00222026-01-01T00:00:00Z\u0022,\n        \u0022rank\u0022:            N\n      },\n      ...\n    ]\n  }\n            \nWhen Full-Text Search is not installed on the SQL Server instance,\nthe SP returns an empty result set \u2014 this endpoint returns 200 with 0 items.",
         "parameters": [
           {
             "name": "q",
@@ -2481,8 +4286,7 @@
             "in": "query",
             "schema": {
               "type": "integer",
-              "format": "int32",
-              "default": 25
+              "format": "int32"
             }
           }
         ],
@@ -2535,7 +4339,7 @@
         "tags": [
           "SearchAnalytics"
         ],
-        "summary": "GET /api/v1/admin/search/analytics/summary\r\nReturns top 10 queries and top 10 zero-result queries over the last 30 days.\r\nRequires any CMS role (admin users only).",
+        "summary": "GET /api/v1/admin/search/analytics/summary\nReturns top 10 queries and top 10 zero-result queries over the last 30 days.\nRequires any CMS role (admin users only).",
         "responses": {
           "200": {
             "description": "OK",
@@ -2565,7 +4369,7 @@
         "tags": [
           "SearchAnalytics"
         ],
-        "summary": "GET /api/v1/admin/search/analytics\r\nFull paginated analytics table with CTR, used by /admin/search/analytics page.\r\nRequires any CMS role.",
+        "summary": "GET /api/v1/admin/search/analytics\nFull paginated analytics table with CTR, used by /admin/search/analytics page.\nRequires any CMS role.",
         "parameters": [
           {
             "name": "daysBack",
@@ -2624,7 +4428,7 @@
         "tags": [
           "SearchAnalytics"
         ],
-        "summary": "POST /api/v1/search/click\r\nRecords a user click on a search result for CTR analytics.\r\nPublic endpoint — no JWT required (called from public site search).\r\nBody: { query, clickedSlug, resultRank }",
+        "summary": "POST /api/v1/search/click\nRecords a user click on a search result for CTR analytics.\nPublic endpoint \u2014 no JWT required (called from public site search).\nBody: { query, clickedSlug, resultRank }",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2637,7 +4441,7 @@
                 "$ref": "#/components/schemas/LogClickRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/LogClickRequest"
               }
@@ -2676,7 +4480,7 @@
         "tags": [
           "SearchPins"
         ],
-        "summary": "Returns all pinned results, ordered by query string.\r\nOptionally filter to a single query by passing ?q=…\r\n            \r\nResponse body:\r\n  {\r\n    \"items\": [\r\n      {\r\n        \"id\":                 1,\r\n        \"queryString\":        \"va benefits\",\r\n        \"contentEntryId\":     42,\r\n        \"createdAt\":          \"2026-09-15T12:00:00Z\",\r\n        \"entrySlug\":          \"benefits/overview\",\r\n        \"entryStatus\":        \"Published\",\r\n        \"entryContentTypeId\": 1,\r\n        \"entryTitle\":         \"VA Benefits Overview\"\r\n      },\r\n      …\r\n    ]\r\n  }",
+        "summary": "Returns all pinned results, ordered by query string.\nOptionally filter to a single query by passing ?q=\u2026\n            \nResponse body:\n  {\n    \u0022items\u0022: [\n      {\n        \u0022id\u0022:                 1,\n        \u0022queryString\u0022:        \u0022va benefits\u0022,\n        \u0022contentEntryId\u0022:     42,\n        \u0022createdAt\u0022:          \u00222026-09-15T12:00:00Z\u0022,\n        \u0022entrySlug\u0022:          \u0022benefits/overview\u0022,\n        \u0022entryStatus\u0022:        \u0022Published\u0022,\n        \u0022entryContentTypeId\u0022: 1,\n        \u0022entryTitle\u0022:         \u0022VA Benefits Overview\u0022\n      },\n      \u2026\n    ]\n  }",
         "parameters": [
           {
             "name": "q",
@@ -2713,7 +4517,7 @@
         "tags": [
           "SearchPins"
         ],
-        "summary": "Creates or replaces a pin: one query string → one content entry.\r\nIf a pin for this query string already exists it is overwritten.\r\n            \r\nRequest body:\r\n  { \"queryString\": \"va benefits\", \"contentEntryId\": 42 }\r\n            \r\nResponse: 201 Created with { \"id\": N }",
+        "summary": "Creates or replaces a pin: one query string \u2192 one content entry.\nIf a pin for this query string already exists it is overwritten.\n            \nRequest body:\n  { \u0022queryString\u0022: \u0022va benefits\u0022, \u0022contentEntryId\u0022: 42 }\n            \nResponse: 201 Created with { \u0022id\u0022: N }",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2726,7 +4530,7 @@
                 "$ref": "#/components/schemas/CreatePinRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/CreatePinRequest"
               }
@@ -2782,7 +4586,7 @@
         "tags": [
           "SearchPins"
         ],
-        "summary": "Removes a pin by Id.\r\nReturns 204 No Content on success (even if the pin did not exist).",
+        "summary": "Removes a pin by Id.\nReturns 204 No Content on success (even if the pin did not exist).",
         "parameters": [
           {
             "name": "id",
@@ -2801,12 +4605,311 @@
         }
       }
     },
+    "/api/v1/security/csp-report": {
+      "post": {
+        "tags": [
+          "SecurityReport"
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "413": {
+            "description": "Content Too Large",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/public": {
+      "get": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Public-scoped settings as a flat key \u2192 value map.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/settings/client": {
+      "get": {
+        "tags": [
+          "Settings"
+        ],
+        "summary": "Admin- and Public-scoped settings as a flat key \u2192 value map.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/settings": {
+      "get": {
+        "tags": [
+          "SiteSettings"
+        ],
+        "summary": "List every setting with its current value, default, type and description.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingsListResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingsListResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingsListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/settings/{key}": {
+      "put": {
+        "tags": [
+          "SiteSettings"
+        ],
+        "summary": "Set a value. Bool must be \u0022true\u0022/\u0022false\u0022, int a non-negative whole number, json valid JSON.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSiteSettingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSiteSettingRequest"
+              }
+            },
+            "application/*\u002Bjson": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSiteSettingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/settings/{key}/reset": {
+      "post": {
+        "tags": [
+          "SiteSettings"
+        ],
+        "summary": "Restore the code default for a setting.",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteSettingDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users": {
       "get": {
         "tags": [
           "UserRole"
         ],
-        "summary": "List active users.",
+        "summary": "List active users with optional name/email search.",
         "parameters": [
           {
             "name": "search",
@@ -2860,6 +4963,67 @@
                   "items": {
                     "$ref": "#/components/schemas/User"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{userId}": {
+      "get": {
+        "tags": [
+          "UserRole"
+        ],
+        "summary": "Get a single user with their role assignments.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -2964,7 +5128,7 @@
                 "$ref": "#/components/schemas/AssignRoleRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/AssignRoleRequest"
               }
@@ -3059,6 +5223,128 @@
         }
       }
     },
+    "/api/v1/admin/users/{userId}/deactivate": {
+      "post": {
+        "tags": [
+          "UserRole"
+        ],
+        "summary": "Deactivate a user \u2014 sets IsActive=0.\nThe next login attempt returns 403 because the auth pipeline checks IsActive.",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/roles": {
+      "get": {
+        "tags": [
+          "UserRole"
+        ],
+        "summary": "List all roles (for role assignment dropdown).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoleRow"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoleRow"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoleRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/sections": {
+      "get": {
+        "tags": [
+          "UserRole"
+        ],
+        "summary": "List all content sections (for section-scoped role assignment).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ContentSectionRow"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ContentSectionRow"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ContentSectionRow"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -3089,7 +5375,7 @@
                 "$ref": "#/components/schemas/WebhookRegistrationRequest"
               }
             },
-            "application/*+json": {
+            "application/*\u002Bjson": {
               "schema": {
                 "$ref": "#/components/schemas/WebhookRegistrationRequest"
               }
@@ -3226,6 +5512,15 @@
         "tags": [
           "WindowsAuth"
         ],
+        "parameters": [
+          {
+            "name": "returnUrl",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -3285,6 +5580,89 @@
         },
         "additionalProperties": false
       },
+      "AuditLogPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditLogRow"
+            },
+            "nullable": true
+          },
+          "totalItems": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditLogRow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "actorId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "actorEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "actorDisplayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "entityType": {
+            "type": "string",
+            "nullable": true
+          },
+          "entityId": {
+            "type": "string",
+            "nullable": true
+          },
+          "action": {
+            "type": "string",
+            "nullable": true
+          },
+          "diffJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BlockingAssetItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fileName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A single asset blocking publish due to missing alt text."
+      },
       "ContentEntry": {
         "type": "object",
         "properties": {
@@ -3334,6 +5712,18 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "fieldsJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "renderedFieldsJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentTypeName": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -3417,6 +5807,48 @@
       "ContentEntryCreateRequest": {
         "type": "object",
         "properties": {
+          "slug": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentTypeId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "contentTypeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "locale": {
+            "type": "string",
+            "nullable": true
+          },
+          "fieldsJson": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Create request. Supply either VA.CMS.API.Controllers.ContentEntryCreateRequest.ContentTypeId (DB id) or\nVA.CMS.API.Controllers.ContentEntryCreateRequest.ContentTypeName (registry name, e.g. \u0022standard_page\u0022). Optional\nVA.CMS.API.Controllers.ContentEntryCreateRequest.FieldsJson seeds the initial version."
+      },
+      "ContentEntryCreateResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ContentEntryDetailResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
           "contentTypeId": {
             "type": "integer",
             "format": "int64"
@@ -3428,19 +5860,52 @@
           "locale": {
             "type": "string",
             "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
-      "ContentEntryCreateResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "publishedVersionId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "ownerId": {
             "type": "integer",
             "format": "int64"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "markdownBody": {
+            "type": "string",
+            "nullable": true
+          },
+          "renderedBody": {
+            "type": "string",
+            "nullable": true
+          },
+          "fieldsJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "latestVersionId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "contentTypeName": {
+            "type": "string",
+            "nullable": true
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Content entry API response including rendered fields \u2014 issue #66, BRD FR-AUTH-02a.\nmarkdownBody: raw CommonMark Markdown stored in FieldsJson (from joined ContentVersion).\nrenderedBody: server-rendered HTML via Markdig DisableHtml() pipeline.\nBoth fields are null when the entry has no published version yet."
       },
       "ContentEntryDuplicateResponse": {
         "type": "object",
@@ -3468,11 +5933,22 @@
           }
         },
         "additionalProperties": false,
-        "description": "Request body for PATCH /api/v1/content/{id}/schedule.\r\nIssue #35: BRD FR-AUTH-04.\r\nBoth fields are optional — null clears the value; omitting a field leaves it unchanged."
+        "description": "Request body for PATCH /api/v1/content/{id}/schedule.\nIssue #35: BRD FR-AUTH-04.\nBoth fields are optional \u2014 null clears the value; omitting a field leaves it unchanged."
       },
       "ContentEntryUpdateRequest": {
         "type": "object",
-        "additionalProperties": false
+        "properties": {
+          "fieldsJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "changeNote": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Update request. VA.CMS.API.Controllers.ContentEntryUpdateRequest.FieldsJson (a JSON object of field values) is saved as\na new Draft version; omit it to only touch UpdatedAt."
       },
       "ContentEntryUpdateSlugRequest": {
         "type": "object",
@@ -3483,6 +5959,69 @@
           }
         },
         "additionalProperties": false
+      },
+      "ContentPublishBlockedResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "blockingAssets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BlockingAssetItem"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response body when POST /api/v1/content/{id}/publish is blocked due to missing alt text.\nIssue #43 \u2014 FR-MEDIA-05."
+      },
+      "ContentReturnRequest": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Body for POST /api/v1/content/{id}/return \u2014 a comment is required."
+      },
+      "ContentSectionRow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "slugPrefix": {
+            "type": "string",
+            "nullable": true
+          },
+          "parentSectionId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ContentTransitionErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "422 body when usp_Workflow_Transition rejects a state change."
       },
       "ContentTypeDetailDto": {
         "type": "object",
@@ -3598,7 +6137,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Restore response — carries the new version id."
+        "description": "Restore response \u2014 carries the new version id."
       },
       "ContentVersionSummaryDto": {
         "type": "object",
@@ -3629,7 +6168,7 @@
           }
         },
         "additionalProperties": false,
-        "description": "Version list row — AC: version number, author, date, change note, status."
+        "description": "Version list row \u2014 AC: version number, author, date, change note, status."
       },
       "CreateAdGroupMappingRequest": {
         "type": "object",
@@ -3657,6 +6196,21 @@
         "additionalProperties": false,
         "description": "Response body after a successful create."
       },
+      "CreateMenuRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "handle": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for creating a navigation menu."
+      },
       "CreatePinRequest": {
         "type": "object",
         "properties": {
@@ -3683,15 +6237,36 @@
         "additionalProperties": false,
         "description": "Response body for a successful POST /api/v1/admin/search/pins."
       },
+      "CreateRedirectRequest": {
+        "type": "object",
+        "properties": {
+          "fromPath": {
+            "type": "string",
+            "nullable": true
+          },
+          "toPath": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusCode": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for POST /api/v1/redirects."
+      },
       "CustomFieldTypeDto": {
         "type": "object",
         "properties": {
           "typeName": {
             "type": "string",
+            "description": "Unique machine-readable type name (matches the React registry key).",
             "nullable": true
           },
           "storageType": {
             "type": "string",
+            "description": ".NET storage type name (e.g. \u0022String\u0022, \u0022Int32\u0022).",
             "nullable": true
           }
         },
@@ -3775,6 +6350,30 @@
           "pageCount": {
             "type": "integer",
             "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "JsonNode": {
+        "type": "object",
+        "properties": {
+          "options": {
+            "$ref": "#/components/schemas/JsonNodeOptions"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/JsonNode"
+          },
+          "root": {
+            "$ref": "#/components/schemas/JsonNode"
+          }
+        },
+        "additionalProperties": false
+      },
+      "JsonNodeOptions": {
+        "type": "object",
+        "properties": {
+          "propertyNameCaseInsensitive": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -3893,6 +6492,55 @@
         },
         "additionalProperties": false,
         "description": "Summary item returned in GET /api/v1/media list."
+      },
+      "MediaDeleteBlockedResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "usages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MediaDeleteBlockedUsage"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "409 Conflict body when DELETE /api/v1/media/{id} is blocked because\nthe asset is referenced by one or more content entries.\nAC (Issue #44 \u2014 FR-MEDIA-06): response includes the full usage list."
+      },
+      "MediaDeleteBlockedUsage": {
+        "type": "object",
+        "properties": {
+          "contentEntryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "entryTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "slug": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "fieldName": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentTypeName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A single content entry that is blocking the media asset delete."
       },
       "MediaDetailResponse": {
         "type": "object",
@@ -4083,6 +6731,23 @@
         "additionalProperties": false,
         "description": "Response body for a successful media upload."
       },
+      "MediaUsageItem": {
+        "type": "object",
+        "properties": {
+          "assetId": {
+            "type": "integer",
+            "description": "MediaAsset.Id of the referenced asset.",
+            "format": "int64"
+          },
+          "fieldName": {
+            "type": "string",
+            "description": "Field name in the content type schema, e.g. \u0022featuredImage\u0022.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "A single asset reference in a content entry field."
+      },
       "MediaUsageSummary": {
         "type": "object",
         "properties": {
@@ -4105,10 +6770,66 @@
           "contentTypeId": {
             "type": "integer",
             "format": "int64"
+          },
+          "contentTypeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "entryTitle": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "A single usage record: which content entry + field references this asset."
+        "description": "A single usage record: which content entry \u002B field references this asset."
+      },
+      "NavItemAdminDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "menuId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "parentItemId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentEntryId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "target": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isVisible": {
+            "type": "boolean"
+          },
+          "depth": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Admin view of a navigation item \u2014 includes visibility and depth."
       },
       "NavItemDto": {
         "type": "object",
@@ -4140,6 +6861,113 @@
         "additionalProperties": false,
         "description": "A single navigation item, potentially nested via Children."
       },
+      "NavItemsResponse": {
+        "type": "object",
+        "properties": {
+          "menuId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "handle": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NavItemAdminDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Response envelope for GET /api/v1/navigation/{handle}/items."
+      },
+      "NavPreviewItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "nullable": true
+          },
+          "target": {
+            "type": "string",
+            "nullable": true
+          },
+          "isVisible": {
+            "type": "boolean"
+          },
+          "depth": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NavPreviewItemDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Preview tree node \u2014 includes IsVisible so admin preview can dim hidden items."
+      },
+      "NavigationMenu": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "handle": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NavigationMenuPreviewResponse": {
+        "type": "object",
+        "properties": {
+          "handle": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NavPreviewItemDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Preview response \u2014 nested tree with visibility info."
+      },
       "NavigationMenuResponse": {
         "type": "object",
         "properties": {
@@ -4158,6 +6986,116 @@
         "additionalProperties": false,
         "description": "Response envelope for GET /api/v1/navigation/{handle}."
       },
+      "NotificationItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "eventType": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentEntryId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "contentTitle": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "actorId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "actorDisplayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          },
+          "isRead": {
+            "type": "boolean"
+          },
+          "readAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entrySlug": {
+            "type": "string",
+            "nullable": true
+          },
+          "entryStatus": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationItem"
+            },
+            "nullable": true
+          },
+          "unreadCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationMarkReadRequest": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationMarkReadResponse": {
+        "type": "object",
+        "properties": {
+          "updated": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NotificationUnreadCountResponse": {
+        "type": "object",
+        "properties": {
+          "unreadCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "PreviewRenderRequest": {
         "type": "object",
         "properties": {
@@ -4167,18 +7105,18 @@
           }
         },
         "additionalProperties": false,
-        "description": "Request body for POST /api/v1/preview/render (issue #65).\r\nAccepts a CommonMark Markdown string to render via Markdig."
+        "description": "Request body for POST /api/v1/preview/render (issue #65).\nAccepts a CommonMark Markdown string to render via Markdig."
       },
       "PreviewRenderResponse": {
         "type": "object",
         "properties": {
-          "html": {
+          "renderedHtml": {
             "type": "string",
             "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "Response from POST /api/v1/preview/render.\r\nReturns sanitised HTML fragment (not a full page) — DisableHtml() applied."
+        "description": "Response from POST /api/v1/preview/render \u2014 issue #66, BRD FR-AUTH-02b.\nReturns sanitised HTML fragment (not a full page) \u2014 DisableHtml() applied.\nField name is renderedHtml per acceptance criteria."
       },
       "PreviewTokenResponse": {
         "type": "object",
@@ -4220,7 +7158,166 @@
             "nullable": true
           }
         },
-        "additionalProperties": { }
+        "additionalProperties": {}
+      },
+      "PublishedContentResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "contentTypeId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "contentTypeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "templateId": {
+            "type": "string",
+            "nullable": true
+          },
+          "slug": {
+            "type": "string",
+            "nullable": true
+          },
+          "locale": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "versionNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonNode"
+            },
+            "nullable": true
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Public delivery payload for GET /api/v1/content/{slug}."
+      },
+      "RedirectAdminDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fromPath": {
+            "type": "string",
+            "nullable": true
+          },
+          "toPath": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusCode": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdById": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "createdByEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdByDisplayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Single redirect row returned by the API."
+      },
+      "RedirectListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RedirectAdminDto"
+            },
+            "nullable": true
+          },
+          "totalRows": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Paginated list response for GET /api/v1/redirects."
+      },
+      "ReorderItemRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "parentItemId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Single item in a bulk-reorder request."
+      },
+      "RoleRow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isSystemRole": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       },
       "SearchAnalyticsPageDto": {
         "type": "object",
@@ -4405,7 +7502,7 @@
           },
           "title": {
             "type": "string",
-            "description": "Title extracted from FieldsJson 'title' field.\r\nNull when the content type has no title field.",
+            "description": "Title extracted from FieldsJson \u0027title\u0027 field.\nNull when the content type has no title field.",
             "nullable": true
           },
           "slug": {
@@ -4418,12 +7515,12 @@
           },
           "contentTypeName": {
             "type": "string",
-            "description": "Human-readable content type name (e.g. \"News Article\", \"Standard Page\").",
+            "description": "Human-readable content type name (e.g. \u0022News Article\u0022, \u0022Standard Page\u0022).",
             "nullable": true
           },
           "excerpt": {
             "type": "string",
-            "description": "Summary excerpt — 'summary' field from FieldsJson when present,\r\notherwise first 300 chars of extracted plain text from all fields.",
+            "description": "Summary excerpt \u2014 \u0027summary\u0027 field from FieldsJson when present,\notherwise first 300 chars of extracted plain text from all fields.",
             "nullable": true
           },
           "publishedAt": {
@@ -4438,7 +7535,108 @@
           }
         },
         "additionalProperties": false,
-        "description": "Single result item returned by GET /api/v1/search.\r\nFields mapped from usp_Search_FullText via SearchResult POCO."
+        "description": "Single result item returned by GET /api/v1/search.\nFields mapped from usp_Search_FullText via SearchResult POCO."
+      },
+      "SetSiteSettingRequest": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SiteSettingDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "nullable": true
+          },
+          "value": {
+            "type": "string",
+            "nullable": true
+          },
+          "defaultValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "isOverridden": {
+            "type": "boolean"
+          },
+          "dataType": {
+            "type": "string",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "nullable": true
+          },
+          "scope": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "updatedById": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "updatedByName": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SiteSettingsListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteSettingDto"
+            },
+            "nullable": true
+          },
+          "snapshotLoadedAtUtc": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SyncMediaUsageRequest": {
+        "type": "object",
+        "properties": {
+          "usages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MediaUsageItem"
+            },
+            "description": "Current set of media asset references in this content entry\u0027s fields.\nEach item maps one asset to the field that references it.\nSending an empty list clears all MediaUsage rows for this entry.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for POST /api/v1/content/{id}/sync-media-usage.\nIssue #44 \u2014 FR-MEDIA-06: sync media usage rows when content fields change."
       },
       "TableSizeRow": {
         "type": "object",
@@ -4489,6 +7687,73 @@
         "additionalProperties": false,
         "description": "Single row in the top-queries widget."
       },
+      "UpdateMenuRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for renaming a navigation menu."
+      },
+      "UpdateRedirectRequest": {
+        "type": "object",
+        "properties": {
+          "fromPath": {
+            "type": "string",
+            "nullable": true
+          },
+          "toPath": {
+            "type": "string",
+            "nullable": true
+          },
+          "statusCode": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for PATCH /api/v1/redirects/{id}."
+      },
+      "UpsertItemRequest": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "nullable": true
+          },
+          "contentEntryId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "target": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortOrder": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "isVisible": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "parentItemId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Request body for creating or updating a navigation item."
+      },
       "User": {
         "type": "object",
         "properties": {
@@ -4527,6 +7792,43 @@
         },
         "additionalProperties": false
       },
+      "UserDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "lastLoginAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRoleDetail"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UserRoleAssignment": {
         "type": "object",
         "properties": {
@@ -4541,6 +7843,37 @@
           "sectionId": {
             "type": "integer",
             "format": "int64",
+            "nullable": true
+          },
+          "sectionSlugPrefix": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "UserRoleDetail": {
+        "type": "object",
+        "properties": {
+          "roleId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "roleName": {
+            "type": "string",
+            "nullable": true
+          },
+          "roleDisplayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "sectionId": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "sectionName": {
+            "type": "string",
             "nullable": true
           },
           "sectionSlugPrefix": {
@@ -4595,7 +7928,7 @@
           },
           "secret": {
             "type": "string",
-            "description": "Optional — server generates one if omitted.",
+            "description": "Optional \u2014 server generates one if omitted.",
             "nullable": true
           },
           "events": {
@@ -4625,7 +7958,7 @@
           },
           "secret": {
             "type": "string",
-            "description": "Returned once at registration. Store it — the server will not show it again.",
+            "description": "Returned once at registration. Store it \u2014 the server will not show it again.",
             "nullable": true
           },
           "events": {
@@ -4669,7 +8002,7 @@
   },
   "security": [
     {
-      "Bearer": [ ]
+      "Bearer": []
     }
   ]
 }

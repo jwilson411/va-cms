@@ -28,30 +28,31 @@ All database operations go through stored procedures. No ad-hoc SQL from the app
 
 The application service account (`vacms_app`) has **only** `EXECUTE` permission on stored procedures. It cannot directly `SELECT`, `INSERT`, `UPDATE`, or `DELETE` any table.
 
+Login creation and password material live outside the migration set (#157): `infra/sql/provision-logins.sql` creates
+`vacms_app` and `vacms_readonly` with pipeline-supplied SQLCMD variables and `CHECK_POLICY = ON`, and is what
+`vacms db provision-logins` runs. `migrations/V003__security_model.sql` only maps the logins to database users and
+applies the grants (skipping a login that has not been provisioned yet):
+
 ```sql
--- migrations/V003__security_model.sql
+-- migrations/V003__security_model.sql (users + grants only)
+IF EXISTS (SELECT 1 FROM sys.server_principals WHERE name = N'vacms_app')
+   AND NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'vacms_app')
+    CREATE USER [vacms_app] FOR LOGIN [vacms_app];
 
--- Application login (password set via deployment secret)
-CREATE LOGIN [vacms_app] WITH PASSWORD = N'$(VacmsAppPassword)';
-USE [VACMS];
-CREATE USER [vacms_app] FOR LOGIN [vacms_app];
-
--- Grant EXECUTE on all SPs in the dbo schema only
-GRANT EXECUTE ON SCHEMA::dbo TO [vacms_app];
-
--- Explicitly deny direct table access
+GRANT EXECUTE ON SCHEMA::dbo TO [vacms_app];                    -- every SP, including future ones
 DENY SELECT, INSERT, UPDATE, DELETE ON SCHEMA::dbo TO [vacms_app];
+DENY UPDATE, DELETE ON dbo.AuditLog TO [vacms_app];             -- belt and braces for audit rows
 
--- AuditLog: app can INSERT via SP, but the SP runs as a higher-privilege user
--- The SP itself is signed / uses EXECUTE AS to write audit rows
--- This prevents even accidental UPDATE/DELETE of audit data by the app
-
--- Read-only reporting login (for analytics dashboards, exports)
-CREATE LOGIN [vacms_readonly] WITH PASSWORD = N'$(VacmsReadonlyPassword)';
-CREATE USER [vacms_readonly] FOR LOGIN [vacms_readonly];
+CREATE USER [vacms_readonly] FOR LOGIN [vacms_readonly];        -- same guard as above
 GRANT SELECT ON SCHEMA::dbo TO [vacms_readonly];
 DENY INSERT, UPDATE, DELETE ON SCHEMA::dbo TO [vacms_readonly];
 ```
+
+Because `vacms_app` cannot read `dbo.SchemaVersions`, `usp_Migrations_ListApplied` (V042) exposes the DbUp journal
+so the API can verify at startup that no migration is pending. Migrations themselves are applied by
+`vacms db migrate` under the deployment account; see DEPLOYMENT.md. `SecurityModelTests` prove the model against a
+fresh container: direct `SELECT` on `[User]`, `AuditLog`, `SchemaVersions` and `SiteSetting` is denied, `EXECUTE`
+works, and `vacms_readonly` can read but not write.
 
 ---
 

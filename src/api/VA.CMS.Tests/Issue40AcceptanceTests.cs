@@ -13,7 +13,7 @@ namespace VA.CMS.Tests;
 ///
 /// Acceptance criteria:
 ///   AC1: POST /api/v1/media/upload accepts multipart file.
-///   AC2: Storage backend selected by config: local, unc, azure_blob.
+///   AC2: Storage backend selected by config: local, unc (on-prem only).
 ///   AC3: File stored outside web root.
 ///   AC4: File extension validated against MIME allow-list (BRD FR-SECURITY-06).
 ///   AC5: MediaAsset row created with path, MIME, size, dimensions.
@@ -63,7 +63,6 @@ public class Issue40AcceptanceTests(DatabaseFixture fixture)
     [Theory]
     [InlineData("local")]
     [InlineData("unc")]
-    [InlineData("azure_blob")]
     public void StorageOptions_BackendName_RoundTrips(string backend)
     {
         var opts = new StorageOptions { Backend = backend };
@@ -208,23 +207,20 @@ public class Issue40AcceptanceTests(DatabaseFixture fixture)
         Assert.NotNull(error);
     }
 
-    // ── AC2: AzureBlob backend (stub) returns NotImplemented error ────────────
+    // ── On-prem only: unsupported backends are refused by option validation ──
 
     [Fact]
-    public async Task Upload_AzureBlobBackend_ReturnsNotImplementedError()
+    public void StorageOptions_Rejects_Unsupported_Backends_And_Missing_Roots()
     {
-        var userId  = await SeedUserAsync();
-        var azure   = new AzureBlobStorageBackend(new StorageOptions());
-        var service = new MediaUploadService(azure, AssetRepo(), new NoOpImageProcessingService(), new NoOpVirusScanService(), new MediaExtendedRepository(fixture.CreateDb()));
-
-        var pngBytes = MinimalPng();
-        var file     = MakeFormFile(pngBytes, "img.png", "image/png");
-
-        var (asset, error) = await service.UploadAsync(file, userId);
-
-        Assert.Null(asset);
-        Assert.NotNull(error);
-        Assert.Contains("not yet implemented", error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("on-prem", new StorageOptions { Backend = "azure_blob" }.Validate());
+        Assert.Contains("on-prem", new StorageOptions { Backend = "s3" }.Validate());
+        Assert.Contains("UncRootPath", new StorageOptions { Backend = "unc" }.Validate());
+        Assert.Contains("not a UNC path", new StorageOptions { Backend = "unc", UncRootPath = "D:\\share" }.Validate());
+        Assert.Null(new StorageOptions { Backend = "unc", UncRootPath = @"\\files\va-cms" }.Validate());
+        Assert.Null(new StorageOptions { Backend = "local", LocalRootPath = "/var/va-cms-uploads" }.Validate());
+        Assert.Contains("inside the application root",
+            new StorageOptions { Backend = "local", LocalRootPath = "/srv/app/wwwroot/files" }.Validate("/srv/app"));
+        Assert.Null(new StorageOptions { Backend = "local", LocalRootPath = "/srv/app/.uploads" }.Validate());   // Development skips the web-root check
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -278,6 +274,9 @@ internal class InMemoryStorageBackend : IStorageBackend
 
     public byte[]? GetBytes(string storagePath) =>
         _files.TryGetValue(storagePath, out var b) ? b : null;
+
+    /// <summary>Paths currently held (after deletes).</summary>
+    public IReadOnlyCollection<string> Paths => _files.Keys;
 }
 
 /// <summary>

@@ -104,7 +104,7 @@ The CMS uses AD as the identity provider. The API issues a JWT — it never stor
 | Admin State | TanStack Query v5 | https://tanstack.com/query |
 | WYSIWYG | TipTap + tiptap-markdown | https://tiptap.dev |
 | Markdown | Markdig | https://github.com/xoofx/markdig |
-| Public Site | Next.js 14 (App Router) | https://nextjs.org/docs |
+| Public Site | Next.js 16 (App Router, Turbopack) | https://nextjs.org/docs |
 | Database | SQL Server 2019+ | |
 | Auth | Microsoft.Identity.Web (AD → JWT) | |
 
@@ -459,10 +459,63 @@ DELETE /api/v1/webhooks/{id}                     Remove webhook
 
 Full OpenAPI spec: `/swagger` when running in Development, or exported to `docs/openapi.json`.
 
+## Dependencies and advisories
+
+- NuGet versions are pinned once in `src/api/Directory.Packages.props` (central package management);
+  `src/api/Directory.Build.props` turns on `NuGetAudit` (all packages, transitive included) and makes
+  NU1901–NU1904 build errors, so `dotnet restore` fails on a new advisory. Check by hand with
+  `dotnet list package --vulnerable --include-transitive`.
+- npm roots: `src/admin`, `src/public`, `tests/accessibility`. Gate with `npm audit --audit-level=high`
+  (dev tooling included — vitest 5 / vite 8 cleared the last dev-only advisories).
+- `.github/dependabot.yml` opens weekly grouped PRs for nuget, the three npm roots and GitHub Actions.
+- Public site: Next.js 16 on Turbopack (`turbopack.root` is `src/` so the shared USWDS theme resolves);
+  `params` / `searchParams` are Promises; `revalidateTag(tag, 'max')`; lint is plain `eslint .`.
+
+## CI, security scanning and branch protection
+
+**On-prem.** The workflows are written for GitHub Actions syntax (GitHub Enterprise Server runs them
+unchanged). Set the repository variable `CI_RUNNER` to your self-hosted runner label (for example
+`self-hosted,linux,docker`) — every job uses it and falls back to `ubuntu-latest` only when it is unset. Runners
+need Docker (Testcontainers and the SQL Server service container), .NET 8, Node 22 and a mirror for NuGet, npm
+and `mcr.microsoft.com` images. CodeQL requires GitHub Advanced Security; set `SAST_ENGINE=semgrep` to run
+Semgrep OSS instead. gitleaks, CycloneDX, `dotnet list package --vulnerable` and `npm audit` are plain CLIs.
+
+`ci.yml` (build/test/package + accessibility) and `security.yml` (CodeQL, advisories, gitleaks,
+SBOM) run on pull requests and pushes to `main`; `security.yml` also runs weekly. Both must be
+required status checks on `main`, with code-owner review (`.github/CODEOWNERS`). Repository
+admins apply that once with:
+
+```bash
+gh api -X PUT repos/jwilson411/va-cms/branches/main/protection --input - <<'JSON'
+{
+  "required_status_checks": { "strict": true,
+    "contexts": ["API — build, test, coverage, OpenAPI drift", "Admin SPA — typecheck, test, build",
+                 "Public site — typecheck, test, build", "CodeQL (csharp)", "CodeQL (javascript-typescript)",
+                 "Dependency advisories (NuGet + npm)", "Secret scan (gitleaks)"] },
+  "enforce_admins": true,
+  "required_pull_request_reviews": { "require_code_owner_reviews": true, "required_approving_review_count": 1 },
+  "restrictions": null
+}
+JSON
+```
+
+Regenerate the OpenAPI snapshot after changing a controller:
+`UPDATE_OPENAPI_SNAPSHOT=true dotnet test --filter OpenApiSnapshot` (in `src/api`), then commit `docs/openapi.json`.
+
 ## GraphQL
 
-Endpoint: `/api/graphql`  
-Playground: `/api/graphql/ui` (Development only)
+Endpoint: `/api/graphql` — off by default; turn on the `features.graphql` site setting.  
+Playground: `/api/graphql/ui` (Development only; introspection is also Development-only)
+
+### Audiences
+
+| Caller | `contentEntries` / `contentEntry(id)` | `mediaAsset(id)` | `mediaAssets` | Hidden fields |
+|---|---|---|---|---|
+| Anonymous | Published entries only (`status` argument is overridden inside `usp_ContentEntry_List`) | only when a Published entry references the asset (`MediaUsage`) | denied | `ownerId`, `uploadedById`, `storagePath`, `isVirusScanPassed` |
+| `Authorization: Bearer <CMS JWT>` with any role (`CanRead`) | all statuses | any asset | allowed | none |
+
+Every request is bounded: max depth 8, Hot Chocolate cost limits (2 000 field / type cost), 10 s execution timeout.
+The scheme names, limits and audience logic live in `VA.CMS.API/GraphQL/` (`GraphQLAudience`, `GraphQLLimits`).
 
 ```graphql
 # Example: fetch the 10 most recent published news articles
@@ -530,7 +583,8 @@ function verifyWebhook(payload: string, signature: string, secret: string): bool
 dotnet tool install --global VA.CMS.CLI
 
 # Commands
-vacms db migrate              # Run pending migrations
+vacms db migrate              # Apply pending migrations (deployment account; --check / --dry-run)
+vacms db provision-logins     # Create or rotate vacms_app / vacms_readonly (--app-password, --readonly-password)
 vacms db seed --demo          # Seed demo content
 vacms content-type scaffold NewsArticle  # Scaffold new type definition
 vacms migrate sharepoint --export ./sharepoint-export.zip  # Import from SharePoint

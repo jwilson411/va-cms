@@ -20,6 +20,7 @@ import '@/styles/uswds-theme.scss';
 import { UswdsHeader } from '@/components/uswds/UswdsHeader';
 import { fetchPrimaryNav } from '@/lib/cms/navigation';
 import { fetchSiteSettings } from '@/lib/cms/settings';
+import { headers } from 'next/headers';
 import { DapScript } from '@/components/analytics/DapScript';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -41,7 +42,9 @@ export default async function RootLayout({
   children: React.ReactNode;
 }): Promise<React.ReactElement> {
   // Both fall back to safe defaults on error so the page still renders.
-  const [navigation, site] = await Promise.all([fetchPrimaryNav(), fetchSiteSettings()]);
+  const [navigation, site, requestHeaders] = await Promise.all([fetchPrimaryNav(), fetchSiteSettings(), headers()]);
+  // Per-request CSP nonce from proxy.ts (#162); undefined in tests / when the proxy did not run.
+  const nonce = requestHeaders.get('x-nonce') ?? undefined;
 
   return (
     <html lang="en">
@@ -53,6 +56,7 @@ export default async function RootLayout({
           enabled={site.dapEnabled}
           agency={site.dapAgency}
           subagency={site.dapSubagency}
+          nonce={nonce}
         />
       </head>
       <body>

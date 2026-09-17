@@ -1,0 +1,11 @@
+# Code owners (#161): every change needs a review from the CMS maintainers;
+# the security-sensitive paths additionally page the same owner explicitly so
+# branch protection's "require review from Code Owners" covers them.
+*                                   @jwilson411
+
+/src/api/VA.CMS.API/Auth/           @jwilson411
+/src/api/VA.CMS.API/Program.cs      @jwilson411
+/migrations/                        @jwilson411
+/infra/                             @jwilson411
+/.github/                           @jwilson411
+/docs/SECURITY*.md                  @jwilson411

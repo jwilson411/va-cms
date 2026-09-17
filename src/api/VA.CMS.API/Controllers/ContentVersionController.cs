@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
+using VA.CMS.API.Services;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Markdown;
@@ -19,6 +20,7 @@ namespace VA.CMS.API.Controllers;
 public class ContentVersionController : ControllerBase
 {
     private readonly IContentVersionRepository _versions;
+    private readonly IMediaUsageSyncService _mediaUsageSync;
     private readonly IContentEntryRepository   _entries;
     private readonly IRbacService              _rbac;
     private readonly IMarkdownRenderer         _renderer;
@@ -27,12 +29,14 @@ public class ContentVersionController : ControllerBase
         IContentVersionRepository versions,
         IContentEntryRepository   entries,
         IRbacService              rbac,
-        IMarkdownRenderer         renderer)
+        IMarkdownRenderer         renderer,
+        IMediaUsageSyncService mediaUsageSync)
     {
         _versions = versions;
         _entries  = entries;
         _rbac     = rbac;
         _renderer = renderer;
+        _mediaUsageSync = mediaUsageSync;
     }
 
     // ── GET /api/v1/content/{entryId}/versions ────────────────────────────────
@@ -126,6 +130,7 @@ public class ContentVersionController : ControllerBase
         {
             var renderedJson = ContentController.RenderFieldsJson(targetVersion.FieldsJson, _renderer);
             await _versions.UpdateRenderedFieldsAsync(newVersionId, renderedJson);
+            await _mediaUsageSync.SyncAsync(entryId, entry.ContentTypeName, targetVersion.FieldsJson);
         }
 
         return Ok(new ContentVersionRestoreResponse(newVersionId));

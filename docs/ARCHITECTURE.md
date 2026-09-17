@@ -46,8 +46,8 @@
           │                 │                       │
  ┌────────▼──────┐ ┌───────▼────────┐ ┌──────────▼──────────┐
  │  SQL Server   │ │  File Storage  │ │  Email (SMTP)        │
- │  2019+        │ │  Local / UNC   │ │  Exchange / EXO      │
- │  (Primary DB) │ │  / Azure Blob  │ │                      │
+ │  2019+        │ │  Local / UNC   │ │  Exchange (on-prem)  │
+ │  (Primary DB) │ │  (on-prem)     │ │                      │
  └───────────────┘ └────────────────┘ └─────────────────────┘
 ```
 
@@ -221,7 +221,7 @@ HTML streamed to browser (SSR) or served from ISR cache
                             │
                     ┌───────▼──────────────┐
                     │  File Storage         │
-                    │  (UNC Share or        │
-                    │   Azure Blob)         │
+                    │  (local disk or       │
+                    │   UNC share, on-prem) │
                     └───────────────────────┘
 ```

@@ -138,7 +138,6 @@ internal sealed class PublicContentTestFactory : WebApplicationFactory<Program>
         builder.UseSetting("AzureAd:TenantId",     "00000000-0000-0000-0000-000000000001");
         builder.UseSetting("AzureAd:ClientId",     "00000000-0000-0000-0000-000000000002");
         builder.UseSetting("AzureAd:ClientSecret", "test-secret");
-        builder.UseSetting("AzureAd:CallbackPath", "/api/auth/callback");
         builder.UseSetting("ConnectionStrings:DefaultConnection",
             "Server=localhost,14333;Database=VACMS_Dev;User Id=sa;Password=VaCms_Dev!2026;TrustServerCertificate=True;Connection Timeout=5;");
 

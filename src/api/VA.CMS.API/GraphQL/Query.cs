@@ -1,3 +1,6 @@
+using HotChocolate.Authorization;
+using HotChocolate.Resolvers;
+using VA.CMS.API.Auth;
 using VA.CMS.API.GraphQL.DataLoaders;
 using VA.CMS.API.GraphQL.Types;
 using VA.CMS.Infrastructure.Data.Repositories;
@@ -12,34 +15,58 @@ namespace VA.CMS.API.GraphQL;
 ///   - contentEntry(id)      — single ContentEntry by ID (via DataLoader)
 ///   - contentEntries(...)   — paginated list with status/type filters
 ///   - mediaAsset(id)        — single MediaAsset by ID (via DataLoader)
-///   - mediaAssets(...)      — paginated list
+///   - mediaAssets(...)      — paginated list (CanRead only)
 ///   - navigationMenu(handle)— NavigationMenu by handle
 ///   - taxonomyTerms(handle) — TaxonomyTerm tree for a taxonomy handle
+///
+/// Audience (#156): anonymous callers are limited to Published content — the
+/// status filter is forced at the stored-procedure level — and may read a media
+/// asset only when published content references it. Callers with CanRead see
+/// everything. See <see cref="IGraphQLAudience"/>.
 /// </summary>
 public class Query
 {
     // ─── ContentEntry ─────────────────────────────────────────────────────────
 
-    /// <summary>Fetch a single content entry by its internal ID.</summary>
+    /// <summary>Fetch a single content entry by its internal ID. Anonymous callers only see Published entries.</summary>
     public async Task<ContentEntryType?> GetContentEntryAsync(
         long id,
         ContentEntryByIdDataLoader dataLoader,
+        IResolverContext context,
+        [Service] IGraphQLAudience audience,
         CancellationToken ct)
-        => await dataLoader.LoadAsync(id, ct);
+    {
+        var entry = await dataLoader.LoadAsync(id, ct);
+        if (entry is null)
+            return null;
+
+        if (!IsPublished(entry.Status) && !await audience.CanReadAllAsync(context))
+            return null;
+
+        return entry;
+    }
 
     /// <summary>
     /// List content entries with optional status/type filters.
     /// Returns up to <paramref name="first"/> rows (default 25, max api.maxPageSize).
+    /// Anonymous callers always get <c>status: "Published"</c> regardless of the argument.
     /// </summary>
     public async Task<IReadOnlyList<ContentEntryType>> GetContentEntriesAsync(
         [Service] IContentEntryRepository repo,
         [Service] ISiteSettingsService settings,
+        [Service] IGraphQLAudience audience,
+        IResolverContext context,
         string? status = null,
         long?   contentTypeId = null,
         int     first  = 25,
         int     page   = 1,
         CancellationToken ct = default)
     {
+        // The public audience is pinned to Published inside usp_ContentEntry_List —
+        // never filtered after the fact in C#.
+        if (!await audience.CanReadAllAsync(context))
+            status = PublishedStatus;
+
         var pageSize = settings.ClampPageSize(first);
         var result   = await repo.ListAsync(page, pageSize, status, contentTypeId);
 
@@ -50,17 +77,34 @@ public class Query
 
     // ─── MediaAsset ───────────────────────────────────────────────────────────
 
-    /// <summary>Fetch a single media asset by its internal ID.</summary>
+    /// <summary>
+    /// Fetch a single media asset by its internal ID. Anonymous callers only get
+    /// assets that published content references (MediaUsage rows with a Published entry).
+    /// </summary>
     public async Task<MediaAssetType?> GetMediaAssetAsync(
         long id,
         MediaAssetByIdDataLoader dataLoader,
+        IResolverContext context,
+        [Service] IGraphQLAudience audience,
+        [Service] IMediaExtendedRepository usageRepo,
         CancellationToken ct)
-        => await dataLoader.LoadAsync(id, ct);
+    {
+        var asset = await dataLoader.LoadAsync(id, ct);
+        if (asset is null)
+            return null;
+
+        if (await audience.CanReadAllAsync(context))
+            return asset;
+
+        var usage = await usageRepo.GetUsageAsync(id);
+        return usage.Any(u => IsPublished(u.Status)) ? asset : null;
+    }
 
     /// <summary>
-    /// List media assets.
+    /// List media assets (CanRead only — the public site never needs to enumerate uploads).
     /// Optionally filter by MIME type prefix (e.g. "image/") or a search term.
     /// </summary>
+    [Authorize(Policy = CmsRoles.Policies.CanRead)]
     public async Task<IReadOnlyList<MediaAssetType>> GetMediaAssetsAsync(
         [Service] IMediaAssetRepository repo,
         [Service] ISiteSettingsService settings,
@@ -125,4 +169,11 @@ public class Query
             })
             .ToList();
     }
+
+    // ─── helpers ──────────────────────────────────────────────────────────────
+
+    private const string PublishedStatus = "Published";
+
+    private static bool IsPublished(string status)
+        => string.Equals(status, PublishedStatus, StringComparison.OrdinalIgnoreCase);
 }

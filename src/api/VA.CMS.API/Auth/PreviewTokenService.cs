@@ -34,6 +34,7 @@ public sealed class PreviewTokenService : IPreviewTokenService
     private readonly byte[] _keyBytes;
     private readonly ISiteSettingsService _settings;
 
+    /// <param name="jwtOptions">The signing key the preview subkey is derived from.</param>
     /// <param name="settings">Source of auth.previewTokenMinutes (issue #146); code default when null.</param>
     public PreviewTokenService(JwtOptions jwtOptions, ISiteSettingsService? settings = null)
     {

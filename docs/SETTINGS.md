@@ -14,8 +14,12 @@ public site without a deploy.
 | `Auth:Mode`, `AzureAd:*`, `Auth:DevBypassAllowedUsers` | Chooses the auth pipeline at startup; secrets |
 | `Jwt:SigningKey`, `Jwt:Issuer`, `Jwt:Audience` | Secret; validation parameters are built at startup |
 | `Storage:*` (backend, paths, Azure connection string) | Switching backends at runtime would orphan files; secrets |
+| `Media:Scanner:*` (`Mode` = Disabled \| Icap \| ClamAv, `Host`, `Port`, `ServicePath`, `TimeoutSeconds`, `FailClosed`) | Malware-engine wiring (#159). `Disabled` is refused in Production; `FailClosed` defaults to true outside Development so an unreachable engine rejects uploads with 503 instead of storing unscanned files |
 | `Email:Smtp:*` (host, port, security, username, password) | SMTP relay address and credentials; secrets bound to the deployment (issue #39). The switch, sender and link origin are `notifications.*` settings below. |
-| `SKIP_MIGRATIONS`, `WINDOWS_AUTH_FAKE_NEGOTIATE` | Test/host bootstrap switches |
+| `Database:MigrateOnStartup` | Whether the API applies migrations itself at startup (default: Development only). Off, it only verifies nothing is pending and exits 1 otherwise — deployments run `vacms db migrate` with an elevated login |
+| `AllowedHosts`, `ForwardedHeaders:*`, `Cors:AllowedOrigins` | Host-header allow-list, trusted proxies and cross-origin front ends — evaluated before any request is served (#162) |
+| Next.js: `CSP_REPORT_ONLY` | The public site's proxy sets headers per request without a settings lookup, so its report-only switch is an env var |
+| `SKIP_MIGRATIONS`, `WINDOWS_AUTH_FAKE_NEGOTIATE`, `AZUREAD_FAKE_OIDC` | Test/host bootstrap switches |
 | Next.js: `NEXT_PUBLIC_API_URL`, `CMS_API_URL`, `REVALIDATE_SECRET`, `NEXT_PUBLIC_SITE_URL` | Needed to find the API / verify webhooks before settings can be read |
 
 Everything else is a site setting.
@@ -93,7 +97,7 @@ Defaults are the values that were previously hard-coded.
 ### Features
 | Key | Default | Scope | Effect when off |
 |---|---|---|---|
-| `features.graphql` | true | Server | `/api/graphql` → 404 |
+| `features.graphql` | **false** | Server | `/api/graphql` → 404 (on: anonymous = Published only, CanRead JWT = full surface — see DEVELOPER_GUIDE) |
 | `features.swaggerUi` | false | Server | `/swagger` → 404 outside Development (always on in Development) |
 | `features.webhooks` | true | Server | `IWebhookBackgroundDispatcher.Enqueue` is a no-op |
 | `features.scheduledPublishing` | true | Server | `ScheduledPublishWorker` skips its sweep |
@@ -107,7 +111,7 @@ Defaults are the values that were previously hard-coded.
 | Key | Default | Scope |
 |---|---|---|
 | `media.maxUploadBytes` | 104857600 (100 MB) | Admin — request body limit and service check for `POST /api/v1/media/upload` |
-| `media.allowedMimeTypes` | the BRD FR-SECURITY-06 list (JSON array) | Admin |
+| `media.allowedMimeTypes` | the BRD FR-SECURITY-06 list (JSON array) — `image/svg+xml` is **not** in it (#158); add it only if SVG is required: uploads are then sanitized (scripts, event handlers, foreignObject, external references stripped) and served with `Content-Security-Policy: sandbox; default-src 'none'`. Every upload's bytes must also match the declared type and extension. | Admin |
 | `media.imageMaxWidthPx` | 1920 | Server |
 | `media.webpQuality` | 80 | Server |
 
@@ -117,6 +121,19 @@ Defaults are the values that were previously hard-coded.
 | `auth.accessTokenMinutes` | 15 |
 | `auth.refreshTokenHours` | 8 (also the `cms_rt` cookie Max-Age) |
 | `auth.previewTokenMinutes` | 60 |
+| `auth.azureAdSignOut` | true — logout also sends the browser to the Azure AD end-session endpoint (`GET /api/auth/signout`); off clears only the CMS cookies |
+| `auth.autoProvisionUsers` | false — unknown AzureAd/WindowsAuth identities are rejected (`/login?error=not_provisioned` / 403) until an administrator creates the user row; DevBypass is governed by `DevBypassAllowedUsers` instead |
+
+### Security (Server)
+| Key | Default |
+|---|---|
+| `security.cspReportOnly` | true — the API's Content-Security-Policy is sent as Report-Only (violations logged via `POST /api/v1/security/csp-report`); off enforces it |
+| `security.hstsPreload` | false — adds `preload` to Strict-Transport-Security once the host is submitted to hstspreload.org |
+
+### Navigation (Server)
+| Key | Default |
+|---|---|
+| `redirects.allowedExternalHosts` | `[]` — host names (exact, or `*.example.gov`) a redirect `ToPath` may point at over https; empty means site-relative targets only |
 
 ### Workflow
 | Key | Default | Scope |

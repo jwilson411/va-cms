@@ -3,40 +3,22 @@ using Microsoft.Data.SqlClient;
 namespace VA.CMS.Tests;
 
 /// <summary>
-/// Integration tests for issue #73 — V003 security model migration.
+/// Integration tests for issue #73 — V003 security model — extended by #157.
 ///
-/// These tests verify that:
-/// 1. Connecting as the vacms_app service account and issuing a direct SELECT on
-///    ContentEntry fails with a permissions error (NFR-DB-01, NFR-DB-04).
-/// 2. Connecting as the vacms_app service account and calling the stored procedure
-///    usp_ContentEntry_GetById succeeds (EXECUTE permission is granted).
+/// The fixture provisions the logins with infra/sql/provision-logins.sql (test
+/// passwords, CHECK_POLICY = ON) and then runs the migration set; V003 maps the
+/// logins to database users and applies the EXECUTE-only / SELECT-only grants.
 ///
-/// The test fixture (DatabaseFixture) runs all migrations including V003 against a
-/// fresh SQL Server TestContainers instance, so the logins, users, and permission
-/// grants are already applied when these tests run.
+/// 1. vacms_app: direct SELECT on a table is denied; EXECUTE on procedures works.
+/// 2. vacms_app: cannot read the DbUp journal directly but can call
+///    usp_Migrations_ListApplied, which the API's startup check relies on.
+/// 3. vacms_readonly: SELECT works, INSERT is denied.
+/// 4. No migration script carries login or password material.
 /// </summary>
 [Collection("Database")]
 public class SecurityModelTests(DatabaseFixture fixture)
 {
-    // vacms_app dev password matches the literal in V003__security_model.sql.
-    // This is intentionally a known dev-only credential — production uses a
-    // deployment-managed secret set via ALTER LOGIN after migration.
-    private const string AppPassword = "VaCms_App!Dev2026";
-
-    /// <summary>
-    /// Builds a connection string for the vacms_app login against the same
-    /// SQL Server instance and database that the test fixture uses.
-    /// </summary>
-    private string AppConnectionString()
-    {
-        var builder = new SqlConnectionStringBuilder(fixture.ConnectionString)
-        {
-            UserID = "vacms_app",
-            Password = AppPassword,
-            IntegratedSecurity = false,
-        };
-        return builder.ConnectionString;
-    }
+    private string AppConnectionString() => fixture.AppConnectionString();
 
     /// <summary>
     /// AC: calling SELECT * FROM ContentEntry with the app connection string
@@ -82,5 +64,102 @@ public class SecurityModelTests(DatabaseFixture fixture)
         });
 
         Assert.Null(exception);
+    }
+
+    [Theory]
+    [InlineData("SELECT TOP 1 * FROM [User]")]
+    [InlineData("SELECT TOP 1 * FROM AuditLog")]
+    [InlineData("SELECT TOP 1 * FROM SchemaVersions")]
+    [InlineData("SELECT TOP 1 * FROM SiteSetting")]
+    public async Task AppLogin_Cannot_Select_Any_Table_Directly(string sql)
+    {
+        await using var conn = new SqlConnection(AppConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+
+        var ex = await Assert.ThrowsAsync<SqlException>(() => cmd.ExecuteReaderAsync());
+
+        Assert.Equal(229, ex.Number);
+    }
+
+    [Fact]
+    public async Task AppLogin_Cannot_Update_Or_Delete_AuditLog()
+    {
+        await using var conn = new SqlConnection(AppConnectionString());
+        await conn.OpenAsync();
+
+        foreach (var sql in new[] { "DELETE FROM AuditLog WHERE Id = -1", "UPDATE AuditLog SET Action = 'x' WHERE Id = -1" })
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            var ex = await Assert.ThrowsAsync<SqlException>(() => cmd.ExecuteNonQueryAsync());
+            Assert.Equal(229, ex.Number);
+        }
+    }
+
+    [Fact]
+    public async Task AppLogin_Can_Read_Migration_Status_Through_Procedure()
+    {
+        await using var conn = new SqlConnection(AppConnectionString());
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Migrations_ListApplied";
+
+        var applied = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            applied.Add(reader.GetString(0));
+
+        Assert.Contains("V003__security_model.sql", applied);
+        Assert.Contains("V042__migration_status_sp.sql", applied);
+    }
+
+    [Fact]
+    public async Task ReadonlyLogin_Can_Select_But_Not_Write()
+    {
+        await using var conn = new SqlConnection(fixture.ReadonlyConnectionString());
+        await conn.OpenAsync();
+
+        await using (var select = conn.CreateCommand())
+        {
+            select.CommandText = "SELECT COUNT(*) FROM ContentEntry";
+            Assert.NotNull(await select.ExecuteScalarAsync());
+        }
+
+        await using var delete = conn.CreateCommand();
+        delete.CommandText = "DELETE FROM SiteSetting WHERE Id = -1";
+        var ex = await Assert.ThrowsAsync<SqlException>(() => delete.ExecuteNonQueryAsync());
+        Assert.Equal(229, ex.Number);
+    }
+
+    [Fact]
+    public async Task Logins_Are_Policy_Checked()
+    {
+        await using var conn = new SqlConnection(fixture.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT name, is_policy_checked FROM sys.sql_logins WHERE name IN ('vacms_app', 'vacms_readonly')";
+
+        var rows = new Dictionary<string, bool>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            rows[reader.GetString(0)] = reader.GetBoolean(1);
+
+        Assert.True(rows["vacms_app"]);
+        Assert.True(rows["vacms_readonly"]);
+    }
+
+    [Fact]
+    public void No_Migration_Script_Contains_Login_Or_Password_Material()
+    {
+        foreach (var file in Directory.GetFiles(fixture.MigrationsPath, "*.sql"))
+        {
+            // Strip comment lines so prose about the policy does not trip the check.
+            var code = string.Join('\n', File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith("--", StringComparison.Ordinal)));
+            Assert.DoesNotContain("CREATE LOGIN", code, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("ALTER LOGIN",  code, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("PASSWORD",     code, StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

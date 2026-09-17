@@ -1,0 +1,150 @@
+# Security scanning (#161, BRD NFR-SEC-01/02): SAST, dependency advisories,
+# secret scanning and CycloneDX SBOMs. Runs on pull requests, on pushes to main
+# and weekly; SBOMs are the artifacts handed to the security assessor.
+#
+# On-prem: jobs run on the CI_RUNNER label (see ci.yml). gitleaks, CycloneDX and
+# the NuGet/npm audits are plain CLIs and run anywhere the runner can reach a
+# package mirror. CodeQL needs GitHub Advanced Security (available on GitHub
+# Enterprise Server); set the SAST_ENGINE variable to "semgrep" to run Semgrep
+# OSS instead when GHAS is not licensed.
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"   # Mondays 06:17 UTC — catches advisories published since the last push
+
+permissions:
+  contents: read
+  security-events: write   # CodeQL results → Security tab
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    if: ${{ vars.SAST_ENGINE != 'semgrep' }}
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [csharp, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+
+      - uses: actions/setup-dotnet@v4
+        if: matrix.language == 'csharp'
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build for CodeQL (C#)
+        if: matrix.language == 'csharp'
+        run: dotnet build src/api/VA.CMS.sln -c Release
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  semgrep:
+    name: Semgrep OSS SAST (when SAST_ENGINE=semgrep)
+    if: ${{ vars.SAST_ENGINE == 'semgrep' }}
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep (C#, TypeScript, secrets rulesets; SARIF artifact)
+        run: semgrep scan --config p/csharp --config p/typescript --config p/secrets --error --sarif --output semgrep.sarif .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+
+  dependencies:
+    name: Dependency advisories (NuGet + npm)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: dotnet list package --vulnerable (any severity fails)
+        working-directory: src/api
+        run: |
+          dotnet restore
+          dotnet list package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -q "has the following vulnerable packages" vulnerable.txt; then
+            echo "::error::Vulnerable NuGet packages found — bump them in src/api/Directory.Packages.props"
+            exit 1
+          fi
+
+      - name: npm audit --audit-level=high (all three roots)
+        run: |
+          for dir in src/admin src/public tests/accessibility; do
+            echo "== $dir"
+            (cd "$dir" && npm ci --ignore-scripts && npm audit --audit-level=high)
+          done
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # scan history, not just the checkout
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sbom:
+    name: SBOM (CycloneDX) — .NET and each npm root
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: .NET SBOM
+        run: |
+          dotnet tool install --global CycloneDX
+          dotnet restore src/api/VA.CMS.sln
+          dotnet CycloneDX src/api/VA.CMS.sln --output sbom --filename va-cms-api.cdx.json --json
+
+      - name: npm SBOMs
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/sbom"
+          for dir in src/admin src/public tests/accessibility; do
+            name=$(basename "$dir")
+            (cd "$dir" && npm ci --ignore-scripts \
+              && npx --yes @cyclonedx/cyclonedx-npm --output-format JSON --omit dev \
+                   --output-file "$GITHUB_WORKSPACE/sbom/va-cms-$name.cdx.json")
+          done
+          ls -la sbom
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom/*.cdx.json
+          retention-days: 90

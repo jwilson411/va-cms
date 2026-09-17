@@ -16,6 +16,7 @@ import { useMediaAssets, useMediaDetail, useUpdateMediaMetadata } from './useMed
 import { MediaUploadForm } from './MediaUploadForm';
 import type { MediaAssetSummary, MediaDetailDto } from './mediaTypes';
 import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
+import { AuthedImage } from './AuthedImage';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -411,10 +412,9 @@ function MediaCard({ asset, isSelected, onSelect }: MediaCardProps): JSX.Element
 
 function AssetThumbnail({ asset, size }: { asset: MediaAssetSummary; size: number }): JSX.Element {
   if (asset.mimeType.startsWith('image/')) {
-    const src = asset.webPStoragePath ?? asset.storagePath;
     return (
-      <img
-        src={`/api/v1/media/serve/${asset.id}`}
+      <AuthedImage
+        assetId={asset.id}
         alt={asset.altText ?? ''}
         width={size}
         height={size}
@@ -543,8 +543,8 @@ function MediaDetailPanel({
             data-testid="media-detail-preview"
           >
             {detail.mimeType.startsWith('image/') ? (
-              <img
-                src={`/api/v1/media/serve/${detail.id}`}
+              <AuthedImage
+                assetId={detail.id}
                 alt={detail.altText ?? ''}
                 style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain' }}
               />

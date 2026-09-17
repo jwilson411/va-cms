@@ -38,10 +38,17 @@ async function fetchDevUsers(): Promise<string[]> {
   }
 }
 
+/** Messages for the ?error= codes the API's login callback can redirect back with (#155). */
+const LOGIN_ERRORS: Record<string, string> = {
+  not_provisioned:
+    'Your VA account is not set up in the CMS. Contact your site administrator to be added, then sign in again.',
+};
+
 export function LoginPage(): JSX.Element {
   const { isAuthenticated, loading, login, devLogin } = useAuth();
   const [devUsers, setDevUsers] = useState<string[]>([]);
   const [devError, setDevError] = useState<string | null>(null);
+  const loginError = LOGIN_ERRORS[new URLSearchParams(window.location.search).get('error') ?? ''] ?? null;
 
   // Probe for DevBypass mode once; the AD button is always rendered as the fallback.
   useEffect(() => {
@@ -112,6 +119,13 @@ export function LoginPage(): JSX.Element {
             </div>
 
             <h1 className="margin-top-4">VA CMS Admin</h1>
+            {loginError && (
+              <div className="usa-alert usa-alert--error margin-bottom-3" role="alert">
+                <div className="usa-alert__body">
+                  <p className="usa-alert__text">{loginError}</p>
+                </div>
+              </div>
+            )}
             <p className="usa-intro">
               Sign in with your VA network account to access the content management
               system.

@@ -135,7 +135,7 @@ public class DevBypassController : ControllerBase
         return Ok(new
         {
             accessToken,
-            expiresIn = 900,
+            expiresIn = (int)_jwt.AccessTokenLifetime.TotalSeconds,
             tokenType = "Bearer",
         });
     }

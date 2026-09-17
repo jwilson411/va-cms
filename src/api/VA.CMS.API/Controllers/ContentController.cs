@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
+using VA.CMS.API.Services;
 using VA.CMS.API.Webhooks;
 using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.Data.Pocos;
@@ -42,6 +43,7 @@ public class ContentController : ControllerBase
     private readonly IFieldTypeRegistry _registry;
     private readonly IWebhookBackgroundDispatcher _webhooks;
     private readonly IWorkflowNotifier _notifier;
+    private readonly IMediaUsageSyncService _mediaUsageSync;
 
     public ContentController(
         IContentEntryRepository entries,
@@ -53,7 +55,8 @@ public class ContentController : ControllerBase
         IContentTypeRepository contentTypes,
         IFieldTypeRegistry registry,
         IWebhookBackgroundDispatcher webhooks,
-        IWorkflowNotifier notifier)
+        IWorkflowNotifier notifier,
+        IMediaUsageSyncService mediaUsageSync)
     {
         _entries      = entries;
         _rbac         = rbac;
@@ -65,6 +68,7 @@ public class ContentController : ControllerBase
         _registry     = registry;
         _webhooks     = webhooks;
         _notifier     = notifier;
+        _mediaUsageSync = mediaUsageSync;
     }
 
     /// <summary>Payload for content.* webhook events (issue #54).</summary>
@@ -192,6 +196,9 @@ public class ContentController : ControllerBase
             ChangeNote     = "Created",
         });
 
+        var createdTypeName = request.ContentTypeName ?? (await _entries.GetByIdAsync(id))?.ContentTypeName;
+        await _mediaUsageSync.SyncAsync(id, createdTypeName, request.FieldsJson);
+
         return CreatedAtAction(nameof(GetById), new { id }, new ContentEntryCreateResponse(id));
     }
 
@@ -275,6 +282,8 @@ public class ContentController : ControllerBase
                 AuthorId       = _rbac.GetUserId(User) ?? 0,
                 ChangeNote     = request.ChangeNote,
             });
+
+            await _mediaUsageSync.SyncAsync(id, entry.ContentTypeName, request.FieldsJson);
         }
 
         await _entries.UpdateAsync(entry);   // bumps UpdatedAt

@@ -29,6 +29,13 @@ public sealed class FakeNegotiateHandler : AuthenticationHandler<AuthenticationS
     /// </summary>
     public const string TestUpnHeader = "X-Test-Windows-Upn";
 
+    /// <summary>
+    /// Test-only HTTP header. Comma-separated group SIDs to emit as
+    /// <see cref="ClaimTypes.GroupSid"/> claims, as the Windows Negotiate
+    /// handler does for the account's token groups.
+    /// </summary>
+    public const string TestGroupSidsHeader = "X-Test-Windows-Groups";
+
     public FakeNegotiateHandler(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger,
@@ -45,11 +52,17 @@ public sealed class FakeNegotiateHandler : AuthenticationHandler<AuthenticationS
             return Task.FromResult(AuthenticateResult.NoResult());
 
         // Build a ClaimsPrincipal that looks like what IIS Negotiate would produce
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(ClaimTypes.Name, upn),
             new Claim(ClaimTypes.NameIdentifier, upn),
         };
+        if (Request.Headers.TryGetValue(TestGroupSidsHeader, out var groupValues))
+        {
+            claims.AddRange(groupValues.ToString()
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(sid => new Claim(ClaimTypes.GroupSid, sid)));
+        }
         var identity  = new ClaimsIdentity(claims, NegotiateDefaults.AuthenticationScheme);
         var principal = new ClaimsPrincipal(identity);
         var ticket    = new AuthenticationTicket(principal, NegotiateDefaults.AuthenticationScheme);

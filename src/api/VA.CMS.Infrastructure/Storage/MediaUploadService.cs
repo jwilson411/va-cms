@@ -13,14 +13,43 @@ namespace VA.CMS.Infrastructure.Storage;
 /// generates a WebP variant stored alongside the original.
 /// BRD FR-MEDIA-01, FR-MEDIA-02, FR-MEDIA-04, FR-MEDIA-07, FR-SECURITY-06.
 /// </summary>
+/// <summary>Why an upload was refused; lets the controller pick the status code (#159).</summary>
+public enum MediaUploadFailure
+{
+    /// <summary>Bad input: type, size, content mismatch — 400.</summary>
+    Validation,
+    /// <summary>The virus scanner found a threat — 400 (file not stored).</summary>
+    Infected,
+    /// <summary>The virus scanner could not be reached and the deployment fails closed — 503 (file not stored).</summary>
+    ScannerUnavailable,
+    /// <summary>Storage backend error — 400 as before.</summary>
+    Storage,
+}
+
+/// <summary>
+/// Outcome of <see cref="IMediaUploadService.UploadAsync"/>. Deconstructs to the
+/// historical (Asset, Error) pair so existing callers and tests are unchanged.
+/// </summary>
+public sealed record MediaUploadOutcome(MediaAsset? Asset, string? Error, MediaUploadFailure? Failure)
+{
+    public static MediaUploadOutcome Success(MediaAsset asset) => new(asset, null, null);
+    public static MediaUploadOutcome Fail(MediaUploadFailure failure, string error) => new(null, error, failure);
+
+    public void Deconstruct(out MediaAsset? asset, out string? error)
+    {
+        asset = Asset;
+        error = Error;
+    }
+}
+
 public interface IMediaUploadService
 {
     /// <summary>
     /// Validate, store, scan, and record a file upload.
     /// Returns the created MediaAsset on success.
-    /// Returns an error message string on validation, storage, or scan failure.
+    /// Returns an error message (and failure kind) on validation, storage, or scan failure.
     /// </summary>
-    Task<(MediaAsset? Asset, string? Error)> UploadAsync(
+    Task<MediaUploadOutcome> UploadAsync(
         IFormFile file,
         long uploadedById,
         CancellationToken ct = default);
@@ -34,6 +63,8 @@ public class MediaUploadService : IMediaUploadService
     private readonly IVirusScanService _virusScan;
     private readonly IMediaExtendedRepository _mediaExtended;
     private readonly ISiteSettingsService _settings;
+    private readonly bool _failClosed;
+    private readonly IAuditLogRepository? _audit;
 
     public MediaUploadService(
         IStorageBackend storage,
@@ -41,7 +72,9 @@ public class MediaUploadService : IMediaUploadService
         IImageProcessingService imaging,
         IVirusScanService virusScan,
         IMediaExtendedRepository mediaExtended,
-        ISiteSettingsService? settings = null)
+        ISiteSettingsService? settings = null,
+        bool failClosed = true,
+        IAuditLogRepository? audit = null)
     {
         _storage       = storage;
         _assets        = assets;
@@ -50,34 +83,64 @@ public class MediaUploadService : IMediaUploadService
         _mediaExtended = mediaExtended;
         // Limits and the MIME allow-list are site settings (issue #145); code defaults when not supplied.
         _settings      = settings ?? StaticSiteSettings.Defaults;
+        // Media:Scanner:FailClosed (#159): reject uploads when the engine cannot be reached.
+        _failClosed    = failClosed;
+        _audit         = audit;
     }
 
-    public async Task<(MediaAsset? Asset, string? Error)> UploadAsync(
+    public async Task<MediaUploadOutcome> UploadAsync(
         IFormFile file,
         long uploadedById,
         CancellationToken ct = default)
     {
         // 1. Validate file is not empty and within the configured size limit (media.maxUploadBytes)
         if (file.Length == 0)
-            return (null, "File must not be empty.");
+            return MediaUploadOutcome.Fail(MediaUploadFailure.Validation, "File must not be empty.");
 
         var maxBytes = _settings.GetLong(SiteSettingKeys.MediaMaxUploadBytes);
         if (maxBytes > 0 && file.Length > maxBytes)
-            return (null, $"File is {file.Length:N0} bytes; the maximum upload size is {maxBytes:N0} bytes.");
+            return MediaUploadOutcome.Fail(MediaUploadFailure.Validation, $"File is {file.Length:N0} bytes; the maximum upload size is {maxBytes:N0} bytes.");
 
-        // 2. Resolve MIME — prefer declared ContentType but normalise "image/jpg" → "image/jpeg"
+        // 2. Resolve MIME — the declared ContentType is a claim, normalised ("image/jpg" → "image/jpeg")
         var mimeType = NormaliseMime(file.ContentType);
 
         // 3. MIME allow-list check (BRD FR-SECURITY-06) against media.allowedMimeTypes
         var allowed = _settings.GetStringList(SiteSettingKeys.MediaAllowedMimeTypes);
         if (!MimeAllowList.IsAllowed(mimeType, allowed))
-            return (null, $"File type '{mimeType}' is not permitted. " +
-                          $"Allowed types: {string.Join(", ", allowed)}.");
+            return MediaUploadOutcome.Fail(MediaUploadFailure.Validation,
+                $"File type '{mimeType}' is not permitted. Allowed types: {string.Join(", ", allowed)}.");
+
+        // 3a. The bytes must agree with the claim (#158): sniff the content and check the
+        //     extension, so a script-bearing SVG or HTML cannot arrive as "image/png".
+        var safeFileName = SanitizeFileName(file.FileName);
+        var ext          = Path.GetExtension(safeFileName).TrimStart('.').ToLowerInvariant();
+        IReadOnlyList<string> detected;
+        using (var sniff = file.OpenReadStream())
+            detected = MediaContentSniffer.Detect(sniff);
+
+        if (!detected.Contains(mimeType, StringComparer.OrdinalIgnoreCase))
+        {
+            var seen = detected.Count == 0 ? "an unrecognised format" : $"'{detected[0]}'";
+            return MediaUploadOutcome.Fail(MediaUploadFailure.Validation, $"File content does not match the declared type '{mimeType}' (content looks like {seen}).");
+        }
+        if (string.IsNullOrEmpty(ext) || !MediaContentSniffer.ExtensionMatches(mimeType, ext))
+            return MediaUploadOutcome.Fail(MediaUploadFailure.Validation, $"File extension '.{ext}' does not match the declared type '{mimeType}'.");
+
+        // 3b. SVG is only reachable when an administrator has added it to the allow-list;
+        //     even then active content is stripped before the file is stored.
+        byte[]? replacementBytes = null;
+        if (mimeType == "image/svg+xml")
+        {
+            using var svgStream = file.OpenReadStream();
+            var (sanitized, svgError) = SvgSanitizer.Sanitize(svgStream);
+            if (sanitized is null)
+                return MediaUploadOutcome.Fail(MediaUploadFailure.Validation, svgError!);
+            replacementBytes = sanitized;
+        }
 
         // 4. Build a safe storage path: yyyy/MM/<guid>.<ext>
         //    Using a GUID prevents enumeration; the original filename is preserved in FileName column.
-        var ext        = Path.GetExtension(file.FileName)?.TrimStart('.').ToLowerInvariant() ?? string.Empty;
-        var safeExt    = string.IsNullOrWhiteSpace(ext) ? "bin" : ext;
+        var safeExt    = ext;
         var datePath   = DateTime.UtcNow.ToString("yyyy/MM");
         var guid       = Guid.NewGuid().ToString("N");
         var uniqueName = $"{guid}.{safeExt}";
@@ -96,30 +159,45 @@ public class MediaUploadService : IMediaUploadService
         string savedPath;
         try
         {
-            savedPath = await _storage.SaveAsync(file, storagePath, ct);
+            savedPath = replacementBytes is null
+                ? await _storage.SaveAsync(file, storagePath, ct)
+                : await _storage.SaveBytesAsync(replacementBytes, storagePath, ct);
         }
         catch (Exception ex)
         {
-            return (null, $"Storage error: {ex.Message}");
+            return MediaUploadOutcome.Fail(MediaUploadFailure.Storage, $"Storage error: {ex.Message}");
         }
 
-        // 7. Virus scan (BRD FR-MEDIA-04 — Issue #45)
-        //    Scan the saved file from the storage backend by re-opening the upload stream.
-        //    If the scan fails (virus detected): record IsVirusScanPassed=0, delete from storage, reject.
-        bool scanPassed;
+        // 7. Virus scan (BRD FR-MEDIA-04 — Issue #45; fail-closed per #159 / NIST SI-3)
+        //    Scan the upload stream. Infected: delete from storage, keep an auditable
+        //    tombstone row with IsVirusScanPassed=0, reject. Engine unreachable: reject
+        //    with 503 and store nothing when failing closed; otherwise store with
+        //    IsVirusScanPassed left NULL ("not scanned") so it can be re-scanned later.
+        VirusScanResult scan;
         try
         {
             using var scanStream = file.OpenReadStream();
-            scanPassed = await _virusScan.ScanAsync(scanStream, ct);
+            scan = await _virusScan.ScanDetailedAsync(scanStream, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            await _storage.DeleteAsync(savedPath, CancellationToken.None);
+            throw;
         }
         catch (Exception ex)
         {
-            // Scan itself threw — treat as scan failure for safety
-            await _storage.DeleteAsync(savedPath, ct);
-            return (null, $"Virus scan error: {ex.Message}");
+            scan = VirusScanResult.Unavailable(ex.Message);
         }
 
-        if (!scanPassed)
+        if (scan.Verdict == VirusScanVerdict.Unavailable && _failClosed)
+        {
+            await _storage.DeleteAsync(savedPath, ct);
+            await AuditAsync(uploadedById, "VirusScanUnavailable", new { fileName = safeFileName, mimeType, detail = scan.Detail });
+            return MediaUploadOutcome.Fail(MediaUploadFailure.ScannerUnavailable,
+                "The file could not be scanned for malware because the scanning service is unavailable. Nothing was stored; try again later.");
+        }
+
+        if (scan.Verdict == VirusScanVerdict.Infected)
         {
             // File is infected: delete from storage, create the DB row with IsVirusScanPassed=0
             // so the rejection is auditable, then return error.
@@ -128,11 +206,11 @@ public class MediaUploadService : IMediaUploadService
             // Create a tombstone asset row so the rejection is auditable (IsVirusScanPassed=0).
             var rejectedAsset = new MediaAsset
             {
-                FileName       = Path.GetFileName(file.FileName),
+                FileName       = safeFileName,
                 StoragePath    = savedPath,      // path that was deleted
                 StorageBackend = _storage.BackendName,
                 MimeType       = mimeType,
-                FileSizeBytes  = file.Length,
+                FileSizeBytes  = replacementBytes?.LongLength ?? file.Length,
                 Width          = width,
                 Height         = height,
                 UploadedById   = uploadedById,
@@ -141,18 +219,20 @@ public class MediaUploadService : IMediaUploadService
             rejectedAsset.Id = rejectedId;
             await _mediaExtended.SetVirusScanResultAsync(rejectedId, false);
             rejectedAsset.IsVirusScanPassed = false;
+            await AuditAsync(uploadedById, "VirusDetected", new { mediaAssetId = rejectedId, fileName = safeFileName, threat = scan.ThreatName });
 
-            return (null, "File rejected: virus scan detected a threat. The file has not been stored.");
+            return MediaUploadOutcome.Fail(MediaUploadFailure.Infected,
+                "File rejected: virus scan detected a threat. The file has not been stored.");
         }
 
         // 8. Create MediaAsset row via stored procedure (EXEC usp_MediaAsset_Create)
         var asset = new MediaAsset
         {
-            FileName       = Path.GetFileName(file.FileName),
+            FileName       = safeFileName,
             StoragePath    = savedPath,
             StorageBackend = _storage.BackendName,
             MimeType       = mimeType,
-            FileSizeBytes  = file.Length,
+            FileSizeBytes  = replacementBytes?.LongLength ?? file.Length,
             Width          = width,
             Height         = height,
             UploadedById   = uploadedById,
@@ -161,9 +241,17 @@ public class MediaUploadService : IMediaUploadService
         var id = await _assets.CreateAsync(asset);
         asset.Id = id;
 
-        // 9. Record scan passed
-        await _mediaExtended.SetVirusScanResultAsync(id, true);
-        asset.IsVirusScanPassed = true;
+        // 9. Record the scan verdict: passed, or NULL when the engine was unavailable and
+        //    the deployment chose to fail open (Development).
+        if (scan.IsClean)
+        {
+            await _mediaExtended.SetVirusScanResultAsync(id, true);
+            asset.IsVirusScanPassed = true;
+        }
+        else
+        {
+            await AuditAsync(uploadedById, "VirusScanSkipped", new { mediaAssetId = id, fileName = safeFileName, detail = scan.Detail });
+        }
 
         // 10. Image processing: resize + WebP conversion (BRD FR-MEDIA-02)
         //     Non-image files skip this step silently; features.webpVariants turns it off entirely.
@@ -172,7 +260,21 @@ public class MediaUploadService : IMediaUploadService
             await ProcessImageAsync(file, asset, guid, datePath, ct);
         }
 
-        return (asset, null);
+        return MediaUploadOutcome.Success(asset);
+    }
+
+    private async Task AuditAsync(long actorId, string action, object detail)
+    {
+        if (_audit is null) return;
+        try
+        {
+            await _audit.WriteAsync(actorId == 0 ? null : actorId, "MediaAsset", 0, action,
+                System.Text.Json.JsonSerializer.Serialize(detail));
+        }
+        catch
+        {
+            // Auditing must never turn a rejected upload into a 500.
+        }
     }
 
     // ── Image processing ─────────────────────────────────────────────────────
@@ -220,6 +322,31 @@ public class MediaUploadService : IMediaUploadService
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>Longest stored file name; the column allows 500 but 255 is what file systems and browsers handle.</summary>
+    public const int MaxFileNameLength = 255;
+
+    /// <summary>
+    /// The client's file name is display-only, but it is echoed in Content-Disposition
+    /// and the admin UI: drop any path, control characters and quotes, and cap the length
+    /// while keeping the extension (#158).
+    /// </summary>
+    public static string SanitizeFileName(string? raw)
+    {
+        var name = (raw ?? string.Empty).Replace('\\', '/');
+        name = name[(name.LastIndexOf('/') + 1)..].Trim();
+        name = new string(name.Where(c => !char.IsControl(c) && c != '"' && c != ';').ToArray());
+        if (name.Length == 0 || name == "." || name == "..")
+            return "upload";
+
+        if (name.Length > MaxFileNameLength)
+        {
+            var ext  = Path.GetExtension(name);
+            var stem = Path.GetFileNameWithoutExtension(name);
+            name = stem[..Math.Max(1, MaxFileNameLength - ext.Length)] + ext;
+        }
+        return name;
+    }
 
     private static string NormaliseMime(string? raw)
     {

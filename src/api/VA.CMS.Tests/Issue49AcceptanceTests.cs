@@ -53,7 +53,7 @@ public class Issue49AcceptanceTests(DatabaseFixture fixture)
             FROM sys.objects
             WHERE [name] = 'fn_ExtractPlainText'
               AND [type] = 'FN';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -71,7 +71,7 @@ public class Issue49AcceptanceTests(DatabaseFixture fixture)
             FROM sys.objects
             WHERE [name] = 'usp_Search_FullText'
               AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -89,7 +89,7 @@ public class Issue49AcceptanceTests(DatabaseFixture fixture)
             FROM sys.objects
             WHERE [name] = 'usp_Search_LogQuery'
               AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -264,7 +264,7 @@ public class Issue49AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT COUNT(1) FROM [dbo].[SearchQueryLog] WHERE [Query] = @q;";
         cmd.Parameters.AddWithValue("@q", uniqueQuery);
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 

@@ -1,8 +1,6 @@
-using DbUp;
-using DbUp.Engine;
-using DbUp.ScriptProviders;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web;
@@ -51,6 +49,21 @@ if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey))
         System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
     Console.WriteLine("⚠  Jwt:SigningKey not configured — using a randomly generated key. " +
                       "Tokens will not survive a restart. Set Jwt:SigningKey for persistence.");
+}
+
+// -----------------------------------------------------------------------
+// Host hardening (#162): explicit AllowedHosts outside Development; forwarded
+// headers only from configured proxies; CORS only when a front end is cross-origin.
+// -----------------------------------------------------------------------
+var forwardedHeaders = VA.CMS.API.HostHardeningOptions.BuildForwardedHeaders(builder.Configuration);
+var corsOrigins      = VA.CMS.API.HostHardeningOptions.CorsAllowedOrigins(builder.Configuration);
+if (corsOrigins.Length > 0)
+{
+    builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
+        .WithOrigins(corsOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials()));
 }
 
 // -----------------------------------------------------------------------
@@ -118,81 +131,67 @@ switch (authOptions.Mode)
 
     case AuthMode.AzureAd:
     default:
-        builder.Services
+        // The OIDC redirect URI (AzureAd:CallbackPath, default /signin-oidc) is owned by the
+        // OIDC handler. /api/auth/callback is the app's own post-login action, so the two must
+        // never coincide — the handler would swallow the second GET with "state is null" (#154).
+        var aadCallbackPath = builder.Configuration["AzureAd:CallbackPath"];
+        if (!string.IsNullOrEmpty(aadCallbackPath)
+            && aadCallbackPath.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"AzureAd:CallbackPath '{aadCallbackPath}' collides with the API routes. Leave it unset " +
+                $"(defaults to {AzureAdSchemes.CallbackPath}) and register that path as the redirect URI " +
+                "in the app registration.");
+        }
+
+        var useFakeOidc = builder.Configuration["AZUREAD_FAKE_OIDC"] == "true";
+        if (useFakeOidc && builder.Environment.IsProduction())
+            throw new InvalidOperationException("AZUREAD_FAKE_OIDC must not be used in Production.");
+
+        var aadBuilder = builder.Services
             .AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
-            })
-            .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"),
-                openIdConnectScheme: "AzureAd",
-                cookieScheme:        "AzureAdCookies")
-            .Services
-            .AddAuthentication()
-            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
-            {
-                var jwtSvc = new JwtService(jwtOptions);
-                options.TokenValidationParameters = jwtSvc.GetValidationParameters();
             });
+
+        if (useFakeOidc)
+        {
+            aadBuilder.AddCookie(AzureAdSchemes.Cookie);
+            aadBuilder.AddScheme<AuthenticationSchemeOptions, FakeAzureAdHandler>(
+                AzureAdSchemes.OpenIdConnect, _ => { });
+        }
+        else
+        {
+            aadBuilder.AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"),
+                openIdConnectScheme: AzureAdSchemes.OpenIdConnect,
+                cookieScheme:        AzureAdSchemes.Cookie);
+        }
+
+        // The AAD session cookie only has to survive the hop from /signin-oidc to
+        // /api/auth/callback and be present for sign-out; keep it tight.
+        builder.Services.Configure<CookieAuthenticationOptions>(AzureAdSchemes.Cookie, o =>
+        {
+            o.Cookie.Name         = AzureAdSchemes.CookieName;
+            o.Cookie.HttpOnly     = true;
+            o.Cookie.SameSite     = SameSiteMode.Lax;
+            o.Cookie.SecurePolicy = builder.Environment.IsProduction()
+                ? CookieSecurePolicy.Always
+                : CookieSecurePolicy.SameAsRequest;
+            o.ExpireTimeSpan      = TimeSpan.FromHours(8);
+            o.SlidingExpiration   = false;
+        });
+
+        aadBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+        {
+            var jwtSvc = new JwtService(jwtOptions);
+            options.TokenValidationParameters = jwtSvc.GetValidationParameters();
+        });
         break;
 }
 
-builder.Services.AddAuthorization(options =>
-{
-    options.FallbackPolicy = new AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser()
-        .Build();
-
-    var allRoles = new[]
-    {
-        VA.CMS.API.Auth.CmsRoles.ContentOwner,
-        VA.CMS.API.Auth.CmsRoles.Editor,
-        VA.CMS.API.Auth.CmsRoles.SiteAdmin,
-        VA.CMS.API.Auth.CmsRoles.Developer,
-        VA.CMS.API.Auth.CmsRoles.SystemAdmin,
-        VA.CMS.API.Auth.CmsRoles.ReadOnly,
-    };
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.AnyRole, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(allRoles)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanRead, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(allRoles)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanWrite, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
-             VA.CMS.API.Auth.CmsRoles.ContentOwner,
-             VA.CMS.API.Auth.CmsRoles.Editor,
-             VA.CMS.API.Auth.CmsRoles.SiteAdmin,
-             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanPublish, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
-             VA.CMS.API.Auth.CmsRoles.Editor,
-             VA.CMS.API.Auth.CmsRoles.SiteAdmin,
-             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanManageSite, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
-             VA.CMS.API.Auth.CmsRoles.SiteAdmin,
-             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanDevelop, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
-             VA.CMS.API.Auth.CmsRoles.Developer,
-             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanAdminSystem, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
-             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
-});
+// Policies (default deny — see CmsAuthorizationExtensions, #155)
+builder.Services.AddCmsAuthorization();
 
 // -----------------------------------------------------------------------
 // Services
@@ -285,6 +284,7 @@ builder.Services.AddScoped<IDbMonitorRepository, DbMonitorRepository>();
 // Story #67: AD group role mapping repository and resolver
 builder.Services.AddScoped<IAdGroupMappingRepository, AdGroupMappingRepository>();
 builder.Services.AddScoped<IAdGroupRoleResolver, AdGroupRoleResolver>();
+builder.Services.AddScoped<VA.CMS.API.Services.IMediaUsageSyncService, VA.CMS.API.Services.MediaUsageSyncService>();
 
 // Issue #49: Full-text search repository (FR-SEARCH-02)
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();
@@ -304,7 +304,6 @@ builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddSingleton<IRefreshTokenService, InMemoryRefreshTokenService>();
 builder.Services.AddSingleton<IRbacService, RbacService>();
-builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, CmsRoleHandler>();
 
 // -----------------------------------------------------------------------
 // Storage backend (issue #40: BRD FR-MEDIA-07 / FR-SECURITY-06)
@@ -312,20 +311,48 @@ builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationH
 var storageOptions = builder.Configuration
     .GetSection(StorageOptions.SectionName)
     .Get<StorageOptions>() ?? new StorageOptions();
+// On-prem only: local disk or a UNC share. Anything else (the former azure_blob stub)
+// is refused here rather than failing on the first upload (#170).
+if (storageOptions.Validate(builder.Environment.IsDevelopment() ? null : builder.Environment.ContentRootPath) is { } storageError)
+    throw new InvalidOperationException(storageError);
 builder.Services.AddSingleton(storageOptions);
 
-IStorageBackend storageBackend = storageOptions.Backend?.ToLowerInvariant() switch
+IStorageBackend storageBackend = storageOptions.Backend.Trim().ToLowerInvariant() switch
 {
-    "unc"        => new UncStorageBackend(storageOptions),
-    "azure_blob" => new AzureBlobStorageBackend(storageOptions),
-    _            => new LocalStorageBackend(storageOptions),   // default: local
+    "unc" => new UncStorageBackend(storageOptions),
+    _     => new LocalStorageBackend(storageOptions),   // default: local
 };
 builder.Services.AddSingleton<IStorageBackend>(storageBackend);
 builder.Services.AddSingleton<IImageProcessingService, ImageProcessingService>();
-// Issue #45: virus scan hook — default no-op; VA teams replace with real AV implementation via DI
-builder.Services.AddSingleton<IVirusScanService, NoOpVirusScanService>();
+// Virus scanning (#159, BRD FR-MEDIA-04, NIST SI-3): Media:Scanner selects ICAP (enterprise
+// engines), ClamAV (dev/CI) or Disabled. Disabled is refused in Production; FailClosed
+// defaults to true outside Development so an unreachable engine rejects uploads.
+var scannerOptions = builder.Configuration
+    .GetSection(MediaScannerOptions.SectionName)
+    .Get<MediaScannerOptions>() ?? new MediaScannerOptions();
+if (scannerOptions.Mode == MediaScannerMode.Disabled && builder.Environment.IsProduction())
+{
+    throw new InvalidOperationException(
+        "Media:Scanner:Mode=Disabled is not permitted in Production. Configure Mode=Icap (host, port, service path) " +
+        "or Mode=ClamAv so uploads are scanned for malware (NIST SI-3).");
+}
+builder.Services.AddSingleton(scannerOptions);
+builder.Services.AddSingleton<IVirusScanService>(scannerOptions.Mode switch
+{
+    MediaScannerMode.Icap   => new IcapVirusScanService(scannerOptions),
+    MediaScannerMode.ClamAv => new ClamAvVirusScanService(scannerOptions),
+    _                       => new NoOpVirusScanService(),
+});
 builder.Services.AddScoped<IMediaExtendedRepository, MediaExtendedRepository>();
-builder.Services.AddScoped<IMediaUploadService, MediaUploadService>();
+builder.Services.AddScoped<IMediaUploadService>(sp => new MediaUploadService(
+    sp.GetRequiredService<IStorageBackend>(),
+    sp.GetRequiredService<IMediaAssetRepository>(),
+    sp.GetRequiredService<IImageProcessingService>(),
+    sp.GetRequiredService<IVirusScanService>(),
+    sp.GetRequiredService<IMediaExtendedRepository>(),
+    sp.GetRequiredService<ISiteSettingsService>(),
+    failClosed: scannerOptions.ResolveFailClosed(builder.Environment.IsDevelopment()),
+    audit: sp.GetRequiredService<IAuditLogRepository>()));
 
 // Preview token service — issue #34 (BRD FR-AUTH-08)
 builder.Services.AddSingleton<IPreviewTokenService, PreviewTokenService>();
@@ -386,11 +413,30 @@ builder.Services.AddContentType<NewsArticleTypeDefinition>();
 // - Types: ContentEntry, MediaAsset, NavigationMenu, TaxonomyTerm
 // - DataLoader prevents N+1 on relation loads
 // -----------------------------------------------------------------------
+// #156: two audiences on one schema. The endpoint stays anonymous so the public
+// site can query Published content; field-level [Authorize] and IGraphQLAudience
+// gate everything else on the JWT bearer identity. Depth, cost and timeout limits
+// bound what an anonymous caller can make the database do; introspection is a
+// Development-only convenience.
+builder.Services.AddScoped<IGraphQLAudience, GraphQLAudience>();
 builder.Services
     .AddGraphQLServer()
+    .AddAuthorization()
     .AddQueryType<Query>()
     .AddDataLoader<VA.CMS.API.GraphQL.DataLoaders.ContentEntryByIdDataLoader>()
-    .AddDataLoader<VA.CMS.API.GraphQL.DataLoaders.MediaAssetByIdDataLoader>();
+    .AddDataLoader<VA.CMS.API.GraphQL.DataLoaders.MediaAssetByIdDataLoader>()
+    .AddMaxExecutionDepthRule(GraphQLLimits.MaxExecutionDepth, skipIntrospectionFields: true)
+    .ModifyCostOptions(o =>
+    {
+        o.MaxFieldCost = GraphQLLimits.MaxFieldCost;
+        o.MaxTypeCost  = GraphQLLimits.MaxTypeCost;
+    })
+    .ModifyRequestOptions(o =>
+    {
+        o.ExecutionTimeout       = GraphQLLimits.ExecutionTimeout;
+        o.IncludeExceptionDetails = builder.Environment.IsDevelopment();
+    })
+    .DisableIntrospection(!builder.Environment.IsDevelopment());
 
 // -----------------------------------------------------------------------
 // Custom Field Type Plugins (FR-DEV-05 / issue #27)
@@ -402,57 +448,69 @@ builder.Services.AddCustomFieldType<GeoPointFieldType>();
 // -----------------------------------------------------------------------
 // Build
 // -----------------------------------------------------------------------
+// Last of the fail-fast checks (#162): a wildcard Host header is only acceptable in Development.
+if (VA.CMS.API.HostHardeningOptions.ValidateAllowedHosts(builder.Configuration["AllowedHosts"], builder.Environment.IsDevelopment()) is { } hostsError)
+    throw new InvalidOperationException(hostsError);
+
 var app = builder.Build();
 
 // -----------------------------------------------------------------------
-// DbUp migrations
+// Database migrations (#157)
+// Deployments run `vacms db migrate` with an elevated connection; the API's own
+// login is EXECUTE-only. Startup therefore only *checks* that nothing is pending
+// and refuses to serve a database that is behind, unless Database:MigrateOnStartup
+// opts in (default: Development only). SKIP_MIGRATIONS=true skips both (tests).
 // -----------------------------------------------------------------------
 var skipMigrations = builder.Configuration["SKIP_MIGRATIONS"] == "true";
 
 if (!skipMigrations)
 {
-// Walk up from bin/<Config>/<tfm>/ until a "migrations" folder is found (repo root
-// in source checkouts), otherwise expect it beside the binaries in a deployment.
-var migrationsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "migrations");
-for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-{
-    var candidate = System.IO.Path.Combine(dir.FullName, "migrations");
-    if (Directory.Exists(candidate))
+    var migrateOnStartup = builder.Configuration.GetValue<bool?>("Database:MigrateOnStartup")
+                           ?? builder.Environment.IsDevelopment();
+    var migrationsPath = VA.CMS.Infrastructure.Data.Migrations.MigrationRunner.FindMigrationsPath();
+
+    if (migrateOnStartup)
     {
-        migrationsPath = candidate;
-        break;
+        var result = VA.CMS.Infrastructure.Data.Migrations.MigrationRunner.Upgrade(connectionString, migrationsPath);
+        if (!result.Successful)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"Migration failed: {result.Error}");
+            Console.ResetColor();
+            return 1;
+        }
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("Database migrations applied successfully.");
+        Console.ResetColor();
+    }
+    else
+    {
+        var status = await VA.CMS.Infrastructure.Data.Migrations.MigrationRunner.CheckAsync(connectionString, migrationsPath);
+        if (!status.IsUpToDate)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine(status.Error ?? "The database is behind the deployed migration set.");
+            Console.Error.WriteLine($"Pending migrations ({status.Pending.Count}): {string.Join(", ", status.Pending)}");
+            Console.Error.WriteLine("Run `vacms db migrate` with the deployment account, or set Database:MigrateOnStartup=true.");
+            Console.ResetColor();
+            return 1;
+        }
+
+        Console.WriteLine($"Database schema is current ({status.Applied.Count} migrations applied).");
     }
 }
-
-EnsureDatabase.For.SqlDatabase(connectionString);
-
-var upgrader = DeployChanges.To
-    .SqlDatabase(connectionString)
-    .WithScriptsFromFileSystem(
-        migrationsPath,
-        new FileSystemScriptOptions { IncludeSubDirectories = false })
-    .WithTransactionPerScript()
-    .LogToConsole()
-    .Build();
-
-DatabaseUpgradeResult result = upgrader.PerformUpgrade();
-if (!result.Successful)
-{
-    Console.ForegroundColor = ConsoleColor.Red;
-    Console.Error.WriteLine($"Migration failed: {result.Error}");
-    Console.ResetColor();
-    return 1;
-}
-
-Console.ForegroundColor = ConsoleColor.Green;
-Console.WriteLine("Database migrations applied successfully.");
-Console.ResetColor();
-
-} // end if (!skipMigrations)
 
 // -----------------------------------------------------------------------
 // HTTP pipeline
 // -----------------------------------------------------------------------
+// Forwarded headers first so Request.Scheme / RemoteIpAddress are right for
+// everything below (HTTPS redirect, Secure cookies, HSTS, audit source IPs).
+if (forwardedHeaders is not null)
+    app.UseForwardedHeaders(forwardedHeaders);
+
+app.UseSecurityHeaders();   // #162: on every response, including errors
+
 if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 
@@ -464,9 +522,12 @@ if (!app.Environment.IsDevelopment())
 app.UseSiteSettingGates(app.Environment.IsDevelopment());
 
 // -----------------------------------------------------------------------
-// Swagger UI — always on in Development (AC: Issue #55); elsewhere the middleware above
-// serves it only while the features.swaggerUi site setting is on.
+// Swagger — always on in Development (AC: Issue #55); elsewhere the site-setting gate
+// above answers 404 while features.swaggerUi is off, and (#162) a CanDevelop bearer
+// token is required to reach the UI or swagger.json. Stays ahead of UseRouting so the
+// fallback authorization policy (which also covers non-endpoint requests) does not apply.
 // -----------------------------------------------------------------------
+app.UseSwaggerAccessGate(app.Environment.IsDevelopment());
 app.UseSwagger(c =>
 {
     c.RouteTemplate = "swagger/{documentName}/swagger.json";
@@ -479,6 +540,9 @@ app.UseSwaggerUI(c =>
 });
 
 app.UseRouting();
+
+if (corsOrigins.Length > 0)
+    app.UseCors();
 
 // DevBypass: inject a JWT from the X-Dev-User header BEFORE the auth pipeline runs.
 // Must be placed before UseAuthentication so the injected token is visible to JWT bearer.
@@ -496,7 +560,7 @@ app.MapControllers();
 // Endpoint:  /api/graphql
 // Playground: /api/graphql/ui (Development only — HC disables Banana Cake Pop in non-dev by default)
 app.MapGraphQL("/api/graphql")
-   .AllowAnonymous();   // Auth is enforced at the REST layer; headless consumers use API keys per epic scope
+   .AllowAnonymous();   // #156: anonymous = Published-only surface; CanRead JWT = full surface (see GraphQLAudience)
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
    .AllowAnonymous();
