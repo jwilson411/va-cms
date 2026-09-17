@@ -193,26 +193,31 @@ BRD FR-WORKFLOW-02): *submitted for review* → the reviewers of that section, *
 *approved* / *published* → the entry's owner. The person who took the action is never
 emailed. Each message has a plain-language subject (`Review requested: <title>`), the same
 one-line description the bell shows, the reviewer's comment when there is one, and a link to
-`{AdminBaseUrl}/admin/content/{id}/edit`.
+`{notifications.adminBaseUrl}/admin/content/{id}/edit`.
 
-Email is **off until `Email:Smtp:Host` is set** — without it the API logs
-`Email not sent (Email:Smtp:Host is not configured)` and the bell keeps working. Everything is
-configured through the `Email` section, so in a deployment set environment variables:
+Two halves, following the [settings rule](docs/SETTINGS.md):
+
+- **The relay and its credentials** are deployment secrets, so they come from the `Email:Smtp`
+  configuration section — in a deployment, environment variables. Email is **off until
+  `Email__Smtp__Host` is set**; without it the API logs
+  `Email not sent (Email:Smtp:Host is not configured)` and the bell keeps working.
+- **Everything an admin might change** — the on/off switch, sender address and name, and the
+  admin site origin used for links — is a site setting under **Admin → Settings → Notifications**
+  (`notifications.emailEnabled`, `notifications.emailFromAddress`, `notifications.emailFromName`,
+  `notifications.adminBaseUrl`). Set `notifications.adminBaseUrl` to the real admin origin before
+  going live; it defaults to `http://localhost:5173`.
 
 | Variable | Exchange Online | Exchange on-prem | Notes |
 |---|---|---|---|
-| `Email__From` | `cms-noreply@va.gov` | `cms-noreply@va.gov` | Required. Must be a mailbox/sender the connector allows. |
-| `Email__FromName` | `VA CMS` | `VA CMS` | Optional display name. |
-| `Email__AdminBaseUrl` | `https://cms.va.gov` | `https://cms.va.gov` | Required. Public origin of the admin SPA, used for links. |
-| `Email__Smtp__Host` | `smtp.office365.com` | `mail.example.va.gov` | Turning this on turns email on. |
+| `Email__Smtp__Host` | `smtp.office365.com` | `mail.example.va.gov` | Setting this turns delivery on. |
 | `Email__Smtp__Port` | `587` | `587` (STARTTLS) or `25` (relay) | Default 587. |
-| `Email__Smtp__Security` | `StartTls` | `StartTls` (or `None` for an internal relay) | `StartTls` \| `SslOnConnect` \| `Auto` \| `None`. Default `StartTls`; connection fails if the server can't upgrade. |
+| `Email__Smtp__Security` | `StartTls` | `StartTls` (or `None` for an internal relay) | `StartTls` \| `SslOnConnect` \| `Auto` \| `None`. Default `StartTls`; the connection fails if the server can't upgrade. |
 | `Email__Smtp__Username` / `Email__Smtp__Password` | the sending mailbox (SMTP AUTH must be enabled on it) | leave empty for an IP-allow-listed receive connector | Set both or neither. |
 | `Email__Smtp__TimeoutSeconds` | `30` | `30` | Connect/command timeout. |
 
-The API validates this at startup and refuses to start on a half-configured mailer (host
-without `From`/`AdminBaseUrl`, username without password). Delivery runs off the request
-thread; a dead relay is logged and never fails the workflow action itself.
+The API validates this at startup and refuses to start on a half-configured relay (username
+without password, bad port). Delivery runs off the request thread; a dead relay is logged and
+never fails the workflow action itself.
 
 To see the emails locally, run the Mailpit sink and point the API at it:
 
@@ -223,9 +228,8 @@ Email__Smtp__Host=localhost Email__Smtp__Port=1025 Email__Smtp__Security=None \
   dotnet run --project VA.CMS.API
 ```
 
-(`Email:From` and `Email:AdminBaseUrl` come from `appsettings.Development.json`; the example
-file already sets them.) Then submit content for review as one dev user with another holding
-an Editor role — see step 4 above — and open Mailpit.
+Then submit content for review as one dev user with another holding an Editor role — see
+step 4 above — and open Mailpit.
 
 
 ## Project Status

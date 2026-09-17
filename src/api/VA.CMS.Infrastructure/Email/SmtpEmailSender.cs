@@ -2,6 +2,7 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Logging;
 using MimeKit;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Infrastructure.Email;
 
@@ -13,21 +14,34 @@ namespace VA.CMS.Infrastructure.Email;
 /// Works against Exchange Online (smtp.office365.com:587, STARTTLS, SMTP AUTH) and on-prem
 /// Exchange (a receive connector on 587 with STARTTLS, or an IP-allow-listed relay on 25).
 /// A rejected recipient is logged and skipped so one bad address never blocks the rest.
+/// The sender address/name come from the notifications.emailFromAddress / emailFromName site
+/// settings, read per batch so an admin change applies to the next email.
 /// </summary>
 public sealed class SmtpEmailSender : IEmailSender
 {
     private readonly EmailOptions _options;
+    private readonly ISiteSettingsService _settings;
     private readonly ILogger<SmtpEmailSender> _logger;
 
-    public SmtpEmailSender(EmailOptions options, ILogger<SmtpEmailSender> logger)
+    public SmtpEmailSender(EmailOptions options, ISiteSettingsService settings, ILogger<SmtpEmailSender> logger)
     {
-        _options = options;
-        _logger  = logger;
+        _options  = options;
+        _settings = settings;
+        _logger   = logger;
     }
 
     public async Task SendAsync(IReadOnlyList<EmailMessage> messages, CancellationToken cancellationToken = default)
     {
         if (messages.Count == 0) return;
+
+        var fromAddress = _settings.GetString(SiteSettingKeys.NotificationsEmailFromAddress);
+        if (string.IsNullOrWhiteSpace(fromAddress))
+        {
+            _logger.LogError("Cannot send {Count} email(s): site setting {Key} is empty.",
+                messages.Count, SiteSettingKeys.NotificationsEmailFromAddress);
+            return;
+        }
+        var from = new MailboxAddress(_settings.GetString(SiteSettingKeys.NotificationsEmailFromName), fromAddress);
 
         var smtp = _options.Smtp;
         using var client = new SmtpClient { Timeout = smtp.TimeoutSeconds * 1000 };
@@ -42,7 +56,7 @@ public sealed class SmtpEmailSender : IEmailSender
             {
                 try
                 {
-                    await client.SendAsync(Build(message), cancellationToken);
+                    await client.SendAsync(Build(from, message), cancellationToken);
                     _logger.LogInformation("Email sent to {To}: {Subject}", message.ToAddress, message.Subject);
                 }
                 catch (SmtpCommandException ex)
@@ -60,10 +74,10 @@ public sealed class SmtpEmailSender : IEmailSender
         }
     }
 
-    private MimeMessage Build(EmailMessage message)
+    private static MimeMessage Build(MailboxAddress from, EmailMessage message)
     {
         var mime = new MimeMessage();
-        mime.From.Add(new MailboxAddress(_options.FromName, _options.From));
+        mime.From.Add(from);
         mime.To.Add(new MailboxAddress(message.ToName, message.ToAddress));
         mime.Subject = message.Subject;
 

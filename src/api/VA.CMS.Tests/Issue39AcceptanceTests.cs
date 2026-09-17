@@ -9,6 +9,7 @@ using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Email;
 using VA.CMS.Infrastructure.Notifications;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Tests;
 
@@ -24,7 +25,9 @@ namespace VA.CMS.Tests;
 ///   AC2: Plain-language subject and body with a link to the content
 ///       => WorkflowEmailComposer: "Review requested: Title", the inbox description, next step, {AdminBaseUrl}/admin/content/{id}/edit.
 ///   AC3: SMTP configuration via environment variables
-///       => the Email section binds from Email__Smtp__Host, Email__Smtp__Port, ... and is validated at startup.
+///       => the Email:Smtp section binds from Email__Smtp__Host, Email__Smtp__Port, ... and is validated at startup.
+///          The switch, sender and link origin are site settings (notifications.emailEnabled / emailFromAddress /
+///          emailFromName / adminBaseUrl) per the epic #141 rule, changeable without a deploy.
 ///   AC4: Supports Exchange on-prem and Exchange Online (TLS SMTP)
 ///       => SmtpEmailSender (MailKit) does STARTTLS / implicit TLS / none per Email:Smtp:Security and SMTP AUTH
 ///          when credentials are set; verified against an in-process SMTP server for the wire protocol.
@@ -131,7 +134,9 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
 
     // ── AC2: subject, body, link ──────────────────────────────────────────────
 
-    private static readonly EmailOptions ComposeOptions = new() { AdminBaseUrl = "https://cms.example.gov/" };
+    private const string AdminBaseUrl = "https://cms.example.gov/";
+    private static readonly ISiteSettingsService Settings =
+        StaticSiteSettings.Defaults.With(SiteSettingKeys.NotificationsAdminBaseUrl, AdminBaseUrl);
 
     private static NotificationRecipient Recipient(string eventType, string? comment = null) => new()
     {
@@ -155,7 +160,7 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
     [InlineData(NotificationEventTypes.ContentPublished, "Published: Benefits Overview",         "now live")]
     public void AC2_EveryEvent_HasPlainLanguageSubjectBody_AndLink(string eventType, string subject, string nextStep)
     {
-        var email = WorkflowEmailComposer.Compose(Recipient(eventType), ComposeOptions);
+        var email = WorkflowEmailComposer.Compose(Recipient(eventType), AdminBaseUrl);
 
         Assert.NotNull(email);
         Assert.Equal("bob@va.gov", email.ToAddress);
@@ -174,7 +179,7 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
     public void AC2_ReturnedEmail_CarriesTheReviewerComment_HtmlEscaped()
     {
         var email = WorkflowEmailComposer.Compose(
-            Recipient(NotificationEventTypes.ContentReturned, comment: "Heading is <wrong> & too long"), ComposeOptions)!;
+            Recipient(NotificationEventTypes.ContentReturned, comment: "Heading is <wrong> & too long"), AdminBaseUrl)!;
 
         Assert.Contains("Reviewer's comment:\nHeading is <wrong> & too long\n", email.TextBody);
         Assert.Contains("Heading is &lt;wrong&gt; &amp; too long", email.HtmlBody);
@@ -184,7 +189,7 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
     [Fact]
     public void AC2_NoAdminBaseUrl_FallsBackToThePath()
     {
-        var email = WorkflowEmailComposer.Compose(Recipient(NotificationEventTypes.ReviewRequested), new EmailOptions())!;
+        var email = WorkflowEmailComposer.Compose(Recipient(NotificationEventTypes.ReviewRequested), adminBaseUrl: "")!;
         Assert.Contains("\n/admin/content/123/edit\n", email.TextBody);
     }
 
@@ -193,8 +198,8 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
     {
         var noAddress = Recipient(NotificationEventTypes.ReviewRequested);
         noAddress.RecipientEmail = " ";
-        Assert.Null(WorkflowEmailComposer.Compose(noAddress, ComposeOptions));
-        Assert.Null(WorkflowEmailComposer.Compose(Recipient("SomethingElse"), ComposeOptions));
+        Assert.Null(WorkflowEmailComposer.Compose(noAddress, AdminBaseUrl));
+        Assert.Null(WorkflowEmailComposer.Compose(Recipient("SomethingElse"), AdminBaseUrl));
     }
 
     // ── AC3: configuration via environment variables ──────────────────────────
@@ -204,9 +209,6 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
     {
         var vars = new Dictionary<string, string?>
         {
-            ["Email__From"]           = "cms-noreply@va.gov",
-            ["Email__FromName"]       = "VA CMS Workflow",
-            ["Email__AdminBaseUrl"]   = "https://cms.va.gov",
             ["Email__Smtp__Host"]     = "smtp.office365.com",
             ["Email__Smtp__Port"]     = "587",
             ["Email__Smtp__Security"] = "StartTls",
@@ -221,9 +223,6 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
             var options = config.GetSection(EmailOptions.SectionName).Get<EmailOptions>()!;
 
             Assert.True(options.IsEnabled);
-            Assert.Equal("cms-noreply@va.gov",  options.From);
-            Assert.Equal("VA CMS Workflow",     options.FromName);
-            Assert.Equal("https://cms.va.gov",  options.AdminBaseUrl);
             Assert.Equal("smtp.office365.com",  options.Smtp.Host);
             Assert.Equal(587,                   options.Smtp.Port);
             Assert.Equal(SmtpSecurity.StartTls, options.Smtp.Security);
@@ -249,19 +248,37 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
     }
 
     [Fact]
-    public void AC3_HostWithoutFromOrBaseUrl_FailsFast()
+    public void AC3_HalfConfiguredRelay_FailsFast()
     {
-        var noFrom = new EmailOptions { AdminBaseUrl = "https://cms.va.gov", Smtp = { Host = "smtp.va.gov" } };
-        Assert.Contains("Email:From", Assert.Throws<InvalidOperationException>(noFrom.Validate).Message);
-
-        var noUrl = new EmailOptions { From = "a@va.gov", Smtp = { Host = "smtp.va.gov" } };
-        Assert.Contains("Email:AdminBaseUrl", Assert.Throws<InvalidOperationException>(noUrl.Validate).Message);
-
-        var relativeUrl = new EmailOptions { From = "a@va.gov", AdminBaseUrl = "/admin", Smtp = { Host = "smtp.va.gov" } };
-        Assert.Throws<InvalidOperationException>(relativeUrl.Validate);
-
-        var halfAuth = new EmailOptions { From = "a@va.gov", AdminBaseUrl = "https://cms.va.gov", Smtp = { Host = "smtp.va.gov", Username = "u" } };
+        var halfAuth = new EmailOptions { Smtp = { Host = "smtp.va.gov", Username = "u" } };
         Assert.Contains("Password", Assert.Throws<InvalidOperationException>(halfAuth.Validate).Message);
+
+        var badPort = new EmailOptions { Smtp = { Host = "smtp.va.gov", Port = 0 } };
+        Assert.Contains("Port", Assert.Throws<InvalidOperationException>(badPort.Validate).Message);
+
+        new EmailOptions { Smtp = { Host = "smtp.va.gov", Username = "u", Password = "p" } }.Validate();
+    }
+
+    [Fact]
+    public void AC3_SenderAndSwitch_AreSiteSettings_WithDefaults()
+    {
+        var defaults = StaticSiteSettings.Defaults;
+        Assert.True(defaults.GetBool(SiteSettingKeys.NotificationsEmailEnabled));
+        Assert.Equal("cms-noreply@va.gov",    defaults.GetString(SiteSettingKeys.NotificationsEmailFromAddress));
+        Assert.Equal("VA CMS",                defaults.GetString(SiteSettingKeys.NotificationsEmailFromName));
+        Assert.Equal("http://localhost:5173", defaults.GetString(SiteSettingKeys.NotificationsAdminBaseUrl));
+
+        var keys = new[]
+        {
+            SiteSettingKeys.NotificationsEmailEnabled, SiteSettingKeys.NotificationsEmailFromAddress,
+            SiteSettingKeys.NotificationsEmailFromName, SiteSettingKeys.NotificationsAdminBaseUrl,
+        };
+        foreach (var key in keys)
+        {
+            var def = Assert.Single(SiteSettingDefinitions.All, d => d.Key == key);
+            Assert.Equal(SiteSettingScope.Server, def.Scope);
+            Assert.Equal(SiteSettingCategories.Notifications, def.Category);
+        }
     }
 
     [Theory]
@@ -318,8 +335,38 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
             .NotifyAsync(5, NotificationEventTypes.ReviewRequested, actorId: 1);
     }
 
+    [Fact]
+    public async Task Notifier_EmailSwitchOff_StillRecordsInbox_ButQueuesNoEmail()
+    {
+        var repo = new Issue38NotificationStub();
+        repo.Recipients.Add(new NotificationRecipient { Id = 1, RecipientUserId = 10, RecipientEmail = "ed@va.gov", RecipientDisplayName = "Ed", ContentTitle = "Page" });
+        var email = new CapturingEmailDispatcher();
+        var off   = StaticSiteSettings.Defaults.With(SiteSettingKeys.NotificationsEmailEnabled, "false");
+
+        await new WorkflowNotifier(repo, email, NullLogger<WorkflowNotifier>.Instance, off)
+            .NotifyAsync(5, NotificationEventTypes.ReviewRequested, actorId: 1);
+
+        Assert.Single(repo.Events);
+        Assert.Empty(email.Batches);
+    }
+
+    [Fact]
+    public async Task Notifier_FeatureNotificationsOff_RecordsNothing_AndQueuesNoEmail()
+    {
+        var repo = new Issue38NotificationStub();
+        repo.Recipients.Add(new NotificationRecipient { Id = 1, RecipientUserId = 10, RecipientEmail = "ed@va.gov", RecipientDisplayName = "Ed", ContentTitle = "Page" });
+        var email = new CapturingEmailDispatcher();
+        var off   = StaticSiteSettings.Defaults.With(SiteSettingKeys.FeatureNotifications, "false");
+
+        await new WorkflowNotifier(repo, email, NullLogger<WorkflowNotifier>.Instance, off)
+            .NotifyAsync(5, NotificationEventTypes.ReviewRequested, actorId: 1);
+
+        Assert.Empty(repo.Events);
+        Assert.Empty(email.Batches);
+    }
+
     private static WorkflowNotifier Notifier(INotificationRepository repo, IEmailDispatcher email)
-        => new(repo, email, ComposeOptions, NullLogger<WorkflowNotifier>.Instance);
+        => new(repo, email, NullLogger<WorkflowNotifier>.Instance, Settings);
 
     // ── HTTP: every workflow action ends in an email ──────────────────────────
 
@@ -379,9 +426,11 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
         await using var server = await FakeSmtpServer.StartAsync(advertiseAuth: true);
         var sender = new SmtpEmailSender(new EmailOptions
         {
-            From = "cms-noreply@va.gov", FromName = "VA CMS", AdminBaseUrl = "https://cms.va.gov",
             Smtp = { Host = "127.0.0.1", Port = server.Port, Security = SmtpSecurity.None, Username = "svc", Password = "pw", TimeoutSeconds = 10 },
-        }, NullLogger<SmtpEmailSender>.Instance);
+        }, StaticSiteSettings.Defaults
+            .With(SiteSettingKeys.NotificationsEmailFromAddress, "cms-noreply@va.gov")
+            .With(SiteSettingKeys.NotificationsEmailFromName,    "VA CMS"),
+        NullLogger<SmtpEmailSender>.Instance);
 
         await sender.SendAsync(
         [
@@ -411,9 +460,8 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
         await using var server = await FakeSmtpServer.StartAsync(advertiseAuth: false, rejectRecipient: "gone@va.gov");
         var sender = new SmtpEmailSender(new EmailOptions
         {
-            From = "cms-noreply@va.gov", AdminBaseUrl = "https://cms.va.gov",
             Smtp = { Host = "127.0.0.1", Port = server.Port, Security = SmtpSecurity.None, TimeoutSeconds = 10 },
-        }, NullLogger<SmtpEmailSender>.Instance);
+        }, StaticSiteSettings.Defaults, NullLogger<SmtpEmailSender>.Instance);
 
         await sender.SendAsync(
         [
@@ -433,9 +481,8 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
         await using var server = await FakeSmtpServer.StartAsync(advertiseAuth: false);
         var sender = new SmtpEmailSender(new EmailOptions
         {
-            From = "cms-noreply@va.gov", AdminBaseUrl = "https://cms.va.gov",
             Smtp = { Host = "127.0.0.1", Port = server.Port, Security = SmtpSecurity.StartTls, TimeoutSeconds = 10 },
-        }, NullLogger<SmtpEmailSender>.Instance);
+        }, StaticSiteSettings.Defaults, NullLogger<SmtpEmailSender>.Instance);
 
         await Assert.ThrowsAnyAsync<Exception>(() => sender.SendAsync([new EmailMessage("a@va.gov", null, "s", "b")]));
         Assert.Empty(server.Messages);

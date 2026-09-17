@@ -33,9 +33,6 @@
     "Audience": "va-cms-spa"
   },
   "Email": {
-    "From": "cms-noreply@va.gov",
-    "FromName": "VA CMS",
-    "AdminBaseUrl": "http://localhost:5173",
     "Smtp": {
       "Host": "",
       "Port": 587,

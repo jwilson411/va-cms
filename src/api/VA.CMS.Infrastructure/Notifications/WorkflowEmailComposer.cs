@@ -18,20 +18,24 @@ public static class WorkflowEmailComposer
     /// <summary>Path the admin SPA serves the entry editor at — matches NotificationBell.entryLink.</summary>
     public static string EntryPath(long contentEntryId) => $"/admin/content/{contentEntryId}/edit";
 
-    /// <summary>Absolute link to the entry editor, or just the path when no AdminBaseUrl is configured.</summary>
-    public static string EntryLink(EmailOptions options, long contentEntryId)
+    /// <summary>
+    /// Absolute link to the entry editor, or just the path when <paramref name="adminBaseUrl"/>
+    /// (the notifications.adminBaseUrl site setting) is blank.
+    /// </summary>
+    public static string EntryLink(string? adminBaseUrl, long contentEntryId)
     {
         var path = EntryPath(contentEntryId);
-        return string.IsNullOrWhiteSpace(options.AdminBaseUrl)
+        return string.IsNullOrWhiteSpace(adminBaseUrl)
             ? path
-            : options.AdminBaseUrl.TrimEnd('/') + path;
+            : adminBaseUrl.TrimEnd('/') + path;
     }
 
     /// <summary>
     /// Compose the email for <paramref name="recipient"/>, or null when they have no address
-    /// or the event type is unknown.
+    /// or the event type is unknown. <paramref name="adminBaseUrl"/> is the admin site origin
+    /// the link is built on.
     /// </summary>
-    public static EmailMessage? Compose(NotificationRecipient recipient, EmailOptions options)
+    public static EmailMessage? Compose(NotificationRecipient recipient, string? adminBaseUrl)
     {
         if (string.IsNullOrWhiteSpace(recipient.RecipientEmail)) return null;
 
@@ -57,7 +61,7 @@ public static class WorkflowEmailComposer
         };
         if (subject is null) return null;
 
-        var link    = EntryLink(options, recipient.ContentEntryId);
+        var link    = EntryLink(adminBaseUrl, recipient.ContentEntryId);
         var name    = string.IsNullOrWhiteSpace(recipient.RecipientDisplayName) ? "there" : recipient.RecipientDisplayName;
         var comment = string.IsNullOrWhiteSpace(recipient.Comment) ? null : recipient.Comment.Trim();
 

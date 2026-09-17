@@ -353,8 +353,9 @@ builder.Services.AddSingleton<IWebhookBackgroundDispatcher, WebhookBackgroundDis
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<IWorkflowNotifier, WorkflowNotifier>();
 
-// Issue #39: Workflow emails over SMTP (BRD FR-WORKFLOW-02). Configured through the
-// Email section (Email__Smtp__Host etc.); without a host, messages are logged, not sent.
+// Issue #39: Workflow emails over SMTP (BRD FR-WORKFLOW-02). The relay and its credentials
+// come from the Email:Smtp section (Email__Smtp__Host etc.); the switch, sender and link
+// origin are site settings (notifications.email*). Without a host, messages are logged.
 var emailOptions = builder.Configuration
     .GetSection(EmailOptions.SectionName)
     .Get<EmailOptions>() ?? new EmailOptions();

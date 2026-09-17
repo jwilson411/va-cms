@@ -1,35 +1,26 @@
 namespace VA.CMS.Infrastructure.Email;
 
 /// <summary>
-/// Outbound email settings — the "Email" configuration section (issue #39, BRD FR-WORKFLOW-02).
+/// SMTP connection settings — the "Email" configuration section (issue #39, BRD FR-WORKFLOW-02).
 ///
-/// Everything binds from environment variables with the standard "__" separator, e.g.
-///   Email__From=cms-noreply@va.gov
-///   Email__AdminBaseUrl=https://cms.va.gov
+/// This is deliberately the only email configuration outside the database: it carries the relay
+/// address and credentials, which are secrets bound to the deployment. Everything an admin may
+/// want to change at runtime — the on/off switch, sender address and name, and the admin site
+/// origin used for links — is a site setting (notifications.email*, notifications.adminBaseUrl).
+///
+/// Binds from environment variables with the standard "__" separator, e.g.
 ///   Email__Smtp__Host=smtp.office365.com
 ///   Email__Smtp__Port=587
 ///   Email__Smtp__Security=StartTls
 ///   Email__Smtp__Username=cms-noreply@va.gov
 ///   Email__Smtp__Password=...
 ///
-/// Email is enabled when Email:Smtp:Host is set. Leave it empty (the default) and workflow
-/// emails are logged instead of sent — the in-app notification center keeps working.
+/// Delivery is possible only when Email:Smtp:Host is set. Leave it empty (the default) and
+/// workflow emails are logged instead of sent — the in-app notification center keeps working.
 /// </summary>
 public sealed class EmailOptions
 {
     public const string SectionName = "Email";
-
-    /// <summary>Sender address. Required when SMTP is configured.</summary>
-    public string? From { get; set; }
-
-    /// <summary>Sender display name.</summary>
-    public string FromName { get; set; } = "VA CMS";
-
-    /// <summary>
-    /// Public origin of the admin SPA, e.g. https://cms.va.gov — email links point at
-    /// {AdminBaseUrl}/admin/content/{id}/edit. Required when SMTP is configured.
-    /// </summary>
-    public string? AdminBaseUrl { get; set; }
 
     public SmtpOptions Smtp { get; set; } = new();
 
@@ -37,22 +28,12 @@ public sealed class EmailOptions
     public bool IsEnabled => !string.IsNullOrWhiteSpace(Smtp.Host);
 
     /// <summary>
-    /// Fail fast at startup on a half-configured mailer rather than at the first workflow
+    /// Fail fast at startup on a half-configured relay rather than at the first workflow
     /// action, when the failure would only show up in a log line.
     /// </summary>
     public void Validate()
     {
         if (!IsEnabled) return;
-
-        if (string.IsNullOrWhiteSpace(From))
-            throw new InvalidOperationException(
-                "Email:From is required when Email:Smtp:Host is set. Set it via the Email__From environment variable.");
-
-        // Uri accepts a bare "/path" as an absolute file: URI on Unix, so check the scheme too.
-        if (!Uri.TryCreate(AdminBaseUrl, UriKind.Absolute, out var baseUrl) || baseUrl.Scheme is not ("http" or "https"))
-            throw new InvalidOperationException(
-                "Email:AdminBaseUrl must be an absolute http(s) URL (e.g. https://cms.va.gov) when Email:Smtp:Host is set, " +
-                "so notification emails can link to the content. Set it via the Email__AdminBaseUrl environment variable.");
 
         if (Smtp.Port is < 1 or > 65535)
             throw new InvalidOperationException($"Email:Smtp:Port must be between 1 and 65535 (got {Smtp.Port}).");
