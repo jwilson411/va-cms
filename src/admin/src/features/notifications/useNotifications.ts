@@ -14,7 +14,7 @@ const NOTIFICATIONS_API = '/api/v1/notifications';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type NotificationEventType = 'ReviewRequested' | 'ContentApproved' | 'ContentReturned';
+export type NotificationEventType = 'ReviewRequested' | 'ContentApproved' | 'ContentReturned' | 'ContentPublished';
 
 export interface NotificationItem {
   id: number;

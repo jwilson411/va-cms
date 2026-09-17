@@ -31,5 +31,14 @@
     "SigningKey": "REPLACE_WITH_32_CHAR_OR_LONGER_SECRET",
     "Issuer": "va-cms-api",
     "Audience": "va-cms-spa"
+  },
+  "Email": {
+    "Smtp": {
+      "Host": "",
+      "Port": 587,
+      "Security": "StartTls",
+      "Username": "",
+      "Password": ""
+    }
   }
 }

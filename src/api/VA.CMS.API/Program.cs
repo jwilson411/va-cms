@@ -16,10 +16,11 @@ using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.ContentTypes.BuiltIn;
 using VA.CMS.Infrastructure.ContentTypes.CustomFields;
+using VA.CMS.Infrastructure.Email;
+using VA.CMS.Infrastructure.Notifications;
 using VA.CMS.Infrastructure.Services;
 using VA.CMS.Infrastructure.Settings;
 using VA.CMS.Infrastructure.Storage;
-using VA.CMS.API.Notifications;
 using VA.CMS.API.Webhooks;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -351,6 +352,23 @@ builder.Services.AddSingleton<IWebhookBackgroundDispatcher, WebhookBackgroundDis
 // Issue #38: In-app notification center for workflow events (BRD FR-WORKFLOW-02/03)
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<IWorkflowNotifier, WorkflowNotifier>();
+
+// Issue #39: Workflow emails over SMTP (BRD FR-WORKFLOW-02). The relay and its credentials
+// come from the Email:Smtp section (Email__Smtp__Host etc.); the switch, sender and link
+// origin are site settings (notifications.email*). Without a host, messages are logged.
+var emailOptions = builder.Configuration
+    .GetSection(EmailOptions.SectionName)
+    .Get<EmailOptions>() ?? new EmailOptions();
+emailOptions.Validate();
+builder.Services.AddSingleton(emailOptions);
+if (emailOptions.IsEnabled)
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+else
+{
+    builder.Services.AddSingleton<IEmailSender, DisabledEmailSender>();
+    Console.WriteLine("ℹ  Email:Smtp:Host not configured — workflow emails will be logged, not sent.");
+}
+builder.Services.AddSingleton<IEmailDispatcher, BackgroundEmailDispatcher>();
 
 // Issue #35: Scheduled publish / expiry background worker (BRD FR-AUTH-04)
 builder.Services.AddHostedService<VA.CMS.Infrastructure.Services.ScheduledPublishWorker>();

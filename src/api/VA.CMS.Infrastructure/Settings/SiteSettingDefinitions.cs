@@ -90,6 +90,11 @@ public static class SiteSettingKeys
     // Notifications (Admin)
     public const string NotificationsPollIntervalSeconds = "notifications.pollIntervalSeconds";
     public const string NotificationsPanelLimit          = "notifications.panelLimit";
+    // Notifications — email (Server); issue #39. SMTP host/credentials stay in Email:Smtp config.
+    public const string NotificationsEmailEnabled        = "notifications.emailEnabled";
+    public const string NotificationsEmailFromAddress    = "notifications.emailFromAddress";
+    public const string NotificationsEmailFromName       = "notifications.emailFromName";
+    public const string NotificationsAdminBaseUrl        = "notifications.adminBaseUrl";
 
     // Admin SPA (Admin)
     public const string AdminAutoSaveIntervalSeconds  = "admin.autoSaveIntervalSeconds";
@@ -240,6 +245,15 @@ public static class SiteSettingDefinitions
           "How often the admin bell polls for new notifications, in seconds.", 10),
         I(SiteSettingKeys.NotificationsPanelLimit, 20, SiteSettingCategories.Notifications, SiteSettingScope.Admin,
           "Number of notifications shown in the bell panel.", 20),
+        B(SiteSettingKeys.NotificationsEmailEnabled, true, SiteSettingCategories.Notifications, SiteSettingScope.Server,
+          "Email workflow notifications (review requested, returned, approved, published) in addition to the bell. " +
+          "Delivery also needs Email:Smtp:Host configured in the API environment.", 30),
+        S(SiteSettingKeys.NotificationsEmailFromAddress, "cms-noreply@va.gov", SiteSettingCategories.Notifications, SiteSettingScope.Server,
+          "Sender address for notification emails. Must be a mailbox or address the SMTP connector accepts.", 40),
+        S(SiteSettingKeys.NotificationsEmailFromName, "VA CMS", SiteSettingCategories.Notifications, SiteSettingScope.Server,
+          "Sender display name for notification emails.", 50),
+        S(SiteSettingKeys.NotificationsAdminBaseUrl, "http://localhost:5173", SiteSettingCategories.Notifications, SiteSettingScope.Server,
+          "Public origin of the admin site (e.g. https://cms.va.gov). Notification emails link to {origin}/admin/content/{id}/edit.", 60),
 
         // ── Admin ───────────────────────────────────────────────────────────
         I(SiteSettingKeys.AdminAutoSaveIntervalSeconds, 60, SiteSettingCategories.Admin, SiteSettingScope.Admin,

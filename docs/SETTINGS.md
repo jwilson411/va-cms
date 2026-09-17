@@ -14,6 +14,7 @@ public site without a deploy.
 | `Auth:Mode`, `AzureAd:*`, `Auth:DevBypassAllowedUsers` | Chooses the auth pipeline at startup; secrets |
 | `Jwt:SigningKey`, `Jwt:Issuer`, `Jwt:Audience` | Secret; validation parameters are built at startup |
 | `Storage:*` (backend, paths, Azure connection string) | Switching backends at runtime would orphan files; secrets |
+| `Email:Smtp:*` (host, port, security, username, password) | SMTP relay address and credentials; secrets bound to the deployment (issue #39). The switch, sender and link origin are `notifications.*` settings below. |
 | `SKIP_MIGRATIONS`, `WINDOWS_AUTH_FAKE_NEGOTIATE` | Test/host bootstrap switches |
 | Next.js: `NEXT_PUBLIC_API_URL`, `CMS_API_URL`, `REVALIDATE_SECRET`, `NEXT_PUBLIC_SITE_URL` | Needed to find the API / verify webhooks before settings can be read |
 
@@ -143,6 +144,14 @@ Defaults are the values that were previously hard-coded.
 |---|---|
 | `notifications.pollIntervalSeconds` | 30 |
 | `notifications.panelLimit` | 20 |
+
+### Notifications — email (Server; issue #39)
+| Key | Default | Effect |
+|---|---|---|
+| `notifications.emailEnabled` | true | Off: workflow events still fill the bell, no email is queued. Delivery also needs `Email:Smtp:Host` in the environment. |
+| `notifications.emailFromAddress` | cms-noreply@va.gov | Sender address; must be accepted by the SMTP connector. |
+| `notifications.emailFromName` | VA CMS | Sender display name. |
+| `notifications.adminBaseUrl` | http://localhost:5173 | Admin site origin; emails link to `{origin}/admin/content/{id}/edit`. |
 | `admin.autoSaveIntervalSeconds` | 60 (0 disables) |
 | `admin.contentListPageSize` | 25 |
 | `admin.auditLogPageSize` | 50 |

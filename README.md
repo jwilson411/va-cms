@@ -186,6 +186,51 @@ in production appsettings.
 test requests. Set `Auth:Mode=DevBypass` and `Auth:DevBypassAllowedUsers` in the test host
 configuration (see `Issue68AcceptanceTests.cs` for the pattern used in this repo's tests).
 
+### Workflow email notifications (SMTP)
+
+Every workflow event that lands in the in-app bell also goes out as an email (issue #39,
+BRD FR-WORKFLOW-02): *submitted for review* → the reviewers of that section, *returned* /
+*approved* / *published* → the entry's owner. The person who took the action is never
+emailed. Each message has a plain-language subject (`Review requested: <title>`), the same
+one-line description the bell shows, the reviewer's comment when there is one, and a link to
+`{notifications.adminBaseUrl}/admin/content/{id}/edit`.
+
+Two halves, following the [settings rule](docs/SETTINGS.md):
+
+- **The relay and its credentials** are deployment secrets, so they come from the `Email:Smtp`
+  configuration section — in a deployment, environment variables. Email is **off until
+  `Email__Smtp__Host` is set**; without it the API logs
+  `Email not sent (Email:Smtp:Host is not configured)` and the bell keeps working.
+- **Everything an admin might change** — the on/off switch, sender address and name, and the
+  admin site origin used for links — is a site setting under **Admin → Settings → Notifications**
+  (`notifications.emailEnabled`, `notifications.emailFromAddress`, `notifications.emailFromName`,
+  `notifications.adminBaseUrl`). Set `notifications.adminBaseUrl` to the real admin origin before
+  going live; it defaults to `http://localhost:5173`.
+
+| Variable | Exchange Online | Exchange on-prem | Notes |
+|---|---|---|---|
+| `Email__Smtp__Host` | `smtp.office365.com` | `mail.example.va.gov` | Setting this turns delivery on. |
+| `Email__Smtp__Port` | `587` | `587` (STARTTLS) or `25` (relay) | Default 587. |
+| `Email__Smtp__Security` | `StartTls` | `StartTls` (or `None` for an internal relay) | `StartTls` \| `SslOnConnect` \| `Auto` \| `None`. Default `StartTls`; the connection fails if the server can't upgrade. |
+| `Email__Smtp__Username` / `Email__Smtp__Password` | the sending mailbox (SMTP AUTH must be enabled on it) | leave empty for an IP-allow-listed receive connector | Set both or neither. |
+| `Email__Smtp__TimeoutSeconds` | `30` | `30` | Connect/command timeout. |
+
+The API validates this at startup and refuses to start on a half-configured relay (username
+without password, bad port). Delivery runs off the request thread; a dead relay is logged and
+never fails the workflow action itself.
+
+To see the emails locally, run the Mailpit sink and point the API at it:
+
+```bash
+docker compose --profile mail up -d mailpit        # SMTP on 1025, inbox UI on http://localhost:8025
+cd src/api
+Email__Smtp__Host=localhost Email__Smtp__Port=1025 Email__Smtp__Security=None \
+  dotnet run --project VA.CMS.API
+```
+
+Then submit content for review as one dev user with another holding an Editor role — see
+step 4 above — and open Mailpit.
+
 
 ## Project Status
 

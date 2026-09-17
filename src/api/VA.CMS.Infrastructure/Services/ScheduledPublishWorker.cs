@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Notifications;
 using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Infrastructure.Services;
@@ -19,6 +21,7 @@ namespace VA.CMS.Infrastructure.Services;
 ///
 /// The poll interval and the features.scheduledPublishing switch are site settings
 /// (issue #144/#147) read on every loop, so an admin change applies without a restart.
+/// Issue #39: a scheduled publish notifies the entry owner (in-app + email) like a manual one.
 /// </summary>
 public sealed class ScheduledPublishWorker : BackgroundService
 {
@@ -93,7 +96,8 @@ public sealed class ScheduledPublishWorker : BackgroundService
     {
         // IContentEntryRepository is Scoped — create a fresh scope per sweep.
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var repo = scope.ServiceProvider.GetRequiredService<IContentEntryRepository>();
+        var repo     = scope.ServiceProvider.GetRequiredService<IContentEntryRepository>();
+        var notifier = scope.ServiceProvider.GetRequiredService<IWorkflowNotifier>();
 
         // ── Publish due entries ──────────────────────────────────────────────
         var toPublish = await repo.GetScheduledForPublishAsync();
@@ -110,6 +114,7 @@ public sealed class ScheduledPublishWorker : BackgroundService
                     await repo.PublishScheduledAsync(entry.Id, SystemActorId);
                     _logger.LogInformation(
                         "Scheduled publish: entry {EntryId} (slug={Slug}) published.", entry.Id, entry.Slug);
+                    await notifier.NotifyAsync(entry.Id, NotificationEventTypes.ContentPublished, SystemActorId);
                 }
                 catch (Exception ex)
                 {

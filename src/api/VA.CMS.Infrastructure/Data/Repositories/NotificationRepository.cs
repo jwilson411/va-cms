@@ -17,7 +17,7 @@ public class NotificationRepository : INotificationRepository
     public NotificationRepository(CmsDatabase db) => _db = db;
 
     /// <inheritdoc />
-    public async Task<int> CreateForWorkflowEventAsync(long contentEntryId, string eventType, long actorId, string? comment = null)
+    public async Task<IReadOnlyList<NotificationRecipient>> CreateForWorkflowEventAsync(long contentEntryId, string eventType, long actorId, string? comment = null)
     {
         await using var conn = new SqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
@@ -32,8 +32,12 @@ public class NotificationRepository : INotificationRepository
         var count = cmd.Parameters.Add("@Count", SqlDbType.Int);
         count.Direction = ParameterDirection.Output;
 
-        await cmd.ExecuteNonQueryAsync();
-        return count.Value is int n ? n : 0;
+        var results = new List<NotificationRecipient>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            results.Add(MapRecipient(reader));
+
+        return results;
     }
 
     /// <inheritdoc />
@@ -95,6 +99,26 @@ public class NotificationRepository : INotificationRepository
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    private static NotificationRecipient MapRecipient(SqlDataReader r)
+    {
+        var ordActorName = r.GetOrdinal("ActorDisplayName");
+        var ordComment   = r.GetOrdinal("Comment");
+
+        return new NotificationRecipient
+        {
+            Id                   = r.GetInt64(r.GetOrdinal("Id")),
+            RecipientUserId      = r.GetInt64(r.GetOrdinal("RecipientUserId")),
+            RecipientEmail       = r.GetString(r.GetOrdinal("RecipientEmail")),
+            RecipientDisplayName = r.GetString(r.GetOrdinal("RecipientDisplayName")),
+            EventType            = r.GetString(r.GetOrdinal("EventType")),
+            ContentEntryId       = r.GetInt64(r.GetOrdinal("ContentEntryId")),
+            ContentTitle         = r.GetString(r.GetOrdinal("ContentTitle")),
+            Message              = r.GetString(r.GetOrdinal("Message")),
+            ActorDisplayName     = r.IsDBNull(ordActorName) ? null : r.GetString(ordActorName),
+            Comment              = r.IsDBNull(ordComment)   ? null : r.GetString(ordComment),
+        };
+    }
 
     private static Notification MapNotification(SqlDataReader r)
     {

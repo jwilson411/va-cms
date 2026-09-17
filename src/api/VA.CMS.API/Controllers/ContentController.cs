@@ -2,12 +2,12 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
-using VA.CMS.API.Notifications;
 using VA.CMS.API.Webhooks;
 using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Markdown;
+using VA.CMS.Infrastructure.Notifications;
 
 namespace VA.CMS.API.Controllers;
 
@@ -378,6 +378,7 @@ public class ContentController : ControllerBase
     /// Direct publish. Requires CanPublish.
     /// Issue #43 — FR-MEDIA-05: blocks publish if any referenced image asset lacks alt text.
     /// Issue #66 — FR-AUTH-02a: regenerates RenderedFieldsJson on publish.
+    /// Issue #39 — FR-WORKFLOW-02: notifies the entry owner (in-app + email).
     /// </summary>
     [HttpPost("{id:long}/publish")]
     [Authorize(Policy = CmsRoles.Policies.CanPublish)]
@@ -416,6 +417,7 @@ public class ContentController : ControllerBase
             entry.PublishedVersionId = latestVersion.Id;
             await _entries.UpdateAsync(entry);
             _webhooks.Enqueue(WebhookEvents.ContentPublished, ContentEventPayload(entry));
+            await _notifier.NotifyAsync(entry.Id, NotificationEventTypes.ContentPublished, _rbac.GetUserId(User) ?? 0);
             return NoContent();
         }
 
@@ -428,6 +430,7 @@ public class ContentController : ControllerBase
         entry.PublishedVersionId = latestVersion.Id;
         await _entries.UpdateAsync(entry);
         _webhooks.Enqueue(WebhookEvents.ContentPublished, ContentEventPayload(entry));
+        await _notifier.NotifyAsync(entry.Id, NotificationEventTypes.ContentPublished, _rbac.GetUserId(User) ?? 0);
         return NoContent();
     }
 
