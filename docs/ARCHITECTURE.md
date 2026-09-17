@@ -139,12 +139,16 @@ Callback → /api/auth/callback
 Admin SPA receives JWT — stored in memory (NOT localStorage)
 All API calls: Authorization: Bearer {jwt}
 
-Silent refresh: before expiry, SPA calls GET /api/auth/refresh
-  → validates httpOnly refresh cookie
-  → issues new JWT
+Silent refresh: before expiry, SPA calls POST /api/auth/refresh
+  → validates the httpOnly refresh cookie against [RefreshToken] (hash only)
+  → rotates it: old token revoked, replacement set in the cookie (#163)
+  → issues new JWT (carries User.SessionVersion as "sv")
   → no user interaction required
 
-AD account disabled? → next refresh returns 401 → SPA forces re-login
+Replayed (already rotated) refresh token → whole session chain revoked, audited
+Idle > auth.idleTimeoutMinutes, or login + auth.absoluteSessionHours reached → 401
+AD account disabled / user deactivated / role changed → sessions revoked, SessionVersion
+  bumped → existing access tokens refused within auth.revocationCheckSeconds, refresh returns 401
 ```
 
 **Key principles:**

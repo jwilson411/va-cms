@@ -178,9 +178,10 @@ curl -s http://localhost:5100/api/v1/admin/health/db \
   -H "X-Dev-User: alice@va.gov"
 ```
 
-**Security note:** `Auth:Mode=DevBypass` is hard-blocked in Production — the API refuses to
-start if `ASPNETCORE_ENVIRONMENT=Production` and DevBypass is configured. Never set DevBypass
-in production appsettings.
+**Security note:** `Auth:Mode=DevBypass` only runs in the Development environment — the API
+refuses to start with it under any other `ASPNETCORE_ENVIRONMENT` (Staging included), and
+refuses an empty `DevBypassAllowedUsers` list (#164). Never set DevBypass in a deployed
+appsettings.
 
 **CI integration tests:** `.github/workflows/ci.yml` runs on every pull request and push to
 `main`: the .NET solution builds with warnings as errors and runs its test suite against a

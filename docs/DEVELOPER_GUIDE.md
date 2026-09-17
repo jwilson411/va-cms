@@ -74,12 +74,16 @@ The CMS uses AD as the identity provider. The API issues a JWT — it never stor
      - Refresh token (httpOnly cookie, 8 hr)
 6. All API requests: Authorization: Bearer {jwt}
 7. Before JWT expires, SPA silently POSTs to /api/auth/refresh
-     - API validates httpOnly cookie
+     - API validates the httpOnly cookie against [RefreshToken] and rotates it (#163)
      - Issues new JWT
-8. If AD account is disabled: next refresh → 401 → SPA clears state → login redirect
+8. If AD account is disabled, the user is deactivated or their roles change: sessions are
+   revoked → next refresh → 401 → SPA clears state → login redirect
+9. Idle for auth.idleTimeoutMinutes: the SPA warns, then signs out; the API refuses the
+   refresh regardless (#164). The /login page shows the system-use notice, which must be
+   acknowledged (ack=1) before /api/auth/login starts a sign-in.
 ```
 
-**Dev setup (no AD):** Set `Auth:Mode=DevBypass` in `appsettings.Development.json`. The API accepts a `X-Dev-User: alice@va.gov` header and issues a JWT for that UPN without AD. Never ship this mode in Production.
+**Dev setup (no AD):** Set `Auth:Mode=DevBypass` and a non-empty `DevBypassAllowedUsers` in `appsettings.Development.json`. The API accepts a `X-Dev-User: alice@va.gov` header and issues a JWT for that UPN without AD. The mode refuses to start outside `ASPNETCORE_ENVIRONMENT=Development` (#164).
 
 ```json
 // appsettings.Development.json (excerpt)

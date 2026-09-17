@@ -977,52 +977,82 @@ GO
 
 ### 4.9 Audit Log
 
+`usp_AuditLog_Write` is called by other stored procedures inside their own transaction and by the API for
+events that have no stored procedure of their own (logon, logoff, refresh, policy denials). Since #165 the
+row carries where the request came from and whether it succeeded (NIST AU-3).
+
 ```sql
--- usp_AuditLog_Write (called by other SPs — not directly by app)
 CREATE OR ALTER PROCEDURE [dbo].[usp_AuditLog_Write]
-    @ActorId    BIGINT,
-    @EntityType NVARCHAR(100),
-    @EntityId   BIGINT,
-    @Action     NVARCHAR(50),
-    @DiffJson   NVARCHAR(MAX) = NULL
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @ActorEmail NVARCHAR(500);
-    SELECT @ActorEmail = Email FROM [User] WHERE Id = @ActorId;
-
-    INSERT INTO [AuditLog]
-        ([ActorId], [ActorEmail], [EntityType], [EntityId], [Action], [DiffJson], [CreatedAt])
-    VALUES
-        (@ActorId, @ActorEmail, @EntityType, CAST(@EntityId AS NVARCHAR(100)), @Action, @DiffJson, SYSUTCDATETIME());
-END;
-GO
-
--- usp_AuditLog_List
-CREATE OR ALTER PROCEDURE [dbo].[usp_AuditLog_List]
-    @ActorId    BIGINT = NULL,
-    @EntityType NVARCHAR(100) = NULL,
-    @Action     NVARCHAR(50) = NULL,
-    @FromDate   DATETIME2 = NULL,
-    @ToDate     DATETIME2 = NULL,
-    @Page       INT = 1,
-    @PageSize   INT = 50
-AS
-BEGIN
-    SET NOCOUNT ON;
-    SELECT *
-    FROM   [AuditLog]
-    WHERE  (@ActorId    IS NULL OR [ActorId]    = @ActorId)
-      AND  (@EntityType IS NULL OR [EntityType] = @EntityType)
-      AND  (@Action     IS NULL OR [Action]     = @Action)
-      AND  (@FromDate   IS NULL OR [CreatedAt] >= @FromDate)
-      AND  (@ToDate     IS NULL OR [CreatedAt] <= @ToDate)
-    ORDER  BY [CreatedAt] DESC
-    OFFSET (@Page - 1) * @PageSize ROWS
-    FETCH  NEXT @PageSize ROWS ONLY;
-END;
-GO
+    @ActorId       BIGINT,                 -- NULL (or 0) → SESSION_CONTEXT(N'ActorId')
+    @EntityType    NVARCHAR(100),
+    @EntityId      BIGINT,
+    @Action        NVARCHAR(50),
+    @DiffJson      NVARCHAR(MAX) = NULL,
+    @Outcome       NVARCHAR(20)  = NULL,   -- 'Failure' or anything else → 'Success'
+    @SourceIp      NVARCHAR(50)  = NULL,   -- NULL → SESSION_CONTEXT(N'SourceIp')
+    @UserAgent     NVARCHAR(500) = NULL,   -- NULL → SESSION_CONTEXT(N'UserAgent')
+    @CorrelationId NVARCHAR(100) = NULL    -- NULL → SESSION_CONTEXT(N'CorrelationId')
 ```
+
+**SESSION_CONTEXT.** For every authenticated request the API's `CmsDatabase` runs `sp_set_session_context` for
+`ActorId`, `SourceIp`, `UserAgent` and `CorrelationId` on each connection it opens (pooled connections are reset
+on return, so this is per open, not per request). A stored procedure that audits therefore records who/where
+without a signature change; procedures that already receive the acting user (`@OwnerId`, `@AuthorId`,
+`@GrantedById`, `@UploadedById`, `@CreatedById`) pass it explicitly, the rest take a trailing
+`@ActorId BIGINT = NULL`. Background workers and anonymous requests set no context and audit with a NULL actor.
+
+`usp_AuditLog_ListPaged` / `usp_AuditLog_ExportCsv` (V030, V043) return the new columns and accept `@Outcome`
+and `@IpAddress` filters; `usp_AuditLog_List` (V008) is unchanged.
+
+**Event catalogue.** `Issue165AcceptanceTests.Mutating_Procedure_Writes_Its_Audit_Row` executes every
+procedure below and asserts its row — add a case there when adding an audited procedure.
+
+| EntityType | Action | Written by | Actor | DiffJson |
+|---|---|---|---|---|
+| `User` | `Provision` | `usp_User_Upsert` (insert branch only) | the new user | externalId, email |
+| `User` | `AssignRole` | `usp_User_AssignRole` (also ends the user's sessions) | `@GrantedById` | roleId, role, sectionId |
+| `User` | `RevokeRole` | `usp_User_RevokeRole` (also ends the user's sessions) | context | roleId, role, sectionId |
+| `User` | `Deactivate` | `usp_User_Deactivate` (also ends the user's sessions) | `@ActorId` | — |
+| `Session` | `SessionsRevoked` | `usp_RefreshToken_RevokeAllForUser` | `@ActorId` | reason, refreshTokensRevoked |
+| `Session` | `RefreshReplay` (Failure) | `usp_RefreshToken_Validate` | the token's user | familyId, priorReason |
+| `Session` | `Logon` / `LogonFailure` (Failure) / `Logoff` / `Refresh` / `RefreshFailure` (Failure) | API auth controllers | the user, or NULL with the attempted UPN in DiffJson | mode, upn, reason, systemUseAcknowledged |
+| `Endpoint` | `AuthorizationDenied` (Failure) | API (`IAuthorizationMiddlewareResultHandler`, once per 403) | the caller | method, path, policy, requiredRoles |
+| `ContentEntry` | `Create` | `usp_ContentEntry_Create` | `@OwnerId` | contentTypeId, slug, locale |
+| `ContentEntry` | `UpdateStatus` | `usp_ContentEntry_UpdateStatus` | context | fromStatus, toStatus, publishedVersionId |
+| `ContentEntry` | `Archive`, `UpdateSlug`, `SetSchedule`, `Duplicate`, `WorkflowTransition_<Status>`, `ScheduledPublish` / `ScheduledExpire` | pre-existing (V008, V017–V020, V040) | as before | as before |
+| `ContentVersion` | `Create` | `usp_ContentVersion_Create` | `@AuthorId` | contentEntryId, versionNumber, status, changeNote |
+| `ContentVersion` | `Restore` | `usp_ContentVersion_Restore` (V016) | `@ActorId` | as before |
+| `MediaAsset` | `Create` | `usp_MediaAsset_Create` | `@UploadedById` | fileName, mimeType, fileSizeBytes |
+| `MediaAsset` | `UpdateMetadata` | `usp_MediaAsset_UpdateMetadata` | context | altText, title, descriptionChanged, tagsChanged |
+| `MediaAsset` | `Delete` | `usp_MediaAsset_SafeDelete` (deleted branch only) | context | fileName |
+| `MediaAsset` | `VirusScanRejected`, `UploadRejected` | API `MediaUploadService` (#159) | the uploader | as before |
+| `NavigationMenu` | `Create` / `Update` / `Delete` / `Reorder` | `usp_Navigation_CreateMenu` / `_UpdateMenu` / `_DeleteMenu` / `_BulkReorder` | context | name, handle / itemsDeleted / itemsUpdated, items |
+| `NavigationItem` | `Create` / `Update` / `Delete` | `usp_Navigation_UpsertItem` / `_DeleteItem` | context | the item fields / menuId, label |
+| `Redirect` | `Create` / `Update` / `Deactivate` | `usp_Redirect_Create` / `_Update` / `_Deactivate` | `@CreatedById` / context | fromPath, toPath, statusCode |
+| `Webhook` | `Create` / `Delete` | `usp_Webhook_Create` / `_Delete` | `@CreatedById` / context | name, url, events (never the secret) |
+| `SearchPin` | `Create` / `Update` / `Delete` | `usp_SearchPin_Create` / `_Delete` | `@CreatedById` / context | queryString, contentEntryId |
+| `AdGroupRoleMapping` | `AdGroupMappingUpserted` / `AdGroupMappingDeleted` | `usp_AdGroupMapping_Upsert` / `_Delete` | `@CreatedById` / context | adGroup, roleId, role |
+| `SiteSetting` | `SiteSettingUpdated` / `SiteSettingReset` | API `SiteSettingsController` (#150) | the admin | key, old/new value |
+
+Not audited by design: `usp_ContentVersion_UpdateRenderedFields` (derived render output, no user intent),
+`usp_MediaAsset_SetVirusScanResult` / `_UpdateWebPPath` (pipeline bookkeeping — the upload itself is audited),
+the search query log, notification reads and the scheduler's sweep queries.
+
+### 4.9a Refresh Tokens (#163)
+
+`[RefreshToken]` (V044) holds one row per issued token — `TokenHash BINARY(32)` (SHA-256 of the opaque cookie
+value), `FamilyId` (one login = one family, kept through rotation), `IssuedAt`, `ExpiresAt`, `AbsoluteExpiresAt`,
+`LastUsedAt`, `RevokedAt`, `RevokedReason`, `ReplacedById`, `CreatedByIp`, `UserAgent`, `GroupsJson`. `[User]`
+gains `SessionVersion INT`. `vacms_app` reaches the table only through:
+
+| Procedure | Purpose |
+|---|---|
+| `usp_RefreshToken_Issue` | new family at login; stores the hash, per-token and absolute expiry, client address, login-time AD groups |
+| `usp_RefreshToken_Validate @TokenHash, @IdleMinutes, @RotationGraceSeconds, @SourceIp, @UserAgent` | returns `Status` = `Ok` / `Replay` / `Expired` / `Idle` (no row when unknown). A revoked token presented outside the rotation grace is replay: the whole family is revoked and `Session/RefreshReplay` audited |
+| `usp_RefreshToken_Rotate @OldId, @NewTokenHash, @ExpiresAt, …` | revokes the old row (`Rotated`, `ReplacedById`) and inserts its replacement in one transaction; `ExpiresAt` is capped at `AbsoluteExpiresAt` |
+| `usp_RefreshToken_Revoke @TokenHash, @Reason` | single token (logout, disabled account) |
+| `usp_RefreshToken_RevokeAllForUser @UserId, @ActorId, @Reason` | "sign out everywhere": revokes every live token and bumps `User.SessionVersion`; called by `usp_User_Deactivate`, `usp_User_AssignRole`, `usp_User_RevokeRole` |
+| `usp_Maint_PurgeRefreshTokens @RetentionDays = 30` | Agent job (§6.8): deletes revoked/expired rows older than the retention |
 
 ### 4.10 Webhooks
 
@@ -1196,6 +1226,7 @@ GO
 ### 6.3 AuditLog Archival
 
 The AuditLog is write-only and grows indefinitely. Rows older than the retention policy move to an archive table and are purged from the live table.
+V043 adds `IpAddress`, `UserAgent`, `CorrelationId` and `Outcome` to both tables and to the batch copy below.
 
 ```sql
 -- migrations/V006__audit_archive.sql
@@ -1303,6 +1334,12 @@ The background worker calls these SPs every 60 seconds, not the API request path
 -- After processing each, the worker calls usp_Workflow_Transition to update status
 ```
 
+### 6.8 Refresh Token Purge
+
+`usp_Maint_PurgeRefreshTokens @RetentionDays = 30` (V044) deletes revoked or expired `[RefreshToken]` rows older
+than the retention in 5 000-row batches, clearing `ReplacedById` links first. Live rows are never touched; the
+security-relevant events are already in `AuditLog`. Registered by `infra/sql-agent-jobs/job_Maint_PurgeRefreshTokens.sql`.
+
 ### 6.7 Database Monitoring Queries
 
 Expose these as read-only API endpoints for the admin health dashboard:
@@ -1383,6 +1420,10 @@ GO
 | `V007__search_analytics_tables.sql` | `SearchQueryLog`, `SearchQuerySummary` tables |
 | `V008__stored_procedures.sql` | All `usp_*` application SPs |
 | `V009__monitoring_sps.sql` | `usp_Monitor_*` SPs |
+| `V010`–`V042` | feature migrations — see each file's header comment |
+| `V043__audit_log_columns.sql` | `AuditLog.CorrelationId` / `Outcome` (+ archive), `usp_AuditLog_Write` with SESSION_CONTEXT fallback, viewer filters (#165) |
+| `V044__refresh_tokens.sql` | `RefreshToken` table, `User.SessionVersion`, `usp_RefreshToken_*`, `usp_Maint_PurgeRefreshTokens` (#163) |
+| `V045__audit_coverage.sql` | every mutating SP audits inside its transaction; role changes end sessions (#165) |
 
 ---
 
@@ -1395,5 +1436,6 @@ GO
 | Audit Log Archival | `usp_Maint_ArchiveAuditLog` | Monthly 1st Sun 00:00 |
 | Webhook Log Purge | `usp_Maint_PurgeWebhookDeliveries` | Weekly Sun 03:00 |
 | Search Log Rollup | `usp_Maint_RollupSearchLogs` | Daily 00:15 |
+| Refresh Token Purge | `usp_Maint_PurgeRefreshTokens` | Daily 02:30 |
 
 All jobs log to the SQL Server Agent job history. A monitoring SP (`usp_Monitor_AgentJobStatus`) checks the last run result of each job and surfaces failures to the admin health dashboard.
