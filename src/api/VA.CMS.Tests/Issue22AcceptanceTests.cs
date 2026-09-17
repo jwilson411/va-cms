@@ -74,7 +74,7 @@ public class Issue22AcceptanceTests
         var token = svc.Issue(userId: 1);
 
         // Immediately valid
-        Assert.Equal(1L, svc.Validate(token));
+        Assert.Equal(1L, svc.Validate(token)?.UserId);
     }
 
     // ── AC3: Silent refresh endpoint succeeds with valid cookie ──────────────
@@ -132,7 +132,7 @@ public class Issue22AcceptanceTests
         var token = svc.Issue(userId: 42);
 
         // Token is valid before revocation
-        Assert.Equal(42L, svc.Validate(token));
+        Assert.Equal(42L, svc.Validate(token)?.UserId);
 
         svc.Revoke(token);
 

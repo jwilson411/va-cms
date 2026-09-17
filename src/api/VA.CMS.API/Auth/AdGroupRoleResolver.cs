@@ -35,12 +35,20 @@ public interface IAdGroupRoleResolver
         IEnumerable<UserRoleAssignment> explicitRoles);
 
     /// <summary>
-    /// Overload for DevBypass mode: group names come from the dev header,
-    /// not from ClaimsPrincipal.
+    /// Overload taking an explicit group list: the DevBypass header, the groups
+    /// persisted with a refresh session, or SIDs/names from a Negotiate identity.
     /// </summary>
     Task<IEnumerable<UserRoleAssignment>> MergeRolesAsync(
         IEnumerable<string> adGroupNames,
         IEnumerable<UserRoleAssignment> explicitRoles);
+
+    /// <summary>
+    /// Extracts the AD group identifiers carried by an authenticated identity so
+    /// they can be persisted with the refresh session (#153). Azure AD emits
+    /// <c>groups</c> claims; a Negotiate identity emits <see cref="ClaimTypes.GroupSid"/>
+    /// (Windows) or <see cref="ClaimTypes.Role"/> (Linux + LDAP) claims.
+    /// </summary>
+    IReadOnlyList<string> ExtractGroups(ClaimsPrincipal identity);
 }
 
 /// <inheritdoc />
@@ -53,19 +61,52 @@ public sealed class AdGroupRoleResolver : IAdGroupRoleResolver
         _mappings = mappings;
     }
 
-    public async Task<IEnumerable<UserRoleAssignment>> MergeRolesAsync(
+    public Task<IEnumerable<UserRoleAssignment>> MergeRolesAsync(
         ClaimsPrincipal identity,
         IEnumerable<UserRoleAssignment> explicitRoles)
+        => MergeRolesAsync(ExtractGroups(identity), explicitRoles);
+
+    public IReadOnlyList<string> ExtractGroups(ClaimsPrincipal identity)
     {
         // AAD emits group membership in "groups" claims (Object IDs or display names).
         // We match against the AdGroup column which stores the display name or
         // the OID as configured by the admin.
-        var groupClaims = identity
-            .FindAll("groups")
-            .Select(c => c.Value)
-            .ToList();
+        var groups = identity.FindAll("groups").Select(c => c.Value).ToList();
 
-        return await MergeRolesAsync(groupClaims, explicitRoles);
+        // Negotiate: Windows populates GroupSid claims (S-1-5-21-…); the Linux
+        // handler with EnableLdap populates Role claims with group names. Both the
+        // raw SID and, where the host can translate it, the DOMAIN\Group name are
+        // returned so an admin can map by whichever form they know.
+        foreach (var sid in identity.FindAll(ClaimTypes.GroupSid).Select(c => c.Value))
+        {
+            groups.Add(sid);
+            var name = TranslateSid(sid);
+            if (name is not null) groups.Add(name);
+        }
+
+        if (identity.Identity?.AuthenticationType == "Negotiate")
+            groups.AddRange(identity.FindAll(ClaimTypes.Role).Select(c => c.Value));
+
+        return groups
+            .Where(g => !string.IsNullOrWhiteSpace(g))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string? TranslateSid(string sid)
+    {
+        if (!OperatingSystem.IsWindows())
+            return null;
+        try
+        {
+            return new System.Security.Principal.SecurityIdentifier(sid)
+                .Translate(typeof(System.Security.Principal.NTAccount)).Value;
+        }
+        catch (Exception)
+        {
+            // Unresolvable SID (well-known, foreign domain, no DC reachable) — keep the raw SID only.
+            return null;
+        }
     }
 
     public async Task<IEnumerable<UserRoleAssignment>> MergeRolesAsync(

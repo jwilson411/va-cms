@@ -18,6 +18,10 @@ namespace VA.CMS.API.Controllers;
 /// Story #67 addition: both Callback and Refresh now call AdGroupRoleResolver
 /// to merge group-mapped roles into the effective role set. Explicit UserRole
 /// assignments always win over group-mapped roles.
+///
+/// #153: the groups observed at login are persisted with the refresh session.
+/// Refresh re-applies the current mappings to those groups; the X-Dev-Groups
+/// header is honoured only under DevBypass in the Development environment.
 /// </summary>
 [ApiController]
 [Route("api/auth")]
@@ -113,20 +117,21 @@ public class AuthController : ControllerBase
         var explicitRoles = await _users.GetRolesAsync(userId);
 
         // Merge with AD group-mapped roles (explicit always wins — #67 AC5)
-        var effectiveRoles = await _groupResolver.MergeRolesAsync(User, explicitRoles);
+        var adGroups       = _groupResolver.ExtractGroups(User);
+        var effectiveRoles = await _groupResolver.MergeRolesAsync(adGroups, explicitRoles);
 
-        // Issue CMS JWT (15 min, HS256)
+        // Issue CMS JWT (auth.accessTokenMinutes, HS256)
         var accessToken = _jwt.IssueAccessToken(user, effectiveRoles);
 
-        // Issue refresh token in httpOnly cookie (8 hr)
-        var refreshToken = _refreshTokens.Issue(userId);
+        // Issue refresh token in httpOnly cookie; the login-time groups travel with it (#153)
+        var refreshToken = _refreshTokens.Issue(userId, adGroups);
         var cookieOpts   = AuthCookieHelper.BuildCookieOptions(isProduction: _env.IsProduction(), lifetime: _refreshTokens.Lifetime);
         Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, refreshToken, cookieOpts);
 
         return Ok(new
         {
             accessToken,
-            expiresIn = 900,
+            expiresIn = (int)_jwt.AccessTokenLifetime.TotalSeconds,
             tokenType = "Bearer",
         });
     }
@@ -134,8 +139,8 @@ public class AuthController : ControllerBase
     // ──────────────────────────────────────────────────────────────────────
     // GET /api/auth/refresh
     // Validates the httpOnly refresh cookie and issues a new JWT.
-    // Story #67 AC4: re-resolves AD group memberships from the token claims
-    // and applies current mappings. Mapping changes take effect here.
+    // Story #67 AC4: re-applies the current AdGroupRoleMapping rows to the
+    // groups captured at login. Mapping changes take effect here.
     // ──────────────────────────────────────────────────────────────────────
     [HttpGet("refresh")]
     [AllowAnonymous]
@@ -147,11 +152,12 @@ public class AuthController : ControllerBase
             return Unauthorized("Refresh token missing.");
         }
 
-        var userId = _refreshTokens.Validate(refreshToken);
-        if (userId is null)
+        var session = _refreshTokens.Validate(refreshToken);
+        if (session is null)
             return Unauthorized("Refresh token invalid or expired.");
 
-        var user = await _users.GetByIdAsync(userId.Value);
+        var userId = session.UserId;
+        var user   = await _users.GetByIdAsync(userId);
         if (user is null || !user.IsActive)
         {
             _refreshTokens.Revoke(refreshToken);
@@ -161,47 +167,40 @@ public class AuthController : ControllerBase
         }
 
         // Explicit roles
-        var explicitRoles = await _users.GetRolesAsync(userId.Value);
+        var explicitRoles = await _users.GetRolesAsync(userId);
 
-        // DevBypass users have no UserRole rows — re-grant the DevBypassRoles set so a
-        // refreshed token keeps the same permissions dev-login originally issued.
-        if (_authOptions.Mode == AuthMode.DevBypass
-            && !_env.IsProduction()
-            && user.ExternalId.StartsWith(DevBypassRoles.ExternalIdPrefix, StringComparison.Ordinal))
-        {
-            explicitRoles = explicitRoles.Concat(DevBypassRoles.Build()).ToList();
-        }
+        // The refresh token is an opaque CMS token, not an AAD token, so there are no
+        // group claims on this request. The groups resolved at login were persisted
+        // with the session; re-resolving them here means mapping changes made by an
+        // admin take effect on the next refresh rather than the next login.
+        var adGroups = new List<string>(session.AdGroups);
 
-        // On refresh, we do not have a full ClaimsPrincipal with AD group claims
-        // (the refresh token is a CMS-issued opaque token, not an AAD token).
-        // We resolve group membership from the dev-header in DevBypass mode.
-        // In AzureAd mode, pass an empty group list — the actual group resolution
-        // happens at Callback when the AAD token (with group claims) is present.
-        // The merged set stays current as long as the user re-authenticates before
-        // group memberships change, which satisfies the AC: "takes effect on
-        // the user's next login."
-        //
-        // To re-evaluate group mappings on every refresh call, re-query current
-        // mappings for the groups that were baked into the refresh session.
-        // Since the CMS refresh token is opaque (no group claims), we use the
-        // AD group dev-header in DevBypass and empty groups otherwise.
-        var devGroups = new List<string>();
-        if (Request.Headers.TryGetValue("X-Dev-Groups", out var devGroupHeader))
+        // DevBypass (Development only): no UserRole rows exist for dev users, so
+        // re-grant the DevBypassRoles set, and let the X-Dev-Groups header simulate
+        // AD membership. Outside that exact configuration the header is ignored —
+        // honouring it in AzureAd/WindowsAuth would let any cookie holder mint a
+        // token with whatever group-mapped role they name (#153).
+        if (_authOptions.Mode == AuthMode.DevBypass && _env.IsDevelopment())
         {
-            devGroups = devGroupHeader.ToString()
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToList();
+            if (user.ExternalId.StartsWith(DevBypassRoles.ExternalIdPrefix, StringComparison.Ordinal))
+                explicitRoles = explicitRoles.Concat(DevBypassRoles.Build()).ToList();
+
+            if (Request.Headers.TryGetValue("X-Dev-Groups", out var devGroupHeader))
+            {
+                adGroups.AddRange(devGroupHeader.ToString()
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            }
         }
 
         // Re-apply current group mappings so admin changes take effect on next refresh.
-        var effectiveRoles = await _groupResolver.MergeRolesAsync(devGroups, explicitRoles);
+        var effectiveRoles = await _groupResolver.MergeRolesAsync(adGroups, explicitRoles);
 
         var accessToken = _jwt.IssueAccessToken(user, effectiveRoles);
 
         return Ok(new
         {
             accessToken,
-            expiresIn = 900,
+            expiresIn = (int)_jwt.AccessTokenLifetime.TotalSeconds,
             tokenType = "Bearer",
         });
     }

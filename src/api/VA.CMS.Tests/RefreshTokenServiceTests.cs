@@ -37,7 +37,25 @@ public class RefreshTokenServiceTests
         var svc   = Build();
         var token = svc.Issue(userId: 99);
         var result = svc.Validate(token);
-        Assert.Equal(99L, result);
+        Assert.Equal(99L, result?.UserId);
+    }
+
+    [Fact]
+    public void Validate_Returns_Groups_Captured_At_Issue()
+    {
+        var svc    = Build();
+        var token  = svc.Issue(userId: 7, adGroups: new[] { "VA-CMS-Editors", " ", "va-cms-editors", "S-1-5-21-1-2-3-1001" });
+        var result = svc.Validate(token);
+
+        Assert.NotNull(result);
+        Assert.Equal(new[] { "VA-CMS-Editors", "S-1-5-21-1-2-3-1001" }, result!.AdGroups);
+    }
+
+    [Fact]
+    public void Validate_Returns_Empty_Groups_When_None_Issued()
+    {
+        var svc = Build();
+        Assert.Empty(svc.Validate(svc.Issue(1))!.AdGroups);
     }
 
     [Fact]
@@ -78,7 +96,7 @@ public class RefreshTokenServiceTests
         {
             var token = svc.Issue(i);
             await Task.Yield();
-            var uid = svc.Validate(token);
+            var uid = svc.Validate(token)?.UserId;
             Assert.Equal((long)i, uid);
         });
         await Task.WhenAll(tasks);
