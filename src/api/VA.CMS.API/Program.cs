@@ -178,70 +178,8 @@ switch (authOptions.Mode)
         break;
 }
 
-builder.Services.AddAuthorization(options =>
-{
-    var allRoles = new[]
-    {
-        VA.CMS.API.Auth.CmsRoles.ContentOwner,
-        VA.CMS.API.Auth.CmsRoles.Editor,
-        VA.CMS.API.Auth.CmsRoles.SiteAdmin,
-        VA.CMS.API.Auth.CmsRoles.Developer,
-        VA.CMS.API.Auth.CmsRoles.SystemAdmin,
-        VA.CMS.API.Auth.CmsRoles.ReadOnly,
-    };
-
-    // Default deny (#155): a principal with no CMS role gets 403 everywhere. The
-    // default policy covers bare [Authorize]; the fallback covers endpoints with no
-    // attribute at all. Anonymous endpoints opt out with [AllowAnonymous]; login
-    // endpoints that must accept a role-less external identity use AuthenticatedOnly.
-    var anyRole = new AuthorizationPolicyBuilder()
-        .RequireAuthenticatedUser()
-        .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(allRoles))
-        .Build();
-    options.DefaultPolicy  = anyRole;
-    options.FallbackPolicy = anyRole;
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.AuthenticatedOnly, p =>
-        p.RequireAuthenticatedUser());
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.AnyRole, anyRole);
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanRead, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(allRoles)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanWrite, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
-             VA.CMS.API.Auth.CmsRoles.ContentOwner,
-             VA.CMS.API.Auth.CmsRoles.Editor,
-             VA.CMS.API.Auth.CmsRoles.SiteAdmin,
-             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanPublish, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
-             VA.CMS.API.Auth.CmsRoles.Editor,
-             VA.CMS.API.Auth.CmsRoles.SiteAdmin,
-             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanManageSite, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
-             VA.CMS.API.Auth.CmsRoles.SiteAdmin,
-             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanDevelop, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
-             VA.CMS.API.Auth.CmsRoles.Developer,
-             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
-
-    options.AddPolicy(VA.CMS.API.Auth.CmsRoles.Policies.CanAdminSystem, p =>
-        p.RequireAuthenticatedUser()
-         .AddRequirements(new VA.CMS.API.Auth.CmsRoleRequirement(
-             VA.CMS.API.Auth.CmsRoles.SystemAdmin)));
-});
+// Policies (default deny — see CmsAuthorizationExtensions, #155)
+builder.Services.AddCmsAuthorization();
 
 // -----------------------------------------------------------------------
 // Services
@@ -353,7 +291,6 @@ builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton<IJwtService, JwtService>();
 builder.Services.AddSingleton<IRefreshTokenService, InMemoryRefreshTokenService>();
 builder.Services.AddSingleton<IRbacService, RbacService>();
-builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, CmsRoleHandler>();
 
 // -----------------------------------------------------------------------
 // Storage backend (issue #40: BRD FR-MEDIA-07 / FR-SECURITY-06)
@@ -435,11 +372,30 @@ builder.Services.AddContentType<NewsArticleTypeDefinition>();
 // - Types: ContentEntry, MediaAsset, NavigationMenu, TaxonomyTerm
 // - DataLoader prevents N+1 on relation loads
 // -----------------------------------------------------------------------
+// #156: two audiences on one schema. The endpoint stays anonymous so the public
+// site can query Published content; field-level [Authorize] and IGraphQLAudience
+// gate everything else on the JWT bearer identity. Depth, cost and timeout limits
+// bound what an anonymous caller can make the database do; introspection is a
+// Development-only convenience.
+builder.Services.AddScoped<IGraphQLAudience, GraphQLAudience>();
 builder.Services
     .AddGraphQLServer()
+    .AddAuthorization()
     .AddQueryType<Query>()
     .AddDataLoader<VA.CMS.API.GraphQL.DataLoaders.ContentEntryByIdDataLoader>()
-    .AddDataLoader<VA.CMS.API.GraphQL.DataLoaders.MediaAssetByIdDataLoader>();
+    .AddDataLoader<VA.CMS.API.GraphQL.DataLoaders.MediaAssetByIdDataLoader>()
+    .AddMaxExecutionDepthRule(GraphQLLimits.MaxExecutionDepth, skipIntrospectionFields: true)
+    .ModifyCostOptions(o =>
+    {
+        o.MaxFieldCost = GraphQLLimits.MaxFieldCost;
+        o.MaxTypeCost  = GraphQLLimits.MaxTypeCost;
+    })
+    .ModifyRequestOptions(o =>
+    {
+        o.ExecutionTimeout       = GraphQLLimits.ExecutionTimeout;
+        o.IncludeExceptionDetails = builder.Environment.IsDevelopment();
+    })
+    .DisableIntrospection(!builder.Environment.IsDevelopment());
 
 // -----------------------------------------------------------------------
 // Custom Field Type Plugins (FR-DEV-05 / issue #27)
@@ -545,7 +501,7 @@ app.MapControllers();
 // Endpoint:  /api/graphql
 // Playground: /api/graphql/ui (Development only — HC disables Banana Cake Pop in non-dev by default)
 app.MapGraphQL("/api/graphql")
-   .AllowAnonymous();   // Auth is enforced at the REST layer; headless consumers use API keys per epic scope
+   .AllowAnonymous();   // #156: anonymous = Published-only surface; CanRead JWT = full surface (see GraphQLAudience)
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
    .AllowAnonymous();

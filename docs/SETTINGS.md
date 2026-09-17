@@ -93,7 +93,7 @@ Defaults are the values that were previously hard-coded.
 ### Features
 | Key | Default | Scope | Effect when off |
 |---|---|---|---|
-| `features.graphql` | true | Server | `/api/graphql` → 404 |
+| `features.graphql` | **false** | Server | `/api/graphql` → 404 (on: anonymous = Published only, CanRead JWT = full surface — see DEVELOPER_GUIDE) |
 | `features.swaggerUi` | false | Server | `/swagger` → 404 outside Development (always on in Development) |
 | `features.webhooks` | true | Server | `IWebhookBackgroundDispatcher.Enqueue` is a no-op |
 | `features.scheduledPublishing` | true | Server | `ScheduledPublishWorker` skips its sweep |

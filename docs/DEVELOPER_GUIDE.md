@@ -461,8 +461,18 @@ Full OpenAPI spec: `/swagger` when running in Development, or exported to `docs/
 
 ## GraphQL
 
-Endpoint: `/api/graphql`  
-Playground: `/api/graphql/ui` (Development only)
+Endpoint: `/api/graphql` — off by default; turn on the `features.graphql` site setting.  
+Playground: `/api/graphql/ui` (Development only; introspection is also Development-only)
+
+### Audiences
+
+| Caller | `contentEntries` / `contentEntry(id)` | `mediaAsset(id)` | `mediaAssets` | Hidden fields |
+|---|---|---|---|---|
+| Anonymous | Published entries only (`status` argument is overridden inside `usp_ContentEntry_List`) | only when a Published entry references the asset (`MediaUsage`) | denied | `ownerId`, `uploadedById`, `storagePath`, `isVirusScanPassed` |
+| `Authorization: Bearer <CMS JWT>` with any role (`CanRead`) | all statuses | any asset | allowed | none |
+
+Every request is bounded: max depth 8, Hot Chocolate cost limits (2 000 field / type cost), 10 s execution timeout.
+The scheme names, limits and audience logic live in `VA.CMS.API/GraphQL/` (`GraphQLAudience`, `GraphQLLimits`).
 
 ```graphql
 # Example: fetch the 10 most recent published news articles

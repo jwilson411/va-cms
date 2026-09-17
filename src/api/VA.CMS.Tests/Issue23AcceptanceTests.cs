@@ -509,7 +509,7 @@ internal class Issue23ContentEntryStub : IContentEntryRepository
         long entryId, long versionId, string fromStatus, string toStatus, long actorId, string? comment = null)
         => Task.FromResult<(bool, string?)>((true, null));
 
-    public Task<PetaPoco.Page<ContentEntry>> ListAsync(
+    public virtual Task<PetaPoco.Page<ContentEntry>> ListAsync(
         int page, int pageSize, string? status = null, long? contentTypeId = null)
         => Task.FromResult(new PetaPoco.Page<ContentEntry>
         {

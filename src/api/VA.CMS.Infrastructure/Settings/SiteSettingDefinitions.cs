@@ -183,8 +183,9 @@ public static class SiteSettingDefinitions
           "Optional DAP sub-agency code, e.g. VHA.", 30),
 
         // ── Features ────────────────────────────────────────────────────────
-        B(SiteSettingKeys.FeatureGraphQl, true, SiteSettingCategories.Features, SiteSettingScope.Server,
-          "Serve the GraphQL endpoint at /api/graphql. Off returns 404.", 10),
+        B(SiteSettingKeys.FeatureGraphQl, false, SiteSettingCategories.Features, SiteSettingScope.Server,
+          "Serve the GraphQL endpoint at /api/graphql (off by default — enable when a consumer needs it). " +
+          "Anonymous callers see Published content only; a CanRead JWT sees everything. Off returns 404.", 10),
         B(SiteSettingKeys.FeatureSwaggerUi, false, SiteSettingCategories.Features, SiteSettingScope.Server,
           "Serve Swagger UI at /swagger outside Development (always on in Development).", 20),
         B(SiteSettingKeys.FeatureWebhooks, true, SiteSettingCategories.Features, SiteSettingScope.Server,
