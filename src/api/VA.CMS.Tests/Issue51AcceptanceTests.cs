@@ -46,7 +46,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             SELECT COUNT(1) FROM sys.tables WHERE [name] = 'SearchResultClick';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -58,7 +58,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             SELECT COUNT(1) FROM sys.objects WHERE [name] = 'usp_Search_GetTopQueries' AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -70,7 +70,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             SELECT COUNT(1) FROM sys.objects WHERE [name] = 'usp_Search_GetZeroResultQueries' AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -82,7 +82,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             SELECT COUNT(1) FROM sys.objects WHERE [name] = 'usp_Search_GetAnalyticsFull' AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -94,7 +94,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
             SELECT COUNT(1) FROM sys.objects WHERE [name] = 'usp_Search_LogClick' AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -219,7 +219,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
     }
 
     [Fact]
-    public async Task GetFull_IncludesCtrField()
+    public void GetFull_IncludesCtrField()
     {
         var type = typeof(SearchAnalyticsRowDto);
         Assert.NotNull(type.GetProperty("ClickThroughRate"));
@@ -261,7 +261,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
             WHERE [Query] = @q AND [ClickedSlug] = @s;";
         cmd.Parameters.AddWithValue("@q", uniqueQuery);
         cmd.Parameters.AddWithValue("@s", uniqueSlug);
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 

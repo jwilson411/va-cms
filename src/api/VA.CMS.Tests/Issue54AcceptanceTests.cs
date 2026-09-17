@@ -68,7 +68,7 @@ public class Issue54AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "SELECT COUNT(1) FROM sys.procedures WHERE [name] = 'usp_Webhook_Create';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -80,7 +80,7 @@ public class Issue54AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "SELECT COUNT(1) FROM sys.procedures WHERE [name] = 'usp_Webhook_List';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -92,7 +92,7 @@ public class Issue54AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "SELECT COUNT(1) FROM sys.procedures WHERE [name] = 'usp_WebhookDelivery_Create';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 

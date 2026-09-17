@@ -75,9 +75,10 @@ public class Issue23AcceptanceTests
     }
 
     [Fact(Skip = "Requires live SQL Server container — run in Database collection")]
-    public async Task AC1_Six_Roles_Exist_In_Database()
+    public Task AC1_Six_Roles_Exist_In_Database()
     {
         // Covered by RbacDatabaseTests below (Database collection).
+        return Task.CompletedTask;
     }
 
     // ── AC2: Correct minimum role enforced per endpoint ───────────────────────

@@ -11,6 +11,7 @@ public static class AuthCookieHelper
     /// <summary>Code default; the live value is auth.refreshTokenHours (issue #146).</summary>
     public static readonly TimeSpan DefaultLifetime = TimeSpan.FromHours(8);
 
+    /// <param name="isProduction">Marks the cookie Secure; in Development it must still work over http://localhost.</param>
     /// <param name="lifetime">Cookie Max-Age; should match the refresh token lifetime. Defaults to 8 h.</param>
     public static CookieOptions BuildCookieOptions(bool isProduction, TimeSpan? lifetime = null) => new()
     {

@@ -233,7 +233,7 @@ public class Issue50AcceptanceTests(DatabaseFixture fixture)
             FROM sys.objects
             WHERE [name] = 'usp_Search_FullText'
               AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 }

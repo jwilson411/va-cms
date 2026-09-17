@@ -49,8 +49,8 @@ public class CustomFieldTypeController : ControllerBase
 // ── DTO ──────────────────────────────────────────────────────────────────────
 
 /// <summary>Summary of a registered custom field type plugin.</summary>
+/// <param name="TypeName">Unique machine-readable type name (matches the React registry key).</param>
+/// <param name="StorageType">.NET storage type name (e.g. "String", "Int32").</param>
 public sealed record CustomFieldTypeDto(
-    /// <summary>Unique machine-readable type name (matches the React registry key).</summary>
     string TypeName,
-    /// <summary>.NET storage type name (e.g. "String", "Int32").</summary>
     string StorageType);

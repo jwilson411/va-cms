@@ -6,6 +6,8 @@
     breaks the build instead of scrolling past as a warning.
   -->
   <PropertyGroup>
+    <!-- CI builds with -warnaserror; keep local builds identical so nothing lands as a warning (#161). -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <NuGetAudit>true</NuGetAudit>
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>low</NuGetAuditLevel>

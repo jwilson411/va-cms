@@ -414,10 +414,8 @@ public sealed record MediaUsageSummary(
     string  Slug,
     string  Status,
     long    ContentTypeId,
-    /// <summary>Human-readable content type display name. Issue #44.</summary>
-    string  ContentTypeName,
-    /// <summary>Best-effort entry title from FieldsJson; falls back to Slug. Issue #44.</summary>
-    string  EntryTitle);
+    string  ContentTypeName,   // human-readable content type display name (issue #44)
+    string  EntryTitle);       // best-effort title from FieldsJson, falling back to Slug (issue #44)
 
 /// <summary>Request body for PATCH /api/v1/media/{id}.</summary>
 public sealed class MediaPatchRequest

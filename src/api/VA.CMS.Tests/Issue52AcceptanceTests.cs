@@ -54,7 +54,7 @@ public class Issue52AcceptanceTests(DatabaseFixture fixture)
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT COUNT(1) FROM sys.tables WHERE [name] = 'SearchPin';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -66,7 +66,7 @@ public class Issue52AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "SELECT COUNT(1) FROM sys.objects WHERE [name] = 'usp_SearchPin_List' AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -78,7 +78,7 @@ public class Issue52AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "SELECT COUNT(1) FROM sys.objects WHERE [name] = 'usp_SearchPin_Create' AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -90,7 +90,7 @@ public class Issue52AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "SELECT COUNT(1) FROM sys.objects WHERE [name] = 'usp_SearchPin_Delete' AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -102,7 +102,7 @@ public class Issue52AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "SELECT COUNT(1) FROM sys.objects WHERE [name] = 'usp_Search_GetPinsForQuery' AND [type] = 'P';";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -119,7 +119,7 @@ public class Issue52AcceptanceTests(DatabaseFixture fixture)
             WHERE  t.[name] = 'SearchPin'
               AND  i.[name] = 'UX_SearchPin_QueryString'
               AND  i.[is_unique] = 1;";
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -158,7 +158,7 @@ public class Issue52AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT COUNT(1) FROM [dbo].[SearchPin] WHERE [QueryString] = @q;";
         cmd.Parameters.AddWithValue("@q", uniqueQuery);
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 
@@ -185,7 +185,7 @@ public class Issue52AcceptanceTests(DatabaseFixture fixture)
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT COUNT(1) FROM [dbo].[SearchPin] WHERE [QueryString] = @q;";
         cmd.Parameters.AddWithValue("@q", uniqueQuery);
-        var count = (int)await cmd.ExecuteScalarAsync()!;
+        var count = (int)(await cmd.ExecuteScalarAsync() ?? 0);
         Assert.Equal(1, count);
     }
 

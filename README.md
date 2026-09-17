@@ -182,9 +182,16 @@ curl -s http://localhost:5100/api/v1/admin/health/db \
 start if `ASPNETCORE_ENVIRONMENT=Production` and DevBypass is configured. Never set DevBypass
 in production appsettings.
 
-**CI integration tests:** The CI pipeline passes a fixed `X-Dev-User` header in integration
-test requests. Set `Auth:Mode=DevBypass` and `Auth:DevBypassAllowedUsers` in the test host
-configuration (see `Issue68AcceptanceTests.cs` for the pattern used in this repo's tests).
+**CI integration tests:** `.github/workflows/ci.yml` runs on every pull request and push to
+`main`: the .NET solution builds with warnings as errors and runs its test suite against a
+SQL Server 2022 Testcontainer (coverage uploaded as an artifact, `docs/openapi.json` checked
+for drift against the built API), the admin SPA and public site each typecheck, test and
+build, and an accessibility job boots the API in DevBypass with the admin SPA and runs the
+Playwright + axe suite in `tests/accessibility`. `.github/workflows/security.yml` adds CodeQL
+(C#, JavaScript/TypeScript), `dotnet list package --vulnerable`, `npm audit --audit-level=high`,
+gitleaks and CycloneDX SBOMs for the API and each npm root. In-process tests that need an
+authenticated caller use `Auth:Mode=DevBypass` with a fixed `X-Dev-User` header (see
+`Issue68AcceptanceTests.cs`).
 
 ### Workflow email notifications (SMTP)
 
@@ -234,7 +241,9 @@ step 4 above — and open Mailpit.
 
 ## Project Status
 
-🟡 **Pre-development** — BRD and backlog complete. Ready for agent build.
+🟢 **Feature-complete, hardening for deployment** — every BRD epic through #151 is built and
+tested (see `docs/`), and epic #152 tracks the security, VA-policy and operational work needed
+before a shared or production deployment. CI and security scanning run on every change.
 
 ## License
 

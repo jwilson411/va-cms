@@ -37,6 +37,7 @@ public sealed class JwtService : IJwtService
     private readonly SymmetricSecurityKey _signingKey;
     private readonly ISiteSettingsService _settings;
 
+    /// <param name="options">Issuer, audience and HS256 signing key.</param>
     /// <param name="settings">Source of auth.accessTokenMinutes (issue #146); code default when null.</param>
     public JwtService(JwtOptions options, ISiteSettingsService? settings = null)
     {

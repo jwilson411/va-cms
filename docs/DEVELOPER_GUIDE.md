@@ -471,6 +471,30 @@ Full OpenAPI spec: `/swagger` when running in Development, or exported to `docs/
 - Public site: Next.js 16 on Turbopack (`turbopack.root` is `src/` so the shared USWDS theme resolves);
   `params` / `searchParams` are Promises; `revalidateTag(tag, 'max')`; lint is plain `eslint .`.
 
+## CI, security scanning and branch protection
+
+`ci.yml` (build/test/package + accessibility) and `security.yml` (CodeQL, advisories, gitleaks,
+SBOM) run on pull requests and pushes to `main`; `security.yml` also runs weekly. Both must be
+required status checks on `main`, with code-owner review (`.github/CODEOWNERS`). Repository
+admins apply that once with:
+
+```bash
+gh api -X PUT repos/jwilson411/va-cms/branches/main/protection --input - <<'JSON'
+{
+  "required_status_checks": { "strict": true,
+    "contexts": ["API — build, test, coverage, OpenAPI drift", "Admin SPA — typecheck, test, build",
+                 "Public site — typecheck, test, build", "CodeQL (csharp)", "CodeQL (javascript-typescript)",
+                 "Dependency advisories (NuGet + npm)", "Secret scan (gitleaks)"] },
+  "enforce_admins": true,
+  "required_pull_request_reviews": { "require_code_owner_reviews": true, "required_approving_review_count": 1 },
+  "restrictions": null
+}
+JSON
+```
+
+Regenerate the OpenAPI snapshot after changing a controller:
+`UPDATE_OPENAPI_SNAPSHOT=true dotnet test --filter OpenApiSnapshot` (in `src/api`), then commit `docs/openapi.json`.
+
 ## GraphQL
 
 Endpoint: `/api/graphql` — off by default; turn on the `features.graphql` site setting.  
