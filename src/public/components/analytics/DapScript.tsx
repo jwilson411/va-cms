@@ -30,6 +30,8 @@ export interface DapScriptProps {
   agency?: string;
   /** Sub-agency code for DAP (e.g. "VHA") — the analytics.dapSubagency site setting. */
   subagency?: string;
+  /** Per-request CSP nonce (#162) so the tag is allowed under script-src without 'unsafe-inline'. */
+  nonce?: string;
 }
 
 /**
@@ -41,7 +43,7 @@ export interface DapScriptProps {
  * - If agency is not configured the component renders nothing rather than
  *   emitting an unconfigured tag.
  */
-export function DapScript({ enabled = true, agency, subagency }: DapScriptProps) {
+export function DapScript({ enabled = true, agency, subagency, nonce }: DapScriptProps) {
   const resolvedAgency = (agency ?? '').trim();
   const resolvedSubagency = (subagency ?? '').trim();
 
@@ -62,6 +64,7 @@ export function DapScript({ enabled = true, agency, subagency }: DapScriptProps)
       src={src}
       strategy="afterInteractive"
       id="dap-analytics"
+      nonce={nonce}
     />
   );
 }

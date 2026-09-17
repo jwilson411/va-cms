@@ -128,29 +128,10 @@ Site: VA CMS (port 443, HTTPS)
 └── /api       → C:\inetpub\vacms\api\      (ASP.NET Core via AspNetCoreModule)
 ```
 
-**web.config for /admin (SPA fallback routing):**
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-  <system.webServer>
-    <rewrite>
-      <rules>
-        <rule name="SPA Fallback" stopProcessing="true">
-          <match url=".*" />
-          <conditions logicalGrouping="MatchAll">
-            <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="true" />
-            <add input="{REQUEST_FILENAME}" matchType="IsDirectory" negate="true" />
-          </conditions>
-          <action type="Rewrite" url="/admin/index.html" />
-        </rule>
-      </rules>
-    </rewrite>
-    <staticContent>
-      <mimeMap fileExtension=".webmanifest" mimeType="application/manifest+json" />
-    </staticContent>
-  </system.webServer>
-</configuration>
-```
+**web.config for /admin:** `vite build` writes `dist/web.config` (SPA fallback rule plus the security
+headers and the admin Content-Security-Policy from `src/security/csp.ts`, #162). Deploy the `dist/` folder
+as-is; do not hand-edit the file — the build regenerates it and refuses to complete if `index.html` ever
+gains an inline script the CSP would block.
 
 ### 4. Environment Variables
 
@@ -159,6 +140,10 @@ Set on the IIS application pool or via Windows environment:
 ```
 # API (VA.CMS.API)
 ASPNETCORE_ENVIRONMENT=Production
+AllowedHosts=cms.va.gov;cms-admin.va.gov          # required outside Development; "*" refuses to start (#162)
+ForwardedHeaders__KnownProxies__0=10.1.2.3       # IIS ARR / load balancer addresses whose X-Forwarded-* is trusted
+ForwardedHeaders__KnownNetworks__0=10.1.0.0/16   # (CIDR); leave both empty when the API terminates TLS itself
+# Cors__AllowedOrigins__0=https://www.va.gov     # only if the public site or SPA lives on a different origin
 ConnectionStrings__DefaultConnection=Server=SQLSERVER;Database=VACMS;User Id=vacms_app;Password=<pw>;TrustServerCertificate=False;
 Auth__Mode=WindowsAuth                           # on-prem default: IIS Windows Authentication (Kerberos)
 # Alternative — AD FS OpenID Connect (Auth__Mode=AzureAd; see "Identity provider" below):
@@ -180,7 +165,22 @@ Jwt__SigningKey=<256-bit-random-key>
 
 # Public site (Next.js)
 NEXT_PUBLIC_API_URL=https://cms.youragency.va.gov/api/v1
+CSP_REPORT_ONLY=true                             # report-only phase; set false to enforce once the report log is quiet
 ```
+
+#### Security headers (#162)
+
+Every API response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` /
+`frame-ancestors 'none'`, `Referrer-Policy`, a minimal `Permissions-Policy`, `Cross-Origin-Opener-Policy` and,
+on HTTPS outside Development, `Strict-Transport-Security` (1 year, includeSubDomains; `security.hstsPreload`
+adds `preload`). The API's Content-Security-Policy is `default-src 'none'` and is sent as **Report-Only**
+while the `security.cspReportOnly` site setting is on; violations from all three front ends arrive at
+`POST /api/v1/security/csp-report` and are logged as warnings. The admin SPA's policy (`script-src 'self'`,
+no inline scripts) is in the generated `web.config`; the public site's is nonce-based per request
+(`src/public/proxy.ts`) and switches from Report-Only to enforced with `CSP_REPORT_ONLY=false`.
+Swagger (`/swagger`) outside Development needs the `features.swaggerUi` setting **and** a bearer token with
+the Developer role. The three front ends are expected on the same origin; set `Cors__AllowedOrigins`
+only when that is not the case.
 
 #### Identity provider (on-prem only)
 

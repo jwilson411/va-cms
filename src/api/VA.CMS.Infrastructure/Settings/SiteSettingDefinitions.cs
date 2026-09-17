@@ -75,6 +75,10 @@ public static class SiteSettingKeys
     // Navigation / redirects (Server)
     public const string RedirectsAllowedExternalHosts = "redirects.allowedExternalHosts";
 
+    // Security headers (Server) — #162
+    public const string SecurityCspReportOnly = "security.cspReportOnly";
+    public const string SecurityHstsPreload   = "security.hstsPreload";
+
     // Workflow (Server)
     public const string WorkflowScheduledPublishPollSeconds = "workflow.scheduledPublishPollSeconds";
     public const string WorkflowRequireReturnComment        = "workflow.requireReturnComment";
@@ -118,6 +122,7 @@ public static class SiteSettingCategories
     public const string Workflow      = "Workflow";
     public const string Webhooks      = "Webhooks";
     public const string Navigation    = "Navigation";
+    public const string Security      = "Security";
     public const string Search        = "Search";
     public const string Api           = "Api";
     public const string Notifications = "Notifications";
@@ -228,6 +233,14 @@ public static class SiteSettingDefinitions
         B(SiteSettingKeys.AuthAutoProvisionUsers, false, SiteSettingCategories.Auth, SiteSettingScope.Server,
           "Create a CMS user row for any tenant identity on its first AzureAd/WindowsAuth login. Off rejects unknown " +
           "identities until an administrator has created the user (DevBypass logins are governed by DevBypassAllowedUsers).", 50),
+
+        // ── Security headers ────────────────────────────────────────────────
+        B(SiteSettingKeys.SecurityCspReportOnly, true, SiteSettingCategories.Security, SiteSettingScope.Server,
+          "Send the API's Content-Security-Policy as Report-Only (violations logged at POST /api/v1/security/csp-report, " +
+          "nothing blocked). Turn off to enforce once the report log is quiet.", 10),
+        B(SiteSettingKeys.SecurityHstsPreload, false, SiteSettingCategories.Security, SiteSettingScope.Server,
+          "Add 'preload' to Strict-Transport-Security (1 year, includeSubDomains). Only after the host name has been " +
+          "submitted to hstspreload.org — it cannot be undone quickly.", 20),
 
         // ── Navigation / redirects ──────────────────────────────────────────
         J(SiteSettingKeys.RedirectsAllowedExternalHosts, Array.Empty<string>(), SiteSettingCategories.Navigation, SiteSettingScope.Server,

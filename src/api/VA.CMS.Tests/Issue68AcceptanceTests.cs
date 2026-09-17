@@ -336,6 +336,7 @@ public sealed class Issue68ProductionTestFactory : WebApplicationFactory<Program
     {
         // Set environment to Production — this is what triggers the guard
         builder.UseEnvironment("Production");
+        builder.UseSetting("AllowedHosts", "localhost");   // #162: wildcard refused outside Development
 
         builder.UseSetting("SKIP_MIGRATIONS",   "true");
         builder.UseSetting("Auth:Mode",         "DevBypass");

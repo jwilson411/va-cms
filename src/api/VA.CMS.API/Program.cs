@@ -52,6 +52,21 @@ if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey))
 }
 
 // -----------------------------------------------------------------------
+// Host hardening (#162): explicit AllowedHosts outside Development; forwarded
+// headers only from configured proxies; CORS only when a front end is cross-origin.
+// -----------------------------------------------------------------------
+var forwardedHeaders = VA.CMS.API.HostHardeningOptions.BuildForwardedHeaders(builder.Configuration);
+var corsOrigins      = VA.CMS.API.HostHardeningOptions.CorsAllowedOrigins(builder.Configuration);
+if (corsOrigins.Length > 0)
+{
+    builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
+        .WithOrigins(corsOrigins)
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials()));
+}
+
+// -----------------------------------------------------------------------
 // Authentication
 // -----------------------------------------------------------------------
 // -----------------------------------------------------------------------
@@ -433,6 +448,10 @@ builder.Services.AddCustomFieldType<GeoPointFieldType>();
 // -----------------------------------------------------------------------
 // Build
 // -----------------------------------------------------------------------
+// Last of the fail-fast checks (#162): a wildcard Host header is only acceptable in Development.
+if (VA.CMS.API.HostHardeningOptions.ValidateAllowedHosts(builder.Configuration["AllowedHosts"], builder.Environment.IsDevelopment()) is { } hostsError)
+    throw new InvalidOperationException(hostsError);
+
 var app = builder.Build();
 
 // -----------------------------------------------------------------------
@@ -485,6 +504,13 @@ if (!skipMigrations)
 // -----------------------------------------------------------------------
 // HTTP pipeline
 // -----------------------------------------------------------------------
+// Forwarded headers first so Request.Scheme / RemoteIpAddress are right for
+// everything below (HTTPS redirect, Secure cookies, HSTS, audit source IPs).
+if (forwardedHeaders is not null)
+    app.UseForwardedHeaders(forwardedHeaders);
+
+app.UseSecurityHeaders();   // #162: on every response, including errors
+
 if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 
@@ -496,9 +522,12 @@ if (!app.Environment.IsDevelopment())
 app.UseSiteSettingGates(app.Environment.IsDevelopment());
 
 // -----------------------------------------------------------------------
-// Swagger UI — always on in Development (AC: Issue #55); elsewhere the middleware above
-// serves it only while the features.swaggerUi site setting is on.
+// Swagger — always on in Development (AC: Issue #55); elsewhere the site-setting gate
+// above answers 404 while features.swaggerUi is off, and (#162) a CanDevelop bearer
+// token is required to reach the UI or swagger.json. Stays ahead of UseRouting so the
+// fallback authorization policy (which also covers non-endpoint requests) does not apply.
 // -----------------------------------------------------------------------
+app.UseSwaggerAccessGate(app.Environment.IsDevelopment());
 app.UseSwagger(c =>
 {
     c.RouteTemplate = "swagger/{documentName}/swagger.json";
@@ -511,6 +540,9 @@ app.UseSwaggerUI(c =>
 });
 
 app.UseRouting();
+
+if (corsOrigins.Length > 0)
+    app.UseCors();
 
 // DevBypass: inject a JWT from the X-Dev-User header BEFORE the auth pipeline runs.
 // Must be placed before UseAuthentication so the injected token is visible to JWT bearer.

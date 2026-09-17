@@ -309,6 +309,7 @@ public class Issue159AcceptanceTests
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment(environment);
+            builder.UseSetting("AllowedHosts", "localhost");   // #162: wildcard refused outside Development
             builder.UseSetting("SKIP_MIGRATIONS", "true");
             builder.UseSetting("Media:Scanner:Mode", mode);
             builder.UseSetting("Media:Scanner:Host", "127.0.0.1");

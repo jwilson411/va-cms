@@ -258,6 +258,7 @@ public sealed class Issue153TestFactory : WebApplicationFactory<Program>
         }
 
         builder.UseEnvironment(_environment);
+        builder.UseSetting("AllowedHosts", "localhost");   // #162: wildcard refused outside Development
         builder.UseSetting("SKIP_MIGRATIONS", "true");
         builder.UseSetting("Auth:Mode",       _mode.ToString());
         builder.UseSetting("WINDOWS_AUTH_FAKE_NEGOTIATE", "true");

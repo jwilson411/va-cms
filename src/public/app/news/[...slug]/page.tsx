@@ -18,6 +18,7 @@
  * 404: notFound() is called when the CMS returns null for the slug.
  */
 
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { fetchNewsArticle } from '@/lib/cms/content';
@@ -84,10 +85,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function NewsArticlePage({
   params,
 }: PageProps): Promise<React.ReactElement> {
-  const [article, navigation, site] = await Promise.all([
+  const [article, navigation, site, requestHeaders] = await Promise.all([
     fetchNewsArticle(await slugFromParams(params)),
     fetchPrimaryNav(),
     fetchSiteSettings(),
+    headers(),
   ]);
 
   if (!article) {
@@ -109,6 +111,7 @@ export default async function NewsArticlePage({
 
   return (
     <NewsArticleTemplate
+      nonce={requestHeaders.get('x-nonce') ?? undefined}
       title={article.fields.title}
       renderedBody={renderedBody}
       author={article.fields.author}

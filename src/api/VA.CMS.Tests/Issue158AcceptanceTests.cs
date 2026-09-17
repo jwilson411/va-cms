@@ -379,7 +379,7 @@ public class Issue158AcceptanceTests
         public Task DeleteUsageForEntryAsync(long contentEntryId) => Task.CompletedTask;
     }
 
-    private sealed class StorageStub : IStorageBackend
+    internal sealed class StorageStub : IStorageBackend
     {
         public string BackendName => "local";
         public Task<string> SaveAsync(IFormFile file, string storagePath, CancellationToken ct = default) => Task.FromResult(storagePath);

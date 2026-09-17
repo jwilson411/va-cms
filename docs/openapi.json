@@ -4605,6 +4605,38 @@
         }
       }
     },
+    "/api/v1/security/csp-report": {
+      "post": {
+        "tags": [
+          "SecurityReport"
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "413": {
+            "description": "Content Too Large",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/settings/public": {
       "get": {
         "tags": [
