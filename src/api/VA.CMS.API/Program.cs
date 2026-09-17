@@ -70,13 +70,38 @@ if (corsOrigins.Length > 0)
 // Authentication
 // -----------------------------------------------------------------------
 // -----------------------------------------------------------------------
-// DevBypass Production guard (AC: refuses to start in Production)
+// Session policy guards (#164, VA 6500): DevBypass and the fake AD handlers exist
+// for local development only — a Staging box misconfigured into DevBypass is a
+// deployment with no authentication. Everything below refuses to start outside
+// ASPNETCORE_ENVIRONMENT=Development rather than merely outside Production.
 // -----------------------------------------------------------------------
-if (authOptions.Mode == AuthMode.DevBypass && builder.Environment.IsProduction())
+if (authOptions.Mode == AuthMode.DevBypass && !builder.Environment.IsDevelopment())
 {
     throw new InvalidOperationException(
-        "Auth:Mode=DevBypass must not be used in Production. " +
+        $"Auth:Mode=DevBypass is only permitted in the Development environment (current: {builder.Environment.EnvironmentName}). " +
         "Set Auth:Mode=AzureAd (or WindowsAuth) and configure real AD credentials.");
+}
+if (authOptions.Mode == AuthMode.DevBypass && authOptions.DevBypassAllowedUsers.Length == 0)
+{
+    throw new InvalidOperationException(
+        "Auth:DevBypassAllowedUsers is empty: with DevBypass every UPN would be accepted. " +
+        "List the developer UPNs allowed to sign in (see appsettings.Development.json.example).");
+}
+// Outside Development the refresh cookie is Secure and would never come back over
+// plain HTTP. When Kestrel's own bindings are configured and none is https://, and
+// no TLS-terminating proxy is trusted for X-Forwarded-Proto, every sign-in would
+// silently fail — refuse to start instead. IIS in-process hosting sets no urls.
+if (VA.CMS.API.HostHardeningOptions.ValidateHttpsAvailable(builder.Configuration, builder.Environment.IsDevelopment()) is { } httpsError)
+    throw new InvalidOperationException(httpsError);
+
+// JWT bearer validation shared by every auth mode. OnTokenValidated consults the
+// session revocation guard (#163) so a token minted before a deactivation or role
+// change is refused even though its signature and lifetime are fine.
+void ConfigureJwtBearer(JwtBearerOptions options)
+{
+    var jwtSvc = new JwtService(jwtOptions);
+    options.TokenValidationParameters = jwtSvc.GetValidationParameters();
+    options.Events = SessionRevocationJwtEvents.Build();
 }
 
 switch (authOptions.Mode)
@@ -89,21 +114,17 @@ switch (authOptions.Mode)
         builder.Services
             .AddAuthentication(options =>
             {
-                options.DefaultAuthenticateScheme = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
-                options.DefaultChallengeScheme    = Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                options.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
             })
-            .AddJwtBearer(Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerDefaults.AuthenticationScheme, options =>
-            {
-                var jwtSvc = new JwtService(jwtOptions);
-                options.TokenValidationParameters = jwtSvc.GetValidationParameters();
-            });
+            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwtBearer);
         break;
 
     case AuthMode.WindowsAuth:
         var useFakeNegotiate = builder.Configuration["WINDOWS_AUTH_FAKE_NEGOTIATE"] == "true";
-        if (useFakeNegotiate && builder.Environment.IsProduction())
+        if (useFakeNegotiate && !builder.Environment.IsDevelopment())
             throw new InvalidOperationException(
-                "WINDOWS_AUTH_FAKE_NEGOTIATE must not be used in Production.");
+                "WINDOWS_AUTH_FAKE_NEGOTIATE is only permitted in the Development environment.");
 
         var authBuilder = builder.Services
             .AddAuthentication(options =>
@@ -122,11 +143,7 @@ switch (authOptions.Mode)
             authBuilder.AddNegotiate();
         }
 
-        authBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
-        {
-            var jwtSvc = new JwtService(jwtOptions);
-            options.TokenValidationParameters = jwtSvc.GetValidationParameters();
-        });
+        authBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwtBearer);
         break;
 
     case AuthMode.AzureAd:
@@ -145,8 +162,8 @@ switch (authOptions.Mode)
         }
 
         var useFakeOidc = builder.Configuration["AZUREAD_FAKE_OIDC"] == "true";
-        if (useFakeOidc && builder.Environment.IsProduction())
-            throw new InvalidOperationException("AZUREAD_FAKE_OIDC must not be used in Production.");
+        if (useFakeOidc && !builder.Environment.IsDevelopment())
+            throw new InvalidOperationException("AZUREAD_FAKE_OIDC is only permitted in the Development environment.");
 
         var aadBuilder = builder.Services
             .AddAuthentication(options =>
@@ -175,23 +192,21 @@ switch (authOptions.Mode)
             o.Cookie.Name         = AzureAdSchemes.CookieName;
             o.Cookie.HttpOnly     = true;
             o.Cookie.SameSite     = SameSiteMode.Lax;
-            o.Cookie.SecurePolicy = builder.Environment.IsProduction()
-                ? CookieSecurePolicy.Always
-                : CookieSecurePolicy.SameAsRequest;
+            o.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+                ? CookieSecurePolicy.SameAsRequest
+                : CookieSecurePolicy.Always;
             o.ExpireTimeSpan      = TimeSpan.FromHours(8);
             o.SlidingExpiration   = false;
         });
 
-        aadBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
-        {
-            var jwtSvc = new JwtService(jwtOptions);
-            options.TokenValidationParameters = jwtSvc.GetValidationParameters();
-        });
+        aadBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwtBearer);
         break;
 }
 
 // Policies (default deny — see CmsAuthorizationExtensions, #155)
 builder.Services.AddCmsAuthorization();
+// #165: a refused policy is an AuditLog row (AuthorizationDenied) before the 403 goes out.
+builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuditingAuthorizationResultHandler>();
 
 // -----------------------------------------------------------------------
 // Services
@@ -250,8 +265,13 @@ builder.Services.AddSwaggerGen(options =>
         options.IncludeXmlComments(xmlPath);
 });
 
+// Who/where for audit rows (#165): filled per request by UseAuditContext(); CmsDatabase
+// stamps it onto SESSION_CONTEXT so stored procedures audit with the right actor.
+builder.Services.AddScoped<AuditContext>();
+builder.Services.AddScoped<IAuditContext>(sp => sp.GetRequiredService<AuditContext>());
+
 // PetaPoco database
-builder.Services.AddScoped<CmsDatabase>(_ => new CmsDatabase(connectionString));
+builder.Services.AddScoped<CmsDatabase>(sp => new CmsDatabase(connectionString, sp.GetRequiredService<IAuditContext>()));
 
 // -----------------------------------------------------------------------
 // Site settings (epic #141): runtime configuration + feature flags from [SiteSetting].
@@ -280,6 +300,7 @@ builder.Services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>(
 builder.Services.AddScoped<INavigationRepository, NavigationRepository>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IDbMonitorRepository, DbMonitorRepository>();
+builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
 
 // Story #67: AD group role mapping repository and resolver
 builder.Services.AddScoped<IAdGroupMappingRepository, AdGroupMappingRepository>();
@@ -302,7 +323,10 @@ builder.Services.AddScoped<ITaxonomyRepository, TaxonomyRepository>();
 builder.Services.AddSingleton(authOptions);
 builder.Services.AddSingleton(jwtOptions);
 builder.Services.AddSingleton<IJwtService, JwtService>();
-builder.Services.AddSingleton<IRefreshTokenService, InMemoryRefreshTokenService>();
+// #163: refresh tokens are rows in [RefreshToken] (rotation, replay detection, revocation);
+// InMemoryRefreshTokenService exists for tests only.
+builder.Services.AddScoped<IRefreshTokenService, DbRefreshTokenService>();
+builder.Services.AddSingleton<ISessionRevocationGuard, SessionRevocationGuard>();
 builder.Services.AddSingleton<IRbacService, RbacService>();
 
 // -----------------------------------------------------------------------
@@ -552,6 +576,7 @@ if (authOptions.Mode == AuthMode.DevBypass)
 
 app.UseAuthentication();
 app.UseAuthHeaderRedaction();
+app.UseAuditContext();      // #165: actor / IP / agent / correlation id for every audit row
 app.UseAuthorization();
 
 app.MapControllers();

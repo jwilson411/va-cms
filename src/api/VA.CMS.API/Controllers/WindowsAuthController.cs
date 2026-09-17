@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
+using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Settings;
 
@@ -37,6 +38,7 @@ public class WindowsAuthController : ControllerBase
     private readonly IAdGroupRoleResolver _groupResolver;
     private readonly AuthOptions          _authOptions;
     private readonly ISiteSettingsService _settings;
+    private readonly IAuditLogRepository  _audit;
     private readonly ILogger<WindowsAuthController> _logger;
 
     public WindowsAuthController(
@@ -47,6 +49,7 @@ public class WindowsAuthController : ControllerBase
         IAdGroupRoleResolver groupResolver,
         AuthOptions          authOptions,
         ISiteSettingsService settings,
+        IAuditLogRepository  audit,
         ILogger<WindowsAuthController> logger)
     {
         _users         = users;
@@ -56,6 +59,7 @@ public class WindowsAuthController : ControllerBase
         _groupResolver = groupResolver;
         _authOptions   = authOptions;
         _settings      = settings;
+        _audit         = audit;
         _logger        = logger;
     }
 
@@ -73,11 +77,13 @@ public class WindowsAuthController : ControllerBase
     //     returnUrl present the cms_rt cookie is set and the response is a 302 to that
     //     local path, and the SPA bootstraps through its silent refresh — no token in
     //     a URL, body or history entry, exactly like the OIDC callback (#154).
+    //     ack=1 travels with it from /api/auth/login: the system-use notice was
+    //     acknowledged on the SPA page (#164) and the Logon audit row says so.
     // ──────────────────────────────────────────────────────────────────────
     [HttpGet("windows-login")]
     [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme,
                Policy = CmsRoles.Policies.AuthenticatedOnly)]
-    public async Task<IActionResult> WindowsLogin([FromQuery] string? returnUrl = null)
+    public async Task<IActionResult> WindowsLogin([FromQuery] string? returnUrl = null, [FromQuery] string? ack = null)
     {
         // Guard: only active when Auth:Mode=WindowsAuth
         if (_authOptions.Mode != AuthMode.WindowsAuth)
@@ -95,6 +101,7 @@ public class WindowsAuthController : ControllerBase
         if (string.IsNullOrEmpty(upn))
         {
             _logger.LogWarning("WindowsAuth login: could not determine UPN from identity name '{RawName}'", rawName);
+            await LogonFailureAsync(null, rawName, "identity_incomplete");
             return Unauthorized("Could not determine UPN from Windows identity.");
         }
 
@@ -109,6 +116,7 @@ public class WindowsAuthController : ControllerBase
         {
             _logger.LogWarning(
                 "WindowsAuth login rejected: {Upn} is not a provisioned CMS user and auth.autoProvisionUsers is off.", upn);
+            await LogonFailureAsync(null, upn, "not_provisioned");
             return StatusCode(StatusCodes.Status403Forbidden,
                 "This account has not been provisioned in the CMS. Contact your site administrator.");
         }
@@ -119,7 +127,10 @@ public class WindowsAuthController : ControllerBase
         // Load the user to check IsActive
         var user = await _users.GetByIdAsync(userId);
         if (user is null || !user.IsActive)
+        {
+            await LogonFailureAsync(userId, upn, "account_disabled");
             return Unauthorized("Account is disabled.");
+        }
 
         // Explicit roles merged with AD-group-mapped roles. Negotiate exposes the
         // user's group SIDs; the resolver also translates them to DOMAIN\Group names
@@ -130,11 +141,13 @@ public class WindowsAuthController : ControllerBase
         var accessToken   = _jwt.IssueAccessToken(user, roles);
 
         // Issue refresh token in httpOnly cookie; the login-time groups travel with it
-        var refreshToken = _refreshTokens.Issue(userId, adGroups);
-        var cookieOpts   = AuthCookieHelper.BuildCookieOptions(isProduction: _env.IsProduction(), lifetime: _refreshTokens.Lifetime);
+        var refreshToken = await _refreshTokens.IssueAsync(userId, adGroups, AuthAudit.ClientOf(HttpContext));
+        var cookieOpts   = AuthCookieHelper.BuildCookieOptions(AuthCookieHelper.SecureFor(_env), lifetime: _refreshTokens.Lifetime);
         Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, refreshToken, cookieOpts);
 
         _logger.LogInformation("WindowsAuth login: issued JWT for {Upn} (userId={UserId})", upn, userId);
+        await _audit.WriteAsync(userId, AuthAudit.EntityType, userId, AuthAudit.Logon,
+            AuthAudit.Diff(new { mode = "WindowsAuth", upn, systemUseAcknowledged = ack == "1", groups = adGroups.Count }));
 
         if (!string.IsNullOrEmpty(returnUrl))
             return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl : "/");
@@ -146,6 +159,10 @@ public class WindowsAuthController : ControllerBase
             tokenType = "Bearer",
         });
     }
+
+    private Task LogonFailureAsync(long? userId, string upn, string reason)
+        => _audit.WriteAsync(userId, AuthAudit.EntityType, userId ?? 0, AuthAudit.LogonFailure,
+            AuthAudit.Diff(new { mode = "WindowsAuth", upn, reason }), AuditOutcome.Failure);
 
     // ──────────────────────────────────────────────────────────────────────
     // Helper: normalise a Windows identity name to UPN.

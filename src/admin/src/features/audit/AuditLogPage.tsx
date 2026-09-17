@@ -4,8 +4,9 @@
  * Route: /admin/audit
  *
  * Features:
- *   - Filterable table: User (actorId), Action Type, Entity Type, Date Range
- *   - Paged list of AuditLog rows, newest first
+ *   - Filterable table: User (actorId), Action Type, Entity Type, Date Range,
+ *     Outcome and Source IP (#165)
+ *   - Paged list of AuditLog rows, newest first, with outcome and source IP columns
  *   - Export filtered results to CSV
  *
  * Accessibility:
@@ -25,6 +26,8 @@ interface FilterState {
   entityType: string;
   fromDate: string;
   toDate: string;
+  outcome: '' | 'Success' | 'Failure';
+  ipAddress: string;
 }
 
 const EMPTY_FILTERS: FilterState = {
@@ -33,6 +36,8 @@ const EMPTY_FILTERS: FilterState = {
   entityType: '',
   fromDate: '',
   toDate: '',
+  outcome: '',
+  ipAddress: '',
 };
 
 function filtersToQuery(f: FilterState): AuditLogFilters {
@@ -42,6 +47,8 @@ function filtersToQuery(f: FilterState): AuditLogFilters {
   if (f.entityType.trim()) q.entityType = f.entityType.trim();
   if (f.fromDate.trim())  q.fromDate  = f.fromDate.trim();
   if (f.toDate.trim())    q.toDate    = f.toDate.trim();
+  if (f.outcome)          q.outcome   = f.outcome;
+  if (f.ipAddress.trim()) q.ipAddress = f.ipAddress.trim();
   return q;
 }
 
@@ -188,6 +195,46 @@ export function AuditLogPage(): JSX.Element {
               Include rows on or before this date/time
             </span>
           </div>
+
+          {/* Outcome (#165) */}
+          <div className="grid-col-12 tablet:grid-col-3">
+            <label className="usa-label" htmlFor="audit-outcome">
+              Outcome
+            </label>
+            <select
+              id="audit-outcome"
+              className="usa-select"
+              value={draft.outcome}
+              onChange={handleFieldChange('outcome')}
+              aria-describedby="audit-outcome-hint"
+            >
+              <option value="">Any</option>
+              <option value="Success">Success</option>
+              <option value="Failure">Failure</option>
+            </select>
+            <span id="audit-outcome-hint" className="usa-hint">
+              Failures are denied logons, refresh replays and refused policies
+            </span>
+          </div>
+
+          {/* Source IP (#165) */}
+          <div className="grid-col-12 tablet:grid-col-3">
+            <label className="usa-label" htmlFor="audit-ip">
+              Source IP
+            </label>
+            <input
+              id="audit-ip"
+              className="usa-input"
+              type="text"
+              value={draft.ipAddress}
+              onChange={handleFieldChange('ipAddress')}
+              placeholder="e.g. 10.20.30.40"
+              aria-describedby="audit-ip-hint"
+            />
+            <span id="audit-ip-hint" className="usa-hint">
+              Exact client address as recorded
+            </span>
+          </div>
         </div>
 
         <div className="margin-top-3 display-flex flex-align-center flex-wrap gap-2">
@@ -256,6 +303,8 @@ export function AuditLogPage(): JSX.Element {
                 <th scope="col">Entity Type</th>
                 <th scope="col">Entity ID</th>
                 <th scope="col">Action</th>
+                <th scope="col">Outcome</th>
+                <th scope="col">Source IP</th>
               </tr>
             </thead>
             <tbody>
@@ -274,6 +323,16 @@ export function AuditLogPage(): JSX.Element {
                   <td>{row.entityType}</td>
                   <td>{row.entityId}</td>
                   <td>{row.action}</td>
+                  <td>
+                    {row.outcome === 'Failure' ? (
+                      <span className="usa-tag bg-secondary-dark">Failure</span>
+                    ) : (
+                      <span className="usa-tag bg-base-lighter text-ink">Success</span>
+                    )}
+                  </td>
+                  <td>
+                    {row.ipAddress ?? <span className="text-base">—</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>

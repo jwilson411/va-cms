@@ -209,6 +209,22 @@
               "format": "int32",
               "default": 50
             }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "description": "Filter by outcome: Success or Failure (#165).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ipAddress",
+            "in": "query",
+            "description": "Filter by exact source IP address (#165).",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -284,6 +300,22 @@
               "type": "string",
               "format": "date-time"
             }
+          },
+          {
+            "name": "outcome",
+            "in": "query",
+            "description": "Filter by outcome: Success or Failure (#165).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ipAddress",
+            "in": "query",
+            "description": "Filter by exact source IP address (#165).",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -313,6 +345,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "ack",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -334,6 +373,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "ack",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -344,7 +390,7 @@
       }
     },
     "/api/auth/refresh": {
-      "get": {
+      "post": {
         "tags": [
           "Auth"
         ],
@@ -5104,7 +5150,7 @@
         "tags": [
           "UserRole"
         ],
-        "summary": "Assign a role to a user, optionally scoped to a section.",
+        "summary": "Assign a role to a user, optionally scoped to a section. The stored procedure audits\nthe change and ends the user\u0027s open sessions (#163/#165): the new role set takes\neffect at their next sign-in rather than whenever the old token would have expired.",
         "parameters": [
           {
             "name": "userId",
@@ -5228,7 +5274,7 @@
         "tags": [
           "UserRole"
         ],
-        "summary": "Deactivate a user \u2014 sets IsActive=0.\nThe next login attempt returns 403 because the auth pipeline checks IsActive.",
+        "summary": "Deactivate a user \u2014 sets IsActive=0 and ends every open session (#163): refresh\ntokens are revoked and the session version bumped, so their existing access\ntoken is refused within auth.revocationCheckSeconds on every node.",
         "parameters": [
           {
             "name": "userId",
@@ -5519,6 +5565,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "ack",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -5638,6 +5691,22 @@
             "nullable": true
           },
           "diffJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "ipAddress": {
+            "type": "string",
+            "nullable": true
+          },
+          "userAgent": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "outcome": {
             "type": "string",
             "nullable": true
           },
@@ -7780,6 +7849,10 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "sessionVersion": {
+            "type": "integer",
+            "format": "int32"
           },
           "createdAt": {
             "type": "string",

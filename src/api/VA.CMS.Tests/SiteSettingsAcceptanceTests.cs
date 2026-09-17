@@ -287,7 +287,7 @@ public class SiteSettingsAcceptanceTests(DatabaseFixture fixture)
             StaticSiteSettings.Defaults.With(SiteSettingKeys.AuthRefreshTokenHours, 2));
         Assert.Equal(TimeSpan.FromHours(2), svc.Lifetime);
         Assert.Equal(TimeSpan.FromHours(2),
-            VA.CMS.API.Auth.AuthCookieHelper.BuildCookieOptions(isProduction: false, lifetime: svc.Lifetime).MaxAge);
+            VA.CMS.API.Auth.AuthCookieHelper.BuildCookieOptions(secure: false, lifetime: svc.Lifetime).MaxAge);
     }
 
     [Fact]

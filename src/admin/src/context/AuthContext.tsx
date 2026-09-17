@@ -3,11 +3,16 @@
  *
  * Acceptance criteria:
  *   - JWT stored in React state ONLY (never localStorage, never sessionStorage)
- *   - Silent refresh before token expiry via GET /api/auth/refresh
+ *   - Silent refresh before token expiry via POST /api/auth/refresh (#164: never a GET;
+ *     #163: every refresh rotates the httpOnly cookie server-side)
  *   - If AD account disabled: refresh returns 401 → state cleared → login redirect
- *   - Login redirects to GET /api/auth/login (which initiates AD OIDC flow)
+ *   - Login redirects to GET /api/auth/login (which initiates AD OIDC flow). The API
+ *     only proceeds with ack=1 — the system-use notice on /login was acknowledged
+ *     (VA 6500 AC-8); without it the API sends the browser back to /login.
  *   - Local dev (Auth:Mode=DevBypass): devLogin(upn) posts to /api/auth/dev-login
  *     and receives the same { accessToken, expiresIn } shape plus the refresh cookie
+ *   - The silent-refresh timer follows expiresIn, so a changed auth.accessTokenMinutes
+ *     site setting changes the schedule with no SPA change (#164)
  */
 
 import React, {
@@ -67,14 +72,26 @@ export function rolesFromToken(token: string): string[] {
   }
 }
 
+export interface LoginOptions {
+  /**
+   * The user acknowledged the system-use notice on the login page. Adds ack=1 so
+   * the API starts the sign-in; ProtectedRoute's automatic redirect omits it and
+   * lands on /login, where the notice is shown.
+   */
+  acknowledged?: boolean;
+}
+
+/** Header the dev sign-in sends so the Logon audit row records the acknowledgement. */
+export const SYSTEM_USE_ACK_HEADER = 'X-System-Use-Ack';
+
 interface AuthContextValue extends AuthState {
   /** Initiate AD OIDC login — navigates the browser to /api/auth/login. */
-  login: () => void;
+  login: (options?: LoginOptions) => void;
   /**
    * DevBypass sign-in (local development only). Posts X-Dev-User to
    * /api/auth/dev-login; the API returns 401/404 unless Auth:Mode=DevBypass.
    */
-  devLogin: (upn: string) => Promise<void>;
+  devLogin: (upn: string, options?: LoginOptions) => Promise<void>;
   /** Clear in-memory token, revoke refresh cookie, and (AzureAd mode) navigate to the AAD sign-out. */
   logout: () => Promise<void>;
   /** True if the SPA has a valid, non-expired access token. */
@@ -151,8 +168,8 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const silentRefresh = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/auth/refresh`, {
-        method: 'GET',
-        credentials: 'include', // send httpOnly refresh cookie
+        method: 'POST',
+        credentials: 'include', // send (and receive the rotated) httpOnly refresh cookie
       });
 
       if (res.status === 401) {
@@ -185,21 +202,32 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
 
   // ── Public API ─────────────────────────────────────────────────────────
 
-  const login = useCallback(() => {
+  const login = useCallback((options?: LoginOptions) => {
     // Navigate to the API's login endpoint — it will redirect to Azure AD (or to
     // /login in DevBypass). Pass the page we were on so sign-in can return to it.
+    // On /login itself the returnUrl the page was opened with is carried through.
     const here = `${window.location.pathname}${window.location.search}`;
-    const returnUrl = here !== '/' && !here.startsWith('/login') ? `?returnUrl=${encodeURIComponent(here)}` : '';
-    window.location.href = `${API_BASE}/auth/login${returnUrl}`;
+    const params = new URLSearchParams();
+    if (here.startsWith('/login')) {
+      const carried = new URLSearchParams(window.location.search).get('returnUrl');
+      if (carried) params.set('returnUrl', carried);
+    } else if (here !== '/') {
+      params.set('returnUrl', here);
+    }
+    if (options?.acknowledged) params.set('ack', '1');
+    const qs = params.toString();
+    window.location.href = `${API_BASE}/auth/login${qs ? `?${qs}` : ''}`;
   }, []);
 
   const devLogin = useCallback(
-    async (upn: string) => {
+    async (upn: string, options?: LoginOptions) => {
       setState((prev) => ({ ...prev, loading: true }));
       try {
+        const headers: Record<string, string> = { 'X-Dev-User': upn };
+        if (options?.acknowledged) headers[SYSTEM_USE_ACK_HEADER] = '1';
         const res = await fetch(`${API_BASE}/auth/dev-login`, {
           method: 'POST',
-          headers: { 'X-Dev-User': upn },
+          headers,
           credentials: 'include', // receive httpOnly refresh cookie
         });
         if (!res.ok) throw new Error(`Dev login failed: ${res.status}`);

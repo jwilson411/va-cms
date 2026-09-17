@@ -131,6 +131,8 @@ internal sealed class PublicContentTestFactory : WebApplicationFactory<Program>
     {
         builder.UseSetting("SKIP_MIGRATIONS",   "true");
         builder.UseSetting("Auth:Mode",         "DevBypass");
+
+        builder.UseSetting("Auth:DevBypassAllowedUsers:0", "dev@va.gov");   // #164: empty list refused
         builder.UseSetting("Jwt:SigningKey",    "public-content-delivery-key-32ch!");
         builder.UseSetting("Jwt:Issuer",        "va-cms-api");
         builder.UseSetting("Jwt:Audience",      "va-cms-spa");

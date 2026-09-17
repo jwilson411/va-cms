@@ -22,6 +22,11 @@ export interface AuditLogRow {
   entityId: string;
   action: string;
   diffJson: string | null;
+  /** #165 (NIST AU-3): where the request came from and whether it succeeded. */
+  ipAddress: string | null;
+  userAgent: string | null;
+  correlationId: string | null;
+  outcome: 'Success' | 'Failure';
   createdAt: string;
 }
 
@@ -38,6 +43,8 @@ export interface AuditLogFilters {
   entityType?: string;
   fromDate?: string;
   toDate?: string;
+  outcome?: 'Success' | 'Failure';
+  ipAddress?: string;
 }
 
 // ── Helper ─────────────────────────────────────────────────────────────────────
@@ -54,13 +61,20 @@ async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-function buildParams(filters: AuditLogFilters, page: number, pageSize: number): URLSearchParams {
+function filterParams(filters: AuditLogFilters): URLSearchParams {
   const p = new URLSearchParams();
   if (filters.actorId != null) p.set('actorId', String(filters.actorId));
   if (filters.action)          p.set('action', filters.action);
   if (filters.entityType)      p.set('entityType', filters.entityType);
   if (filters.fromDate)        p.set('fromDate', filters.fromDate);
   if (filters.toDate)          p.set('toDate', filters.toDate);
+  if (filters.outcome)         p.set('outcome', filters.outcome);
+  if (filters.ipAddress)       p.set('ipAddress', filters.ipAddress);
+  return p;
+}
+
+function buildParams(filters: AuditLogFilters, page: number, pageSize: number): URLSearchParams {
+  const p = filterParams(filters);
   p.set('page', String(page));
   p.set('pageSize', String(pageSize));
   return p;
@@ -83,12 +97,6 @@ export function useAuditLog(
 // ── CSV export helper ─────────────────────────────────────────────────────────
 
 export function buildExportUrl(filters: AuditLogFilters): string {
-  const p = new URLSearchParams();
-  if (filters.actorId != null) p.set('actorId', String(filters.actorId));
-  if (filters.action)          p.set('action', filters.action);
-  if (filters.entityType)      p.set('entityType', filters.entityType);
-  if (filters.fromDate)        p.set('fromDate', filters.fromDate);
-  if (filters.toDate)          p.set('toDate', filters.toDate);
-  const qs = p.toString();
+  const qs = filterParams(filters).toString();
   return `${API_BASE}/audit/export.csv${qs ? '?' + qs : ''}`;
 }

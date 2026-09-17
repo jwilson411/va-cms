@@ -3,7 +3,9 @@
  *
  * Key acceptance criteria verified:
  *   - JWT is stored in React state only (NOT localStorage / sessionStorage)
- *   - Silent refresh is attempted on mount
+ *   - Silent refresh is attempted on mount, as a POST (#164)
+ *   - The next refresh is scheduled from expiresIn, so a changed
+ *     auth.accessTokenMinutes site setting changes the schedule (#164)
  *   - Refresh returning 401 clears state and triggers login redirect
  *   - authFetch attaches Bearer token to requests
  */
@@ -51,6 +53,47 @@ describe('AuthContext', () => {
 
     expect(screen.getByTestId('loading')).toHaveTextContent('true');
     expect(screen.getByTestId('is-auth')).toHaveTextContent('false');
+  });
+
+  it('silent refresh is a POST with credentials (#164)', async () => {
+    const spy = vi.spyOn(window, 'fetch').mockReturnValue(new Promise(() => {}));
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    expect(spy).toHaveBeenCalledWith('/api/auth/refresh', expect.objectContaining({ method: 'POST', credentials: 'include' }));
+  });
+
+  it('schedules the next refresh one minute before expiresIn, so a changed setting changes the schedule (#164)', async () => {
+    vi.useFakeTimers();
+    try {
+      const spy = vi.spyOn(window, 'fetch').mockImplementation(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ accessToken: 'a.b.c', expiresIn: 300, tokenType: 'Bearer' }),   // auth.accessTokenMinutes = 5
+        } as Response),
+      );
+
+      render(
+        <AuthProvider>
+          <AuthConsumer />
+        </AuthProvider>,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      // 15-minute default schedule would not have fired yet; the 5-minute token refreshes at 4:00
+      await vi.advanceTimersByTimeAsync(239_000);
+      expect(spy).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stores JWT in React state after successful silent refresh', async () => {

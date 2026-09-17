@@ -72,6 +72,13 @@ public static class SiteSettingKeys
     public const string AuthAzureAdSignOut      = "auth.azureAdSignOut";
     public const string AuthAutoProvisionUsers  = "auth.autoProvisionUsers";
 
+    // Session policy (VA 6500 AC-8/AC-11/AC-12) — #163/#164
+    public const string AuthIdleTimeoutMinutes          = "auth.idleTimeoutMinutes";
+    public const string AuthAbsoluteSessionHours        = "auth.absoluteSessionHours";
+    public const string AuthSystemUseNotice             = "auth.systemUseNotice";
+    public const string AuthRevocationCheckSeconds      = "auth.revocationCheckSeconds";
+    public const string AuthRefreshRotationGraceSeconds = "auth.refreshRotationGraceSeconds";
+
     // Navigation / redirects (Server)
     public const string RedirectsAllowedExternalHosts = "redirects.allowedExternalHosts";
 
@@ -151,6 +158,19 @@ public static class SiteSettingDefinitions
         // Archives (limited; virus scan hook is separate)
         "application/zip", "application/x-zip-compressed",
     };
+
+    /// <summary>
+    /// VA-standard system-use notification (VA Handbook 6500 / NIST AC-8). Editable as
+    /// auth.systemUseNotice; kept here so a fresh database shows the approved wording.
+    /// </summary>
+    public const string SystemUseNoticeDefault =
+        "This is a U.S. Government computer system, which may be accessed and used only for authorized Government " +
+        "business by authorized personnel. Unauthorized access or use of this computer system may subject violators " +
+        "to criminal, civil, and/or administrative action. All information on this computer system may be " +
+        "intercepted, recorded, read, copied, and disclosed by and to authorized personnel for official purposes, " +
+        "including criminal investigations. Such information includes sensitive data encrypted to comply with " +
+        "confidentiality and privacy requirements. Access or use of this computer system by any person, whether " +
+        "authorized or unauthorized, constitutes consent to these terms. There is no right of privacy in this system.";
 
     private static SiteSettingDefinition S(string key, string def, string cat, SiteSettingScope scope, string desc, int order)
         => new(key, SiteSettingType.String, def, cat, scope, desc, order);
@@ -233,6 +253,22 @@ public static class SiteSettingDefinitions
         B(SiteSettingKeys.AuthAutoProvisionUsers, false, SiteSettingCategories.Auth, SiteSettingScope.Server,
           "Create a CMS user row for any tenant identity on its first AzureAd/WindowsAuth login. Off rejects unknown " +
           "identities until an administrator has created the user (DevBypass logins are governed by DevBypassAllowedUsers).", 50),
+        I(SiteSettingKeys.AuthIdleTimeoutMinutes, 15, SiteSettingCategories.Auth, SiteSettingScope.Admin,
+          "Admin session inactivity limit in minutes (VA 6500 AC-11: 15 for privileged users). The admin SPA warns two " +
+          "minutes before and signs out; the API refuses to refresh a session unused for longer than this " +
+          "(never less than auth.accessTokenMinutes + 1, so the SPA's silent refresh always fits).", 60),
+        I(SiteSettingKeys.AuthAbsoluteSessionHours, 8, SiteSettingCategories.Auth, SiteSettingScope.Server,
+          "Hard cap on a session measured from login, in hours (1–12), regardless of activity (VA 6500 AC-12). " +
+          "Refresh stops working at the cap and the user must sign in again.", 70),
+        S(SiteSettingKeys.AuthSystemUseNotice, SystemUseNoticeDefault, SiteSettingCategories.Auth, SiteSettingScope.Public,
+          "System-use notification shown on the admin sign-in page (NIST AC-8). The user must acknowledge it before " +
+          "the sign-in buttons enable; the acknowledgement is recorded on the Logon audit row.", 80),
+        I(SiteSettingKeys.AuthRevocationCheckSeconds, 30, SiteSettingCategories.Auth, SiteSettingScope.Server,
+          "How long (seconds) each API node caches a user's session version before re-reading it. Bounds the delay " +
+          "between deactivating a user or changing their roles and their existing access tokens being refused.", 90),
+        I(SiteSettingKeys.AuthRefreshRotationGraceSeconds, 30, SiteSettingCategories.Auth, SiteSettingScope.Server,
+          "After a refresh token is rotated, the old value stays accepted for this many seconds so two browser tabs " +
+          "refreshing at once do not trip replay detection. Reuse after the grace revokes the whole session chain.", 100),
 
         // ── Security headers ────────────────────────────────────────────────
         B(SiteSettingKeys.SecurityCspReportOnly, true, SiteSettingCategories.Security, SiteSettingScope.Server,

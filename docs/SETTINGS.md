@@ -123,6 +123,11 @@ Defaults are the values that were previously hard-coded.
 | `auth.previewTokenMinutes` | 60 |
 | `auth.azureAdSignOut` | true — logout also sends the browser to the Azure AD end-session endpoint (`GET /api/auth/signout`); off clears only the CMS cookies |
 | `auth.autoProvisionUsers` | false — unknown AzureAd/WindowsAuth identities are rejected (`/login?error=not_provisioned` / 403) until an administrator creates the user row; DevBypass is governed by `DevBypassAllowedUsers` instead |
+| `auth.idleTimeoutMinutes` | 15 — VA 6500 AC-11 inactivity limit. The admin SPA warns two minutes before and signs out; the API refuses to refresh a session unused for longer (`RefreshToken.LastUsedAt`). Never enforced below `auth.accessTokenMinutes + 1` so the silent refresh always fits. Scope **Admin** |
+| `auth.absoluteSessionHours` | 8 — hard cap from login regardless of activity (AC-12), clamped to 1–12; rotation never extends past it and `auth.refreshTokenHours` can never exceed it |
+| `auth.systemUseNotice` | the VA-standard "This is a U.S. Government computer system…" wording (NIST AC-8). Shown on `/login`; the sign-in buttons stay disabled until acknowledged and the acknowledgement is recorded on the `Logon` audit row. Scope **Public** (the login page is anonymous) |
+| `auth.revocationCheckSeconds` | 30 — how long each API node caches a user's `SessionVersion`/`IsActive` before re-reading it; bounds the delay between deactivating a user or changing their roles and their existing access tokens being refused on other nodes (the node that made the change refuses immediately) |
+| `auth.refreshRotationGraceSeconds` | 30 — a rotated refresh token stays accepted this long so two tabs refreshing at once do not trip replay detection; reuse after the grace revokes the whole session chain |
 
 ### Security (Server)
 | Key | Default |

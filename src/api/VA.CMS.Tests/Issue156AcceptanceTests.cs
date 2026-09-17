@@ -350,6 +350,7 @@ public sealed class Issue156HostFactory : Microsoft.AspNetCore.Mvc.Testing.WebAp
             Replace<IMediaAssetRepository>(services,    _ => new Issue156AcceptanceTests.MediaStub());
             Replace<IMediaExtendedRepository>(services, _ => new Issue156AcceptanceTests.UsageStub());
             Replace<IDbMonitorRepository>(services,     _ => new AuthTestStubs.StubDbMonitorRepository());
+            AuthTestStubs.UseInMemoryAuth(services);
             services.AddSingleton<ISiteSettingsService>(StaticSiteSettings.Defaults.With(SiteSettingKeys.FeatureGraphQl, true));
         });
     }

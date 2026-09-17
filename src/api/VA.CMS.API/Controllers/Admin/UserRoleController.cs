@@ -28,15 +28,18 @@ public class UserRoleController : ControllerBase
     private readonly IUserRepository _users;
     private readonly IUserRoleRepository _userRoles;
     private readonly IRoleRepository _roles;
+    private readonly ISessionRevocationGuard _sessions;
 
     public UserRoleController(
         IUserRepository users,
         IUserRoleRepository userRoles,
-        IRoleRepository roles)
+        IRoleRepository roles,
+        ISessionRevocationGuard sessions)
     {
         _users     = users;
         _userRoles = userRoles;
         _roles     = roles;
+        _sessions  = sessions;
     }
 
     // ── User directory ─────────────────────────────────────────────────────────
@@ -79,7 +82,11 @@ public class UserRoleController : ControllerBase
         return Ok(roles);
     }
 
-    /// <summary>Assign a role to a user, optionally scoped to a section.</summary>
+    /// <summary>
+    /// Assign a role to a user, optionally scoped to a section. The stored procedure audits
+    /// the change and ends the user's open sessions (#163/#165): the new role set takes
+    /// effect at their next sign-in rather than whenever the old token would have expired.
+    /// </summary>
     [HttpPost("users/{userId:long}/roles")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -94,6 +101,7 @@ public class UserRoleController : ControllerBase
         long.TryParse(grantedByClaimVal, out var grantedById);
 
         await _userRoles.AssignRoleAsync(userId, request.RoleId, grantedById, request.SectionId);
+        _sessions.Invalidate(userId);
         return NoContent();
     }
 
@@ -110,14 +118,16 @@ public class UserRoleController : ControllerBase
         if (user is null) return NotFound();
 
         await _userRoles.RevokeRoleAsync(userId, roleId, sectionId);
+        _sessions.Invalidate(userId);
         return NoContent();
     }
 
     // ── User lifecycle ─────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Deactivate a user — sets IsActive=0.
-    /// The next login attempt returns 403 because the auth pipeline checks IsActive.
+    /// Deactivate a user — sets IsActive=0 and ends every open session (#163): refresh
+    /// tokens are revoked and the session version bumped, so their existing access
+    /// token is refused within auth.revocationCheckSeconds on every node.
     /// </summary>
     [HttpPost("users/{userId:long}/deactivate")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -131,6 +141,7 @@ public class UserRoleController : ControllerBase
         long.TryParse(actorClaimVal, out var actorId);
 
         await _userRoles.DeactivateAsync(userId, actorId);
+        _sessions.Invalidate(userId);
         return NoContent();
     }
 

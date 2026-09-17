@@ -51,7 +51,7 @@ public class Issue22AcceptanceTests
     [Fact]
     public void AC2_CookieOptions_Are_HttpOnly_And_8_Hour_MaxAge()
     {
-        var opts = AuthCookieHelper.BuildCookieOptions(isProduction: false);
+        var opts = AuthCookieHelper.BuildCookieOptions(secure: false);
 
         Assert.True(opts.HttpOnly, "Refresh token cookie must be HttpOnly");
         Assert.NotNull(opts.MaxAge);
@@ -61,20 +61,20 @@ public class Issue22AcceptanceTests
     [Fact]
     public void AC2_CookieOptions_SameSite_Is_Strict()
     {
-        var opts = AuthCookieHelper.BuildCookieOptions(isProduction: false);
+        var opts = AuthCookieHelper.BuildCookieOptions(secure: false);
         Assert.Equal(SameSiteMode.Strict, opts.SameSite);
     }
 
     [Fact]
-    public void AC2_RefreshToken_Service_Issues_Token_With_8_Hour_Window()
+    public async Task AC2_RefreshToken_Service_Issues_Token_With_8_Hour_Window()
     {
         // The in-memory service doesn't expose ExpiresAt directly, but we can
         // confirm that a just-issued token is valid and one fabricated past 8h is not.
         var svc   = new InMemoryRefreshTokenService();
-        var token = svc.Issue(userId: 1);
+        var token = await svc.IssueAsync(userId: 1);
 
         // Immediately valid
-        Assert.Equal(1L, svc.Validate(token)?.UserId);
+        Assert.Equal(1L, (await svc.ValidateAsync(token)).Session?.UserId);
     }
 
     // ── AC3: Silent refresh endpoint succeeds with valid cookie ──────────────
@@ -96,9 +96,9 @@ public class Issue22AcceptanceTests
         // Issue a real refresh token via the registered service
         using var scope    = factory.Services.CreateScope();
         var refreshSvc     = scope.ServiceProvider.GetRequiredService<IRefreshTokenService>();
-        var refreshToken   = refreshSvc.Issue(userId: Issue22TestFactory.ActiveUserId);
+        var refreshToken   = await refreshSvc.IssueAsync(userId: Issue22TestFactory.ActiveUserId);
 
-        var req = new HttpRequestMessage(HttpMethod.Get, "/api/auth/refresh");
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         req.Headers.Add("Cookie", $"{AuthCookieHelper.RefreshTokenCookieName}={refreshToken}");
 
         var response = await client.SendAsync(req);
@@ -119,25 +119,25 @@ public class Issue22AcceptanceTests
             AllowAutoRedirect = false,
         });
 
-        var response = await client.GetAsync("/api/auth/refresh");
+        var response = await client.PostAsync("/api/auth/refresh", null);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
     // ── AC4: Revoked refresh tokens return 401 ───────────────────────────────
 
     [Fact]
-    public void AC4_Revoked_Token_Cannot_Be_Validated()
+    public async Task AC4_Revoked_Token_Cannot_Be_Validated()
     {
         var svc   = new InMemoryRefreshTokenService();
-        var token = svc.Issue(userId: 42);
+        var token = await svc.IssueAsync(userId: 42);
 
         // Token is valid before revocation
-        Assert.Equal(42L, svc.Validate(token)?.UserId);
+        Assert.Equal(42L, (await svc.ValidateAsync(token)).Session?.UserId);
 
-        svc.Revoke(token);
+        await svc.RevokeAsync(token);
 
-        // After revocation, must return null → controller returns 401
-        Assert.Null(svc.Validate(token));
+        // After revocation, must fail → controller returns 401
+        Assert.False((await svc.ValidateAsync(token)).Ok);
     }
 
     [Fact]
@@ -152,10 +152,10 @@ public class Issue22AcceptanceTests
         // Issue then immediately revoke the token
         using var scope  = factory.Services.CreateScope();
         var refreshSvc   = scope.ServiceProvider.GetRequiredService<IRefreshTokenService>();
-        var refreshToken = refreshSvc.Issue(userId: Issue22TestFactory.ActiveUserId);
-        refreshSvc.Revoke(refreshToken);
+        var refreshToken = await refreshSvc.IssueAsync(userId: Issue22TestFactory.ActiveUserId);
+        await refreshSvc.RevokeAsync(refreshToken);
 
-        var req = new HttpRequestMessage(HttpMethod.Get, "/api/auth/refresh");
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         req.Headers.Add("Cookie", $"{AuthCookieHelper.RefreshTokenCookieName}={refreshToken}");
 
         var response = await client.SendAsync(req);
@@ -186,6 +186,7 @@ public sealed class Issue22TestFactory : WebApplicationFactory<Program>
         {
             Replace<IUserRepository>(services, _ => new Issue22UserStub());
             Replace<IDbMonitorRepository>(services, _ => new Issue22DbMonitorStub());
+            AuthTestStubs.UseInMemoryAuth(services);
         });
     }
 

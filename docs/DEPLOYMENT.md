@@ -190,7 +190,7 @@ This deployment has no cloud identity service. Two on-prem options:
 Authentication* (Negotiate/Kerberos, NTLM fallback) on the IIS site and register an SPN for the
 app-pool identity (`setspn -S HTTP/cms.va.gov VA\svc-vacms`). Login flow: `GET /api/auth/login` →
 302 `/api/auth/windows-login?returnUrl=…` (the browser completes the Kerberos exchange there) → the
-`cms_rt` refresh cookie is set → 302 back into the SPA, which obtains the JWT through `GET /api/auth/refresh`.
+`cms_rt` refresh cookie is set → 302 back into the SPA, which obtains the JWT through `POST /api/auth/refresh`.
 No token ever appears in a URL or response body. Group-mapped roles come from the identity's group
 SIDs (mappings may be keyed by SID or `DOMAIN\Group`; see Admin → Settings → AD Group Mappings).
 
@@ -208,6 +208,39 @@ Login flow: `GET /api/auth/login` → AD FS → `/signin-oidc` (OIDC handler, se
 `GET /api/auth/callback` (issues the `cms_rt` refresh cookie, then 302 into the SPA).
 Logout: `POST /api/auth/logout` revokes the refresh session and, when the `auth.azureAdSignOut` site setting is
 on (default), returns `{ "signOutUrl": "/api/auth/signout" }`, which the SPA navigates to.
+
+#### Session policy (VA Handbook 6500 — #163/#164)
+
+- **System-use notification (AC-8).** `GET /api/auth/login` only starts a sign-in with `ack=1`, which the admin
+  SPA adds after the user has agreed to the `auth.systemUseNotice` text on `/login`; a bookmarked
+  `/api/auth/login` is sent back to that page. The `Logon` audit row records `systemUseAcknowledged`.
+- **Refresh tokens live in `[RefreshToken]`** (SHA-256 only), rotate on every `POST /api/auth/refresh`, and share
+  sessions across a web garden or farm — a deploy no longer signs everyone out. A replayed token revokes its whole
+  chain (`RefreshReplay` audit row). Register `infra/sql-agent-jobs/job_Maint_PurgeRefreshTokens.sql` with the
+  other Agent jobs (nightly; deletes dead rows after 30 days).
+- **Idle and absolute limits** are the `auth.idleTimeoutMinutes` / `auth.absoluteSessionHours` site settings,
+  enforced by the API and mirrored by the SPA's inactivity dialog.
+- **Deactivation and role changes end open sessions**: `usp_RefreshToken_RevokeAllForUser` revokes the user's
+  tokens and bumps `User.SessionVersion`; the JWT's `sv` claim must match, so existing access tokens are refused
+  within `auth.revocationCheckSeconds` on every node.
+- **Cookies.** `cms_rt` is `HttpOnly; Secure; SameSite=Strict; Path=/api/auth` everywhere except the Development
+  environment, so Staging/UAT must be served over HTTPS (or behind a trusted TLS-terminating proxy — the API refuses
+  to start when its own Kestrel bindings are http-only and no `ForwardedHeaders` trust is configured).
+- **CSRF (FR-SECURITY-05).** The access token is held in SPA memory and sent as a bearer header; the only ambient
+  credential is the `SameSite=Strict`, `/api/auth`-scoped refresh cookie, whose endpoints are POST and only return
+  a token to same-origin script. No anti-forgery token is required.
+- **`Auth__Mode=DevBypass`, `WINDOWS_AUTH_FAKE_NEGOTIATE` and `AZUREAD_FAKE_OIDC` are refused unless
+  `ASPNETCORE_ENVIRONMENT=Development`**, and DevBypass refuses an empty `Auth__DevBypassAllowedUsers`.
+
+#### Audit trail (NIST AU-2/AU-3 — #165)
+
+Every mutating stored procedure writes its own `AuditLog` row inside the same transaction, and the API adds logon,
+logoff, refresh, refresh-failure/replay, session-revocation and policy-denial (`AuthorizationDenied`, 403) events.
+Rows carry `Outcome` (Success/Failure), `IpAddress`, `UserAgent` and `CorrelationId` (an inbound `X-Correlation-Id`
+from IIS ARR / the load balancer, else the request trace id — echoed on every response). Set
+`ForwardedHeaders__KnownProxies`/`KnownNetworks` so the recorded address is the client's, not the proxy's. The
+admin viewer (`/admin/audit`) and its CSV export filter by outcome and IP; the event catalogue is in
+`docs/DATABASE_LAYER.md` §4.9.
 
 The `AzureAd` section binds from the **top-level** `AzureAd__*` variables (not `Auth__AzureAd__*`, which
 does not bind).

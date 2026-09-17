@@ -69,18 +69,25 @@ public interface INavigationMenuRepository
 
 public interface IAuditLogRepository
 {
-    Task WriteAsync(long? actorId, string entityType, long entityId, string action, string? diffJson = null);
+    /// <summary>
+    /// Writes one audit row. Source IP, user agent and correlation id come from the
+    /// scope's <see cref="IAuditContext"/> (#165); <paramref name="outcome"/> is
+    /// <see cref="AuditOutcome.Success"/> unless the event records a denial or failure.
+    /// </summary>
+    Task WriteAsync(long? actorId, string entityType, long entityId, string action, string? diffJson = null,
+        string outcome = AuditOutcome.Success);
     Task<IEnumerable<AuditLog>> ListAsync(long? actorId = null, string? entityType = null, string? action = null,
         DateTime? fromDate = null, DateTime? toDate = null, int page = 1, int pageSize = 50);
 
     /// <summary>
     /// Paged audit log with total count, filtered by any combination of actor, action, entity type,
-    /// and date range. Returns newest first. Issue #57 — BRD FR-USERS-06.
+    /// date range, outcome and source IP. Returns newest first. Issue #57 — BRD FR-USERS-06.
     /// </summary>
     Task<AuditLogPage> ListPagedAsync(
         long? actorId = null, string? action = null, string? entityType = null,
         DateTime? fromDate = null, DateTime? toDate = null,
-        int page = 1, int pageSize = 50);
+        int page = 1, int pageSize = 50,
+        string? outcome = null, string? ipAddress = null);
 
     /// <summary>
     /// Same filters as ListPagedAsync but returns up to 1000 rows without paging for CSV export.
@@ -88,5 +95,33 @@ public interface IAuditLogRepository
     /// </summary>
     Task<IReadOnlyList<AuditLogRow>> ExportAsync(
         long? actorId = null, string? action = null, string? entityType = null,
-        DateTime? fromDate = null, DateTime? toDate = null);
+        DateTime? fromDate = null, DateTime? toDate = null,
+        string? outcome = null, string? ipAddress = null);
+}
+
+/// <summary>
+/// Persistent refresh tokens (#163, BRD FR-SECURITY-02). Only the SHA-256 hash of the
+/// opaque cookie value ever reaches the database; every method maps to one usp_RefreshToken_* call.
+/// </summary>
+public interface IRefreshTokenRepository
+{
+    /// <summary>Starts a new token family at login. Returns the row id.</summary>
+    Task<long> IssueAsync(long userId, byte[] tokenHash, DateTime expiresAt, DateTime absoluteExpiresAt,
+        string? createdByIp, string? userAgent, string? groupsJson);
+
+    /// <summary>
+    /// Resolves a presented token: null when unknown, otherwise the row with its
+    /// <see cref="RefreshTokenLookup.Status"/>. A replayed token revokes its whole family here.
+    /// </summary>
+    Task<RefreshTokenLookup?> ValidateAsync(byte[] tokenHash, int idleMinutes, int rotationGraceSeconds,
+        string? sourceIp, string? userAgent);
+
+    /// <summary>Revokes <paramref name="oldId"/> and issues its replacement in one transaction. Returns the new row id.</summary>
+    Task<long> RotateAsync(long oldId, byte[] newTokenHash, DateTime expiresAt, string? createdByIp, string? userAgent);
+
+    /// <summary>Revokes a single token (logout, disabled account).</summary>
+    Task RevokeAsync(byte[] tokenHash, string reason);
+
+    /// <summary>Revokes every live token of a user and bumps User.SessionVersion ("sign out everywhere").</summary>
+    Task RevokeAllForUserAsync(long userId, long? actorId, string reason);
 }

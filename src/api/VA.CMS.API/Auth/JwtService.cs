@@ -49,6 +49,13 @@ public sealed class JwtService : IJwtService
     public TimeSpan AccessTokenLifetime =>
         TimeSpan.FromMinutes(Math.Max(1, _settings.GetInt(SiteSettingKeys.AuthAccessTokenMinutes)));
 
+    /// <summary>
+    /// Claim carrying User.SessionVersion at mint time (#163). SessionRevocationGuard
+    /// rejects a token whose value is behind the row — deactivation and role changes
+    /// bump the row, so open sessions end without waiting for the token to expire.
+    /// </summary>
+    public const string SessionVersionClaim = "sv";
+
     public string IssueAccessToken(User user, IEnumerable<UserRoleAssignment> roles)
     {
         var claims = new List<Claim>
@@ -57,6 +64,7 @@ public sealed class JwtService : IJwtService
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim("cms_user_id",                 user.Id.ToString()),
             new Claim("display_name",                user.DisplayName),
+            new Claim(SessionVersionClaim,           user.SessionVersion.ToString(), ClaimValueTypes.Integer32),
         };
 
         foreach (var r in roles)

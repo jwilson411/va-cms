@@ -35,7 +35,7 @@ namespace VA.CMS.Tests;
 ///     resolver unit test: after adding a new mapping, a fresh resolve returns
 ///     the new role.
 ///
-/// AC7: Audit log records creation/deletion (via AdminSettingsController).
+/// AC7: Audit log records creation/deletion (inside usp_AdGroupMapping_* since #165; see Issue165AcceptanceTests).
 ///   → Tested via stub audit log that captures WriteAsync calls.
 /// </summary>
 public class Issue67AcceptanceTests
@@ -227,45 +227,8 @@ public class Issue67AcceptanceTests
         Assert.Equal("Editor", after[0].RoleName);
     }
 
-    // ── AC7: Audit log is written on create / delete ──────────────────────────
-
-    [Fact]
-    public async Task AC7_AuditLog_Written_On_Create()
-    {
-        await using var factory = new Issue67TestFactory();
-        var client = factory.CreateAuthenticatedClient(CmsRoles.SystemAdmin);
-
-        await client.PostAsJsonAsync(
-            "/api/v1/admin/settings/ad-group-mappings",
-            new CreateAdGroupMappingRequest("VA-CMS-Editors", RoleId: 2));
-
-        var auditStub = factory.GetAuditStub();
-        Assert.Contains(auditStub.Writes,
-            w => w.Action == "AdGroupMappingUpserted" && w.EntityType == "AdGroupRoleMapping");
-    }
-
-    [Fact]
-    public async Task AC7_AuditLog_Written_On_Delete()
-    {
-        await using var factory = new Issue67TestFactory();
-        var client = factory.CreateAuthenticatedClient(CmsRoles.SystemAdmin);
-
-        // Create first
-        var createResp = await client.PostAsJsonAsync(
-            "/api/v1/admin/settings/ad-group-mappings",
-            new CreateAdGroupMappingRequest("VA-CMS-Editors", RoleId: 2));
-        var created = await createResp.Content.ReadFromJsonAsync<CreateMappingResponse>();
-        Assert.NotNull(created);
-
-        // Delete
-        var delResp = await client.DeleteAsync(
-            $"/api/v1/admin/settings/ad-group-mappings/{created!.Id}");
-        Assert.Equal(HttpStatusCode.NoContent, delResp.StatusCode);
-
-        var auditStub = factory.GetAuditStub();
-        Assert.Contains(auditStub.Writes,
-            w => w.Action == "AdGroupMappingDeleted" && w.EntityType == "AdGroupRoleMapping");
-    }
+    // AC7 (audit rows on create / delete) moved into the stored procedures with #165;
+    // Issue165AcceptanceTests covers it against a real database.
 }
 
 // ── Test factory ──────────────────────────────────────────────────────────────
@@ -324,6 +287,7 @@ public sealed class Issue67TestFactory : WebApplicationFactory<Program>
         {
             Replace<IUserRepository>(services,         _ => new Issue67UserStub());
             Replace<IDbMonitorRepository>(services,    _ => new Issue67DbMonitorStub());
+            AuthTestStubs.UseInMemoryAuth(services);
             Replace<IAdGroupMappingRepository>(services, _ => _mappingStub);
             Replace<IAuditLogRepository>(services,     _ => _auditStub);
         });
@@ -439,13 +403,16 @@ internal sealed class Issue67DbMonitorStub : IDbMonitorRepository
 /// <summary>Captures audit writes for assertion in tests.</summary>
 public class Issue67AuditLogStub : IAuditLogRepository
 {
-    public record AuditWrite(long? ActorId, string EntityType, long EntityId, string Action, string? DiffJson);
+    public record AuditWrite(long? ActorId, string EntityType, long EntityId, string Action, string? DiffJson,
+        string Outcome = AuditOutcome.Success);
 
     public List<AuditWrite> Writes { get; } = new();
 
-    public Task WriteAsync(long? actorId, string entityType, long entityId, string action, string? diffJson = null)
+    public Task WriteAsync(long? actorId, string entityType, long entityId, string action, string? diffJson = null,
+        string outcome = AuditOutcome.Success)
     {
-        Writes.Add(new AuditWrite(actorId, entityType, entityId, action, diffJson));
+        lock (Writes)
+            Writes.Add(new AuditWrite(actorId, entityType, entityId, action, diffJson, outcome));
         return Task.CompletedTask;
     }
 
@@ -457,11 +424,13 @@ public class Issue67AuditLogStub : IAuditLogRepository
     public Task<AuditLogPage> ListPagedAsync(
         long? actorId = null, string? action = null, string? entityType = null,
         DateTime? fromDate = null, DateTime? toDate = null,
-        int page = 1, int pageSize = 50)
+        int page = 1, int pageSize = 50,
+        string? outcome = null, string? ipAddress = null)
         => Task.FromResult(new AuditLogPage { Items = [], TotalItems = 0, Page = page, PageSize = pageSize });
 
     public Task<IReadOnlyList<AuditLogRow>> ExportAsync(
         long? actorId = null, string? action = null, string? entityType = null,
-        DateTime? fromDate = null, DateTime? toDate = null)
+        DateTime? fromDate = null, DateTime? toDate = null,
+        string? outcome = null, string? ipAddress = null)
         => Task.FromResult<IReadOnlyList<AuditLogRow>>(Array.Empty<AuditLogRow>());
 }

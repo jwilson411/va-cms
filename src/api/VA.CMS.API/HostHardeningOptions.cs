@@ -68,6 +68,32 @@ public static class HostHardeningOptions
         return options;
     }
 
+    /// <summary>
+    /// #164: outside Development the refresh cookie is Secure, so the API must be reachable
+    /// over HTTPS. Returns an error when Kestrel's own bindings ("urls" / ASPNETCORE_URLS)
+    /// are configured, none of them is https://, and no forwarded-header trust is set
+    /// (which would mean TLS terminates at IIS ARR or a load balancer). Nothing can be
+    /// decided when no bindings are configured (IIS in-process, tests), so that passes.
+    /// </summary>
+    public static string? ValidateHttpsAvailable(IConfiguration configuration, bool isDevelopment)
+    {
+        if (isDevelopment) return null;
+
+        var urls = configuration["urls"] ?? configuration["ASPNETCORE_URLS"];
+        if (string.IsNullOrWhiteSpace(urls)) return null;
+
+        var bindings = urls.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (bindings.Any(b => b.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+            return null;
+
+        if (BuildForwardedHeaders(configuration) is not null)
+            return null;   // a trusted proxy supplies X-Forwarded-Proto: https
+
+        return $"The API is bound to \"{urls}\" with no https:// endpoint and no ForwardedHeaders:KnownProxies/KnownNetworks. " +
+               "Outside Development the cms_rt cookie is Secure and browsers will never return it over HTTP, so every " +
+               "sign-in would fail. Bind an https:// URL, or trust the TLS-terminating proxy in ForwardedHeaders (#164).";
+    }
+
     public static string[] CorsAllowedOrigins(IConfiguration configuration)
         => configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()?
                .Select(o => o.Trim().TrimEnd('/')).Where(o => o.Length > 0).ToArray() ?? [];

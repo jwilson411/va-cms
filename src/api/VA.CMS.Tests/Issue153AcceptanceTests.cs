@@ -46,14 +46,17 @@ public class Issue153AcceptanceTests
     }
 
     [Fact]
-    public async Task DevBypass_Outside_Development_Ignores_XDevGroups_Header()
+    public void DevBypass_Outside_Development_Cannot_Start_At_All()
     {
-        // DevBypass is permitted in Staging (only Production refuses it), but the
-        // header must still be inert there.
-        await using var factory = new Issue153TestFactory(AuthMode.DevBypass, environment: "Staging");
-        var roles = await RefreshRolesAsync(factory, loginGroups: [], devGroupsHeader: AdminGroup);
-
-        Assert.DoesNotContain(CmsRoles.SystemAdmin, roles);
+        // Originally: DevBypass was permitted in Staging and the header had to be inert
+        // there. Since #164 the stronger guarantee holds — DevBypass refuses to start
+        // anywhere but Development, so there is no Staging host for the header to reach.
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+        {
+            using var factory = new Issue153TestFactory(AuthMode.DevBypass, environment: "Staging");
+            factory.CreateClient();
+        });
+        Assert.Contains("DevBypass", ex.Message);
     }
 
     [Fact]
@@ -117,7 +120,7 @@ public class Issue153AcceptanceTests
         Assert.Contains(CmsRoles.SystemAdmin, loginRoles);
 
         // The cookie jar carries cms_rt; the refresh must keep the group-mapped role.
-        var refreshResp = await client.GetAsync("/api/auth/refresh");
+        var refreshResp = await client.PostAsync("/api/auth/refresh", null);
         Assert.Equal(HttpStatusCode.OK, refreshResp.StatusCode);
 
         var refreshRoles = RolesOf(factory, (await refreshResp.Content.ReadFromJsonAsync<TokenResponse>())!.AccessToken);
@@ -148,8 +151,8 @@ public class Issue153AcceptanceTests
         await using var factory = new Issue153TestFactory(AuthMode.AzureAd, accessTokenMinutes: 45);
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        var token = factory.Services.GetRequiredService<IRefreshTokenService>().Issue(AuthTestStubs.ActiveUserId);
-        var req   = new HttpRequestMessage(HttpMethod.Get, "/api/auth/refresh");
+        var token = await factory.Services.GetRequiredService<IRefreshTokenService>().IssueAsync(AuthTestStubs.ActiveUserId);
+        var req   = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         req.Headers.Add("Cookie", $"{AuthCookieHelper.RefreshTokenCookieName}={token}");
 
         var body = await (await client.SendAsync(req)).Content.ReadFromJsonAsync<TokenResponse>();
@@ -200,10 +203,10 @@ public class Issue153AcceptanceTests
     {
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
-        var token = factory.Services.GetRequiredService<IRefreshTokenService>()
-            .Issue(AuthTestStubs.ActiveUserId, loginGroups);
+        var token = await factory.Services.GetRequiredService<IRefreshTokenService>()
+            .IssueAsync(AuthTestStubs.ActiveUserId, loginGroups);
 
-        var req = new HttpRequestMessage(HttpMethod.Get, "/api/auth/refresh");
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         req.Headers.Add("Cookie", $"{AuthCookieHelper.RefreshTokenCookieName}={token}");
         if (devGroupsHeader is not null)
             req.Headers.Add("X-Dev-Groups", devGroupsHeader);
@@ -261,6 +264,7 @@ public sealed class Issue153TestFactory : WebApplicationFactory<Program>
         builder.UseSetting("AllowedHosts", "localhost");   // #162: wildcard refused outside Development
         builder.UseSetting("SKIP_MIGRATIONS", "true");
         builder.UseSetting("Auth:Mode",       _mode.ToString());
+        builder.UseSetting("Auth:DevBypassAllowedUsers:0", "alice@va.gov");   // #164: empty list refused
         builder.UseSetting("WINDOWS_AUTH_FAKE_NEGOTIATE", "true");
         builder.UseSetting("Jwt:SigningKey",  "issue-153-acceptance-key-32chars!");
         builder.UseSetting("Jwt:Issuer",      "va-cms-api");
@@ -276,6 +280,7 @@ public sealed class Issue153TestFactory : WebApplicationFactory<Program>
         {
             Replace<IUserRepository>(services,           _ => new AuthTestStubs.StubUserRepository());
             Replace<IDbMonitorRepository>(services,      _ => new AuthTestStubs.StubDbMonitorRepository());
+            AuthTestStubs.UseInMemoryAuth(services);
             Replace<IAdGroupMappingRepository>(services, _ => Mappings);
 
             // The stub user repo knows no Windows UPNs, so let logins auto-provision (#155).

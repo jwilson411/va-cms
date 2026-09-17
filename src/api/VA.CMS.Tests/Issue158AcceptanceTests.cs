@@ -420,6 +420,7 @@ public class Issue158AcceptanceTests
                 Replace<IMediaExtendedRepository>(services, _ => new UsageRepoStub());
                 Replace<IStorageBackend>(services,          _ => new StorageStub());
                 Replace<IDbMonitorRepository>(services,     _ => new AuthTestStubs.StubDbMonitorRepository());
+                AuthTestStubs.UseInMemoryAuth(services);
             });
         }
 

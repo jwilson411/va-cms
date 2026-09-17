@@ -6,6 +6,7 @@
  */
 import { Outlet } from 'react-router-dom';
 import { AdminNav, SkipNav } from './AdminNav';
+import { IdleSessionGuard } from './IdleSessionGuard';
 import { useAuth } from '../context/AuthContext';
 import { NotificationBell } from '../features/notifications';
 
@@ -37,6 +38,8 @@ export function AdminLayout(): JSX.Element {
           <Outlet />
         </div>
       </div>
+      {/* #164: inactivity warning + sign-out (VA 6500 AC-11) */}
+      <IdleSessionGuard />
     </div>
   );
 }

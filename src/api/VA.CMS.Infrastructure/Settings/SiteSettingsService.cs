@@ -324,4 +324,34 @@ public static class SiteSettingsExtensions
         var requested = pageSize ?? settings.GetInt(SiteSettingKeys.SearchDefaultPageSize);
         return Math.Clamp(requested, 1, Math.Max(1, settings.GetInt(SiteSettingKeys.SearchMaxPageSize)));
     }
+
+    // ── Session policy (#163/#164) ───────────────────────────────────────────
+
+    /// <summary>auth.accessTokenMinutes, at least 1.</summary>
+    public static int AccessTokenMinutes(this ISiteSettingsService settings) =>
+        Math.Max(1, settings.GetInt(SiteSettingKeys.AuthAccessTokenMinutes));
+
+    /// <summary>
+    /// Server-side idle window in minutes: auth.idleTimeoutMinutes, but never less than the
+    /// access token lifetime plus one minute — the SPA refreshes a minute before expiry, so a
+    /// smaller window would reject every silent refresh of an active user.
+    /// </summary>
+    public static int IdleTimeoutMinutes(this ISiteSettingsService settings) =>
+        Math.Max(settings.GetInt(SiteSettingKeys.AuthIdleTimeoutMinutes), settings.AccessTokenMinutes() + 1);
+
+    /// <summary>auth.absoluteSessionHours clamped to [1, 12] (VA 6500 AC-12).</summary>
+    public static int AbsoluteSessionHours(this ISiteSettingsService settings) =>
+        Math.Clamp(settings.GetInt(SiteSettingKeys.AuthAbsoluteSessionHours), 1, 12);
+
+    /// <summary>auth.refreshTokenHours, at least 1 and never past the absolute session cap.</summary>
+    public static int RefreshTokenHours(this ISiteSettingsService settings) =>
+        Math.Clamp(settings.GetInt(SiteSettingKeys.AuthRefreshTokenHours), 1, settings.AbsoluteSessionHours());
+
+    /// <summary>auth.revocationCheckSeconds clamped to [0, 300].</summary>
+    public static int RevocationCheckSeconds(this ISiteSettingsService settings) =>
+        Math.Clamp(settings.GetInt(SiteSettingKeys.AuthRevocationCheckSeconds), 0, 300);
+
+    /// <summary>auth.refreshRotationGraceSeconds clamped to [0, 300].</summary>
+    public static int RefreshRotationGraceSeconds(this ISiteSettingsService settings) =>
+        Math.Clamp(settings.GetInt(SiteSettingKeys.AuthRefreshRotationGraceSeconds), 0, 300);
 }

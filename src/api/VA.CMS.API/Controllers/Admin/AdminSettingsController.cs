@@ -16,6 +16,9 @@ namespace VA.CMS.API.Controllers.Admin;
 ///   GET    /api/v1/admin/settings/ad-group-mappings
 ///   POST   /api/v1/admin/settings/ad-group-mappings
 ///   DELETE /api/v1/admin/settings/ad-group-mappings/{id}
+///
+/// #165: the mutations are audited by usp_AdGroupMapping_Upsert / _Delete themselves,
+/// like every other mutating stored procedure, rather than by this controller.
 /// </summary>
 [ApiController]
 [Route("api/v1/admin/settings/ad-group-mappings")]
@@ -23,16 +26,13 @@ namespace VA.CMS.API.Controllers.Admin;
 public class AdminSettingsController : ControllerBase
 {
     private readonly IAdGroupMappingRepository _mappings;
-    private readonly IAuditLogRepository       _audit;
     private readonly IRbacService              _rbac;
 
     public AdminSettingsController(
         IAdGroupMappingRepository mappings,
-        IAuditLogRepository       audit,
         IRbacService              rbac)
     {
         _mappings = mappings;
-        _audit    = audit;
         _rbac     = rbac;
     }
 
@@ -62,15 +62,9 @@ public class AdminSettingsController : ControllerBase
 
         var actorId = _rbac.GetUserId(User) ?? 0;
 
+        // Audited as AdGroupRoleMapping/AdGroupMappingUpserted inside the stored
+        // procedure, in the same transaction as the write (#165).
         var id = await _mappings.UpsertAsync(request.AdGroup.Trim(), request.RoleId, actorId);
-
-        // Audit: "AD group mapping created/updated by [admin]" (AC requirement)
-        await _audit.WriteAsync(
-            actorId,
-            entityType: "AdGroupRoleMapping",
-            entityId:   id,
-            action:     "AdGroupMappingUpserted",
-            diffJson:   $"{{\"adGroup\":\"{request.AdGroup.Trim()}\",\"roleId\":{request.RoleId}}}");
 
         return CreatedAtAction(nameof(List), new CreateMappingResponse(id));
     }
@@ -80,17 +74,9 @@ public class AdminSettingsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(long id)
     {
-        var actorId = _rbac.GetUserId(User) ?? 0;
-
+        // Audited as AdGroupRoleMapping/AdGroupMappingDeleted inside the stored procedure;
+        // the actor comes from the request's SESSION_CONTEXT (#165).
         await _mappings.DeleteAsync(id);
-
-        // Audit
-        await _audit.WriteAsync(
-            actorId,
-            entityType: "AdGroupRoleMapping",
-            entityId:   id,
-            action:     "AdGroupMappingDeleted",
-            diffJson:   null);
 
         return NoContent();
     }

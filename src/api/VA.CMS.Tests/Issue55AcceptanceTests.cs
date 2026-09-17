@@ -39,6 +39,8 @@ public class Issue55AcceptanceTests
                     "Server=.;Database=_swagger_test_placeholder;Connection Timeout=1;TrustServerCertificate=True;User Id=sa;Password=none");
                 builder.UseSetting("SKIP_MIGRATIONS", "true");
                 builder.UseSetting("Auth:Mode", "DevBypass");
+
+                builder.UseSetting("Auth:DevBypassAllowedUsers:0", "dev@va.gov");   // #164: empty list refused
                 builder.UseSetting("Jwt:SigningKey", Convert.ToBase64String(new byte[32]));
             });
 

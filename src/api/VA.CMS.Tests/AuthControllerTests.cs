@@ -15,9 +15,9 @@ namespace VA.CMS.Tests;
 /// Acceptance criteria verified:
 ///   - Unauthenticated API calls return 401 (fallback authorization policy)
 ///   - GET /api/auth/login issues an OIDC challenge (redirect towards AAD)
-///   - GET /api/auth/refresh returns 401 when no refresh cookie is present
-///   - GET /api/auth/refresh returns 200 + JWT when a valid refresh cookie is present
-///   - GET /api/auth/refresh returns 401 for an unknown/expired token
+///   - POST /api/auth/refresh returns 401 when no refresh cookie is present
+///   - POST /api/auth/refresh returns 200 + JWT when a valid refresh cookie is present
+///   - POST /api/auth/refresh returns 401 for an unknown/expired token
 ///
 /// Uses WebApplicationFactory<Program> with startup overrides to:
 ///   - Skip DbUp migrations (no database access needed for these tests)
@@ -92,7 +92,7 @@ public class AuthControllerTests : IClassFixture<AuthTestFactory>
             AllowAutoRedirect = false,
         });
 
-        var response = await client.GetAsync("/api/auth/login");
+        var response = await client.GetAsync("/api/auth/login?ack=1");
 
         // A redirect is the expected behaviour (302 to AAD).
         // If the discovery endpoint is unreachable we accept 5xx as evidence
@@ -105,7 +105,7 @@ public class AuthControllerTests : IClassFixture<AuthTestFactory>
             $"Expected 3xx or 500 (OIDC challenge), got {(int)response.StatusCode}");
     }
 
-    // ── GET /api/auth/refresh ────────────────────────────────────────────
+    // ── POST /api/auth/refresh ───────────────────────────────────────────
 
     [Fact]
     public async Task Refresh_Returns_401_Without_Cookie()
@@ -115,7 +115,7 @@ public class AuthControllerTests : IClassFixture<AuthTestFactory>
             AllowAutoRedirect = false,
         });
 
-        var response = await client.GetAsync("/api/auth/refresh");
+        var response = await client.PostAsync("/api/auth/refresh", null);
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
@@ -127,7 +127,7 @@ public class AuthControllerTests : IClassFixture<AuthTestFactory>
             AllowAutoRedirect = false,
         });
 
-        var req = new HttpRequestMessage(HttpMethod.Get, "/api/auth/refresh");
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         req.Headers.Add("Cookie", $"{AuthCookieHelper.RefreshTokenCookieName}=not-a-real-token");
 
         var response = await client.SendAsync(req);
@@ -146,9 +146,9 @@ public class AuthControllerTests : IClassFixture<AuthTestFactory>
         // Issue a real refresh token via the service instance registered in the host.
         using var scope  = _factory.Services.CreateScope();
         var refreshSvc   = scope.ServiceProvider.GetRequiredService<IRefreshTokenService>();
-        var refreshToken = refreshSvc.Issue(userId: AuthTestStubs.ActiveUserId);
+        var refreshToken = await refreshSvc.IssueAsync(userId: AuthTestStubs.ActiveUserId);
 
-        var req = new HttpRequestMessage(HttpMethod.Get, "/api/auth/refresh");
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         req.Headers.Add("Cookie", $"{AuthCookieHelper.RefreshTokenCookieName}={refreshToken}");
 
         var response = await client.SendAsync(req);
@@ -193,6 +193,7 @@ public class AuthTestFactory : WebApplicationFactory<Program>
             // Replace the real DbMonitorRepository with an in-memory stub
             // so DbHealthController can still instantiate without a DB.
             ReplaceService<IDbMonitorRepository>(services, _ => new AuthTestStubs.StubDbMonitorRepository());
+            AuthTestStubs.UseInMemoryAuth(services);
         });
     }
 
@@ -211,6 +212,35 @@ public class AuthTestFactory : WebApplicationFactory<Program>
 internal static class AuthTestStubs
 {
     public const long ActiveUserId = 1L;
+
+    /// <summary>
+    /// Program.cs registers the DB-backed refresh token store and audit repository (#163/#165).
+    /// Hosts without SQL Server swap both for in-memory versions so the /api/auth endpoints run:
+    /// tokens live in one InMemoryRefreshTokenService per host, audit rows are captured in an
+    /// Issue67AuditLogStub that tests can inspect via <see cref="AuditWrites"/>.
+    /// </summary>
+    public static void UseInMemoryAuth(IServiceCollection services)
+    {
+        // The session revocation guard reads the user row on every bearer request (#163);
+        // a host that still has the real UserRepository would reach for SQL Server.
+        if (services.Any(d => d.ServiceType == typeof(IUserRepository) && d.ImplementationType == typeof(UserRepository)))
+        {
+            foreach (var d in services.Where(d => d.ServiceType == typeof(IUserRepository)).ToList())
+                services.Remove(d);
+            services.AddScoped<IUserRepository>(_ => new StubUserRepository());
+        }
+
+        foreach (var d in services.Where(d => d.ServiceType == typeof(IRefreshTokenService) || d.ServiceType == typeof(IAuditLogRepository)).ToList())
+            services.Remove(d);
+        services.AddSingleton<InMemoryRefreshTokenService>();
+        services.AddSingleton<IRefreshTokenService>(sp => sp.GetRequiredService<InMemoryRefreshTokenService>());
+        services.AddSingleton<Issue67AuditLogStub>();
+        services.AddSingleton<IAuditLogRepository>(sp => sp.GetRequiredService<Issue67AuditLogStub>());
+    }
+
+    /// <summary>Audit rows captured by a host configured with <see cref="UseInMemoryAuth"/>.</summary>
+    public static List<Issue67AuditLogStub.AuditWrite> AuditWrites(IServiceProvider services)
+        => services.GetRequiredService<Issue67AuditLogStub>().Writes;
 
     internal sealed class StubUserRepository : IUserRepository
     {

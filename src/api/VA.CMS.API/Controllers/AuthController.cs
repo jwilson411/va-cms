@@ -1,7 +1,10 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
+using VA.CMS.Infrastructure.Data;
+using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Settings;
 
@@ -11,9 +14,9 @@ namespace VA.CMS.API.Controllers;
 /// Handles the AD → JWT auth flow.
 ///
 /// Endpoints (all at /api/auth/*):
-///   GET  /api/auth/login    → redirect to Azure AD OIDC
+///   GET  /api/auth/login    → redirect to Azure AD OIDC (requires ack=1, see below)
 ///   GET  /api/auth/callback → AAD session cookie validated, refresh cookie set, 302 into the SPA
-///   GET  /api/auth/refresh  → validates refresh cookie, issues new JWT
+///   POST /api/auth/refresh  → validates + rotates the refresh cookie, issues new JWT
 ///   POST /api/auth/logout   → revokes refresh cookie; returns the AAD sign-out URL when enabled
 ///   GET  /api/auth/signout  → front-channel sign-out of the AAD session (browser navigation)
 ///
@@ -30,11 +33,21 @@ namespace VA.CMS.API.Controllers;
 /// default scheme is JWT bearer), never returns the access token to the browser,
 /// and redirects to a validated local returnUrl. The SPA bootstraps via silent
 /// refresh on load.
+///
+/// #163: refresh tokens live in the database and rotate on every use; a replayed
+/// token revokes its whole chain. #164: the browser entry point (/login) refuses
+/// to start a sign-in until the system-use notice has been acknowledged (ack=1),
+/// so a bookmarked /api/auth/login cannot skip the AC-8 banner on the SPA page.
+/// Refresh is a POST so that no GET ever mints a credential. #165: every logon,
+/// logoff, refresh and failure is an AuditLog row.
 /// </summary>
 [ApiController]
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
+    /// <summary>Query parameter the SPA sets once the system-use notice has been acknowledged.</summary>
+    public const string AckParameter = "ack";
+
     private readonly IUserRepository        _users;
     private readonly IJwtService            _jwt;
     private readonly IRefreshTokenService   _refreshTokens;
@@ -42,6 +55,7 @@ public class AuthController : ControllerBase
     private readonly IAdGroupRoleResolver   _groupResolver;
     private readonly AuthOptions            _authOptions;
     private readonly ISiteSettingsService   _settings;
+    private readonly IAuditLogRepository    _audit;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
@@ -52,6 +66,7 @@ public class AuthController : ControllerBase
         IAdGroupRoleResolver    groupResolver,
         AuthOptions             authOptions,
         ISiteSettingsService    settings,
+        IAuditLogRepository     audit,
         ILogger<AuthController> logger)
     {
         _users         = users;
@@ -61,34 +76,42 @@ public class AuthController : ControllerBase
         _groupResolver = groupResolver;
         _authOptions   = authOptions;
         _settings      = settings;
+        _audit         = audit;
         _logger        = logger;
     }
 
     private bool AzureAdActive => _authOptions.Mode == AuthMode.AzureAd;
+
+    private bool SecureCookies => AuthCookieHelper.SecureFor(_env);
+
+    private RefreshClient Client => AuthAudit.ClientOf(HttpContext);
 
     /// <summary>Only ever redirect to a same-site path so login/logout can never become an open redirect.</summary>
     private string SafeLocal(string? returnUrl, string fallback = "/")
         => !string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl) ? returnUrl : fallback;
 
     // ──────────────────────────────────────────────────────────────────────
-    // GET /api/auth/login
-    // Redirects the browser to Azure AD OIDC.
+    // GET /api/auth/login?returnUrl=&ack=1
+    // Redirects the browser to Azure AD OIDC. Without ack=1 the browser is sent
+    // to the SPA's /login page, which shows the system-use notice (AC-8).
     // ──────────────────────────────────────────────────────────────────────
     [HttpGet("login")]
     [AllowAnonymous]
-    public IActionResult Login([FromQuery] string? returnUrl)
+    public IActionResult Login([FromQuery] string? returnUrl, [FromQuery] string? ack)
     {
         var safeReturn = SafeLocal(returnUrl, fallback: string.Empty);
+        var toSpaLogin = safeReturn.Length == 0
+            ? "/login"
+            : $"/login?returnUrl={Uri.EscapeDataString(safeReturn)}";
+
+        if (ack != "1")
+            return LocalRedirect(toSpaLogin);
 
         // DevBypass: the "AzureAd" scheme is not registered, so Challenge() would
         // throw. Send the browser to the admin SPA's /login page instead, which
         // offers the dev user picker (backed by /api/auth/dev-users).
-        if (_authOptions.Mode == AuthMode.DevBypass && !_env.IsProduction())
-        {
-            return Redirect(safeReturn.Length == 0
-                ? "/login"
-                : $"/login?returnUrl={Uri.EscapeDataString(safeReturn)}");
-        }
+        if (_authOptions.Mode == AuthMode.DevBypass && _env.IsDevelopment())
+            return LocalRedirect(toSpaLogin);
 
         // WindowsAuth (on-prem IIS / Kerberos): hand the navigation to the Negotiate-
         // protected endpoint. The browser completes the ticket exchange there, the
@@ -97,7 +120,7 @@ public class AuthController : ControllerBase
         if (_authOptions.Mode == AuthMode.WindowsAuth)
         {
             return LocalRedirect(Url.Action(nameof(WindowsAuthController.WindowsLogin), "WindowsAuth",
-                new { returnUrl = safeReturn.Length == 0 ? "/" : safeReturn })!);
+                new { returnUrl = safeReturn.Length == 0 ? "/" : safeReturn, ack = "1" })!);
         }
 
         if (!AzureAdActive)
@@ -105,8 +128,9 @@ public class AuthController : ControllerBase
 
         var props = new AuthenticationProperties
         {
-            RedirectUri = Url.Action(nameof(Callback), "Auth",
-                safeReturn.Length == 0 ? null : new { returnUrl = safeReturn }),
+            RedirectUri = safeReturn.Length == 0
+                ? Url.Action(nameof(Callback), "Auth", new { ack = "1" })
+                : Url.Action(nameof(Callback), "Auth", new { returnUrl = safeReturn, ack = "1" }),
         };
         return Challenge(props, AzureAdSchemes.OpenIdConnect);
     }
@@ -120,7 +144,7 @@ public class AuthController : ControllerBase
     // ──────────────────────────────────────────────────────────────────────
     [HttpGet("callback")]
     [AllowAnonymous]
-    public async Task<IActionResult> Callback([FromQuery] string? returnUrl)
+    public async Task<IActionResult> Callback([FromQuery] string? returnUrl, [FromQuery] string? ack)
     {
         if (!AzureAdActive)
             return NotFound();
@@ -142,7 +166,10 @@ public class AuthController : ControllerBase
                ?? upn;
 
         if (string.IsNullOrEmpty(upn) || string.IsNullOrEmpty(oid))
+        {
+            await LogonFailureAsync(null, upn, "identity_incomplete");
             return Unauthorized("Could not determine user identity from AD token.");
+        }
 
         // #155: unless auto-provisioning is on, only identities an administrator has
         // already created may sign in. Unknown tenant users get a clear message on
@@ -153,6 +180,7 @@ public class AuthController : ControllerBase
             _logger.LogWarning(
                 "AzureAd login rejected: {Upn} (oid {Oid}) is not a provisioned CMS user and auth.autoProvisionUsers is off.",
                 upn, oid);
+            await LogonFailureAsync(null, upn, "not_provisioned");
             await HttpContext.SignOutAsync(AzureAdSchemes.Cookie);
             return LocalRedirect("/login?error=not_provisioned");
         }
@@ -163,6 +191,7 @@ public class AuthController : ControllerBase
         var user = await _users.GetByIdAsync(userId);
         if (user is null || !user.IsActive)
         {
+            await LogonFailureAsync(userId, upn, "account_disabled");
             await HttpContext.SignOutAsync(AzureAdSchemes.Cookie);
             return Unauthorized("Account is disabled.");
         }
@@ -173,22 +202,24 @@ public class AuthController : ControllerBase
         var adGroups = _groupResolver.ExtractGroups(principal);
 
         // Issue refresh token in httpOnly cookie; the login-time groups travel with it (#153)
-        var refreshToken = _refreshTokens.Issue(userId, adGroups);
-        var cookieOpts   = AuthCookieHelper.BuildCookieOptions(isProduction: _env.IsProduction(), lifetime: _refreshTokens.Lifetime);
+        var refreshToken = await _refreshTokens.IssueAsync(userId, adGroups, Client);
+        var cookieOpts   = AuthCookieHelper.BuildCookieOptions(SecureCookies, lifetime: _refreshTokens.Lifetime);
         Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, refreshToken, cookieOpts);
 
         _logger.LogInformation("AzureAd login: session issued for {Upn} (userId={UserId})", upn, userId);
+        await _audit.WriteAsync(userId, AuthAudit.EntityType, userId, AuthAudit.Logon,
+            AuthAudit.Diff(new { mode = "AzureAd", upn, systemUseAcknowledged = ack == "1", groups = adGroups.Count }));
 
         return LocalRedirect(SafeLocal(returnUrl));
     }
 
     // ──────────────────────────────────────────────────────────────────────
-    // GET /api/auth/refresh
-    // Validates the httpOnly refresh cookie and issues a new JWT.
+    // POST /api/auth/refresh
+    // Validates and rotates the httpOnly refresh cookie and issues a new JWT.
     // Story #67 AC4: re-applies the current AdGroupRoleMapping rows to the
     // groups captured at login. Mapping changes take effect here.
     // ──────────────────────────────────────────────────────────────────────
-    [HttpGet("refresh")]
+    [HttpPost("refresh")]
     [AllowAnonymous]
     public async Task<IActionResult> Refresh()
     {
@@ -198,17 +229,35 @@ public class AuthController : ControllerBase
             return Unauthorized("Refresh token missing.");
         }
 
-        var session = _refreshTokens.Validate(refreshToken);
-        if (session is null)
-            return Unauthorized("Refresh token invalid or expired.");
+        var validation = await _refreshTokens.ValidateAsync(refreshToken, Client);
+        if (!validation.Ok)
+        {
+            // Unknown values are stale cookies from before a purge or a redeploy —
+            // not worth a row. Idle/expired/replayed sessions are (AU-2).
+            if (validation.Failure is not RefreshFailure.Unknown)
+            {
+                await _audit.WriteAsync(null, AuthAudit.EntityType, 0,
+                    validation.Failure == RefreshFailure.Replay ? AuthAudit.RefreshReplay : AuthAudit.RefreshFailure,
+                    AuthAudit.Diff(new { reason = validation.Failure.ToString() }), AuditOutcome.Failure);
+            }
+            ExpireCookie();
+            return Unauthorized(validation.Failure switch
+            {
+                RefreshFailure.Idle   => "Session ended after inactivity.",
+                RefreshFailure.Replay => "Refresh token reuse detected; session revoked.",
+                _                     => "Refresh token invalid or expired.",
+            });
+        }
 
-        var userId = session.UserId;
-        var user   = await _users.GetByIdAsync(userId);
+        var session = validation.Session!;
+        var userId  = session.UserId;
+        var user    = await _users.GetByIdAsync(userId);
         if (user is null || !user.IsActive)
         {
-            _refreshTokens.Revoke(refreshToken);
-            var expiryCookieOpts = AuthCookieHelper.BuildExpiryCookieOptions(isProduction: _env.IsProduction());
-            Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, string.Empty, expiryCookieOpts);
+            await _refreshTokens.RevokeAsync(refreshToken, RefreshRevokeReason.Disabled);
+            await _audit.WriteAsync(userId, AuthAudit.EntityType, userId, AuthAudit.RefreshFailure,
+                AuthAudit.Diff(new { reason = "account_disabled" }), AuditOutcome.Failure);
+            ExpireCookie();
             return Unauthorized("Account is disabled.");
         }
 
@@ -241,7 +290,13 @@ public class AuthController : ControllerBase
         // Re-apply current group mappings so admin changes take effect on next refresh.
         var effectiveRoles = await _groupResolver.MergeRolesAsync(adGroups, explicitRoles);
 
+        // Rotate: the presented token is spent, its replacement goes back in the cookie.
+        var nextToken  = await _refreshTokens.RotateAsync(refreshToken, session, Client);
+        var cookieOpts = AuthCookieHelper.BuildCookieOptions(SecureCookies, lifetime: _refreshTokens.Lifetime);
+        Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, nextToken, cookieOpts);
+
         var accessToken = _jwt.IssueAccessToken(user, effectiveRoles);
+        await _audit.WriteAsync(userId, AuthAudit.EntityType, userId, AuthAudit.Refresh, null);
 
         return Ok(new
         {
@@ -265,11 +320,15 @@ public class AuthController : ControllerBase
         if (Request.Cookies.TryGetValue(AuthCookieHelper.RefreshTokenCookieName, out var refreshToken)
             && !string.IsNullOrEmpty(refreshToken))
         {
-            _refreshTokens.Revoke(refreshToken);
+            var validation = await _refreshTokens.ValidateAsync(refreshToken, Client);
+            await _refreshTokens.RevokeAsync(refreshToken, RefreshRevokeReason.Logout);
+
+            var userId = validation.Session?.UserId
+                      ?? (long.TryParse(User.FindFirst("cms_user_id")?.Value, out var fromToken) ? fromToken : (long?)null);
+            await _audit.WriteAsync(userId, AuthAudit.EntityType, userId ?? 0, AuthAudit.Logoff, null);
         }
 
-        var expiryCookieOpts = AuthCookieHelper.BuildExpiryCookieOptions(isProduction: _env.IsProduction());
-        Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, string.Empty, expiryCookieOpts);
+        ExpireCookie();
 
         if (!AzureAdActive)
             return Ok(new { signOutUrl = (string?)null });
@@ -299,4 +358,37 @@ public class AuthController : ControllerBase
         var props = new AuthenticationProperties { RedirectUri = "/login" };
         return SignOut(props, AzureAdSchemes.Cookie, AzureAdSchemes.OpenIdConnect);
     }
+
+    private void ExpireCookie()
+        => Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, string.Empty,
+            AuthCookieHelper.BuildExpiryCookieOptions(SecureCookies));
+
+    private Task LogonFailureAsync(long? userId, string upn, string reason)
+        => _audit.WriteAsync(userId, AuthAudit.EntityType, userId ?? 0, AuthAudit.LogonFailure,
+            AuthAudit.Diff(new { mode = "AzureAd", upn, reason }), AuditOutcome.Failure);
+}
+
+/// <summary>
+/// Audit vocabulary for authentication events (#165). EntityType "Session"; EntityId is the
+/// CMS user id when known, else 0 with the attempted UPN in DiffJson.
+/// </summary>
+public static class AuthAudit
+{
+    public const string EntityType    = "Session";
+    public const string Logon         = "Logon";
+    public const string LogonFailure  = "LogonFailure";
+    public const string Logoff        = "Logoff";
+    public const string Refresh       = "Refresh";
+    public const string RefreshFailure = "RefreshFailure";
+    public const string RefreshReplay = "RefreshReplay";
+    public const string SessionsRevoked = "SessionsRevoked";
+    public const string SystemUseAckHeader = "X-System-Use-Ack";
+
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    public static string Diff(object value) => JsonSerializer.Serialize(value, Json);
+
+    public static RefreshClient ClientOf(HttpContext ctx) => new(
+        ctx.Connection.RemoteIpAddress?.ToString(),
+        AuditContext.Truncate(ctx.Request.Headers.UserAgent.ToString(), AuditContext.UserAgentMaxLength));
 }

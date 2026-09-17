@@ -29,7 +29,7 @@ public class Issue154AcceptanceTests
         await using var factory = new Issue154TestFactory();
         var client = factory.CreateClient(NoRedirect());
 
-        var resp = await client.GetAsync("/api/auth/login?returnUrl=%2Fcontent%2F42");
+        var resp = await client.GetAsync("/api/auth/login?returnUrl=%2Fcontent%2F42&ack=1");
 
         Assert.Equal(HttpStatusCode.Redirect, resp.StatusCode);
         var location = resp.Headers.Location!.ToString();
@@ -43,7 +43,7 @@ public class Issue154AcceptanceTests
         await using var factory = new Issue154TestFactory();
         var client = factory.CreateClient(NoRedirect());
 
-        var resp = await client.GetAsync("/api/auth/login?returnUrl=https%3A%2F%2Fevil.example%2Fphish");
+        var resp = await client.GetAsync("/api/auth/login?returnUrl=https%3A%2F%2Fevil.example%2Fphish&ack=1");
 
         var location = Uri.UnescapeDataString(resp.Headers.Location!.ToString());
         Assert.DoesNotContain("evil.example", location);
@@ -107,7 +107,7 @@ public class Issue154AcceptanceTests
 
         await FollowLoginToCallbackAsync(client, "/");
 
-        var refresh = await client.GetAsync("/api/auth/refresh");
+        var refresh = await client.PostAsync("/api/auth/refresh", null);
         Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
 
         var token = (await refresh.Content.ReadFromJsonAsync<TokenResponse>())!.AccessToken;
@@ -134,7 +134,7 @@ public class Issue154AcceptanceTests
         Assert.Equal("/api/auth/signout", body!.SignOutUrl);
 
         // cms_rt is revoked server-side and expired in the browser
-        var refresh = await client.GetAsync("/api/auth/refresh");
+        var refresh = await client.PostAsync("/api/auth/refresh", null);
         Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
     }
 
@@ -207,7 +207,7 @@ public class Issue154AcceptanceTests
     /// <summary>Walks login → fake AAD → callback by hand so each hop can be asserted; returns the callback response.</summary>
     private static async Task<HttpResponseMessage> FollowLoginToCallbackAsync(HttpClient client, string returnUrl)
     {
-        var login = await client.GetAsync($"/api/auth/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
+        var login = await client.GetAsync($"/api/auth/login?returnUrl={Uri.EscapeDataString(returnUrl)}&ack=1");
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
 
         var aad = await client.GetAsync(login.Headers.Location);
@@ -262,6 +262,7 @@ public sealed class Issue154TestFactory : WebApplicationFactory<Program>
         {
             Replace<IUserRepository>(services,           _ => new AuthTestStubs.StubUserRepository());
             Replace<IDbMonitorRepository>(services,      _ => new AuthTestStubs.StubDbMonitorRepository());
+            AuthTestStubs.UseInMemoryAuth(services);
             Replace<IAdGroupMappingRepository>(services, _ => mappings);
             services.AddSingleton<ISiteSettingsService>(
                 StaticSiteSettings.Defaults
