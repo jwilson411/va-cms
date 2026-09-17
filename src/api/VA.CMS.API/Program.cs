@@ -17,6 +17,7 @@ using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.ContentTypes.BuiltIn;
 using VA.CMS.Infrastructure.ContentTypes.CustomFields;
 using VA.CMS.Infrastructure.Services;
+using VA.CMS.Infrastructure.Settings;
 using VA.CMS.Infrastructure.Storage;
 using VA.CMS.API.Notifications;
 using VA.CMS.API.Webhooks;
@@ -252,6 +253,19 @@ builder.Services.AddSwaggerGen(options =>
 // PetaPoco database
 builder.Services.AddScoped<CmsDatabase>(_ => new CmsDatabase(connectionString));
 
+// -----------------------------------------------------------------------
+// Site settings (epic #141): runtime configuration + feature flags from [SiteSetting].
+// One singleton serves typed reads from an in-memory snapshot; as a hosted service it
+// syncs the C# definitions into the table, loads at startup, and refreshes on a timer.
+// Reads never block on the database — code defaults apply until the first load.
+// -----------------------------------------------------------------------
+builder.Services.AddSingleton<ISiteSettingRepository>(_ => new SiteSettingRepository(connectionString));
+builder.Services.AddSingleton<SiteSettingsService>(sp => new SiteSettingsService(
+    sp.GetRequiredService<ISiteSettingRepository>(),
+    sp.GetRequiredService<ILogger<SiteSettingsService>>()));
+builder.Services.AddSingleton<ISiteSettingsService>(sp => sp.GetRequiredService<SiteSettingsService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SiteSettingsService>());
+
 // Repositories
 builder.Services.AddScoped<IContentEntryRepository, ContentEntryRepository>();
 builder.Services.AddScoped<IContentTypeRepository, ContentTypeRepository>();
@@ -328,8 +342,9 @@ builder.Services.AddScoped<ISeedService, DemoSeedService>();
 
 // Issue #54: Webhook registration and delivery (BRD FR-DEV-07)
 builder.Services.AddScoped<IWebhookRepository, WebhookRepository>();
+// Per-delivery timeout is webhooks.timeoutSeconds (applied in WebhookDispatcher); this is only a ceiling.
 builder.Services.AddHttpClient("WebhookClient")
-    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(15));
+    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();
 builder.Services.AddSingleton<IWebhookBackgroundDispatcher, WebhookBackgroundDispatcher>();
 
@@ -424,21 +439,26 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 
 // -----------------------------------------------------------------------
-// Swagger UI — accessible at /swagger in Development (AC: Issue #55)
+// Site setting gates (epic #141): features.graphql / features.swaggerUi answer 404 while
+// off, and media.maxUploadBytes sets the upload body limit. Must run before Swagger,
+// routing and the form reader.
 // -----------------------------------------------------------------------
-if (app.Environment.IsDevelopment())
+app.UseSiteSettingGates(app.Environment.IsDevelopment());
+
+// -----------------------------------------------------------------------
+// Swagger UI — always on in Development (AC: Issue #55); elsewhere the middleware above
+// serves it only while the features.swaggerUi site setting is on.
+// -----------------------------------------------------------------------
+app.UseSwagger(c =>
 {
-    app.UseSwagger(c =>
-    {
-        c.RouteTemplate = "swagger/{documentName}/swagger.json";
-    });
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "VA CMS REST API v1");
-        c.RoutePrefix = "swagger";
-        c.DocumentTitle = "VA CMS API";
-    });
-}
+    c.RouteTemplate = "swagger/{documentName}/swagger.json";
+});
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "VA CMS REST API v1");
+    c.RoutePrefix = "swagger";
+    c.DocumentTitle = "VA CMS API";
+});
 
 app.UseRouting();
 

@@ -1,5 +1,6 @@
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Notifications;
 
@@ -11,7 +12,8 @@ namespace VA.CMS.API.Notifications;
 ///
 /// Recipient resolution lives in usp_Notification_CreateForWorkflowEvent. A failure here
 /// is logged and swallowed: the transition has already been committed and a broken
-/// inbox must never turn a successful workflow action into a 500.
+/// inbox must never turn a successful workflow action into a 500. Nothing is recorded while
+/// the features.notifications site setting is off (issue #144).
 /// </summary>
 public interface IWorkflowNotifier
 {
@@ -22,15 +24,23 @@ public sealed class WorkflowNotifier : IWorkflowNotifier
 {
     private readonly INotificationRepository _notifications;
     private readonly ILogger<WorkflowNotifier> _logger;
+    private readonly ISiteSettingsService _settings;
 
-    public WorkflowNotifier(INotificationRepository notifications, ILogger<WorkflowNotifier> logger)
+    public WorkflowNotifier(
+        INotificationRepository notifications,
+        ILogger<WorkflowNotifier> logger,
+        ISiteSettingsService? settings = null)
     {
         _notifications = notifications;
         _logger        = logger;
+        _settings      = settings ?? StaticSiteSettings.Defaults;
     }
 
     public async Task NotifyAsync(long contentEntryId, string eventType, long actorId, string? comment = null)
     {
+        if (!_settings.GetBool(SiteSettingKeys.FeatureNotifications))
+            return;
+
         try
         {
             var count = await _notifications.CreateForWorkflowEventAsync(contentEntryId, eventType, actorId, comment);

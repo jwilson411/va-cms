@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Infrastructure.Storage;
 
@@ -32,19 +33,23 @@ public class MediaUploadService : IMediaUploadService
     private readonly IImageProcessingService _imaging;
     private readonly IVirusScanService _virusScan;
     private readonly IMediaExtendedRepository _mediaExtended;
+    private readonly ISiteSettingsService _settings;
 
     public MediaUploadService(
         IStorageBackend storage,
         IMediaAssetRepository assets,
         IImageProcessingService imaging,
         IVirusScanService virusScan,
-        IMediaExtendedRepository mediaExtended)
+        IMediaExtendedRepository mediaExtended,
+        ISiteSettingsService? settings = null)
     {
         _storage       = storage;
         _assets        = assets;
         _imaging       = imaging;
         _virusScan     = virusScan;
         _mediaExtended = mediaExtended;
+        // Limits and the MIME allow-list are site settings (issue #145); code defaults when not supplied.
+        _settings      = settings ?? StaticSiteSettings.Defaults;
     }
 
     public async Task<(MediaAsset? Asset, string? Error)> UploadAsync(
@@ -52,17 +57,22 @@ public class MediaUploadService : IMediaUploadService
         long uploadedById,
         CancellationToken ct = default)
     {
-        // 1. Validate file is not empty
+        // 1. Validate file is not empty and within the configured size limit (media.maxUploadBytes)
         if (file.Length == 0)
             return (null, "File must not be empty.");
+
+        var maxBytes = _settings.GetLong(SiteSettingKeys.MediaMaxUploadBytes);
+        if (maxBytes > 0 && file.Length > maxBytes)
+            return (null, $"File is {file.Length:N0} bytes; the maximum upload size is {maxBytes:N0} bytes.");
 
         // 2. Resolve MIME — prefer declared ContentType but normalise "image/jpg" → "image/jpeg"
         var mimeType = NormaliseMime(file.ContentType);
 
-        // 3. MIME allow-list check (BRD FR-SECURITY-06)
-        if (!MimeAllowList.IsAllowed(mimeType))
+        // 3. MIME allow-list check (BRD FR-SECURITY-06) against media.allowedMimeTypes
+        var allowed = _settings.GetStringList(SiteSettingKeys.MediaAllowedMimeTypes);
+        if (!MimeAllowList.IsAllowed(mimeType, allowed))
             return (null, $"File type '{mimeType}' is not permitted. " +
-                          $"Allowed types: {string.Join(", ", MimeAllowList.Allowed)}.");
+                          $"Allowed types: {string.Join(", ", allowed)}.");
 
         // 4. Build a safe storage path: yyyy/MM/<guid>.<ext>
         //    Using a GUID prevents enumeration; the original filename is preserved in FileName column.
@@ -156,8 +166,8 @@ public class MediaUploadService : IMediaUploadService
         asset.IsVirusScanPassed = true;
 
         // 10. Image processing: resize + WebP conversion (BRD FR-MEDIA-02)
-        //     Non-image files skip this step silently.
-        if (_imaging.ShouldProcess(mimeType))
+        //     Non-image files skip this step silently; features.webpVariants turns it off entirely.
+        if (_settings.GetBool(SiteSettingKeys.FeatureWebpVariants) && _imaging.ShouldProcess(mimeType))
         {
             await ProcessImageAsync(file, asset, guid, datePath, ct);
         }

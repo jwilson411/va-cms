@@ -2,11 +2,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Infrastructure.Services;
 
 /// <summary>
-/// Background worker that polls every 60 seconds and:
+/// Background worker that polls every workflow.scheduledPublishPollSeconds (default 60) and:
 ///   - Publishes Approved entries whose ScheduledPublishAt has passed.
 ///   - Unpublishes (expires) Published entries whose ScheduledExpireAt has passed.
 ///
@@ -15,23 +16,38 @@ namespace VA.CMS.Infrastructure.Services;
 ///   - Background job unpublishes the entry within 2 minutes of the expiry time.
 ///
 /// Uses a system actor ID of 0 (indicating automated action) for audit log entries.
+///
+/// The poll interval and the features.scheduledPublishing switch are site settings
+/// (issue #144/#147) read on every loop, so an admin change applies without a restart.
 /// </summary>
 public sealed class ScheduledPublishWorker : BackgroundService
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan MinPollInterval = TimeSpan.FromSeconds(5);
 
     // System actor ID 0 is used for automated scheduler actions in the audit log.
     private const long SystemActorId = 0;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ScheduledPublishWorker> _logger;
+    private readonly ISiteSettingsService _settings;
 
     public ScheduledPublishWorker(
         IServiceScopeFactory scopeFactory,
-        ILogger<ScheduledPublishWorker> logger)
+        ILogger<ScheduledPublishWorker> logger,
+        ISiteSettingsService settings)
     {
         _scopeFactory = scopeFactory;
         _logger       = logger;
+        _settings     = settings;
+    }
+
+    private TimeSpan PollInterval
+    {
+        get
+        {
+            var configured = TimeSpan.FromSeconds(_settings.GetInt(SiteSettingKeys.WorkflowScheduledPublishPollSeconds));
+            return configured < MinPollInterval ? MinPollInterval : configured;
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -44,7 +60,10 @@ public sealed class ScheduledPublishWorker : BackgroundService
         {
             try
             {
-                await RunSweepAsync(stoppingToken);
+                if (_settings.GetBool(SiteSettingKeys.FeatureScheduledPublishing))
+                    await RunSweepAsync(stoppingToken);
+                else
+                    _logger.LogDebug("ScheduledPublishWorker: features.scheduledPublishing is off; sweep skipped.");
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

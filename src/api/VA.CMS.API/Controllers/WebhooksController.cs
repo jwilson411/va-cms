@@ -135,14 +135,7 @@ public class WebhooksController : ControllerBase
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
-    private static readonly HashSet<string> KnownEvents = new(StringComparer.OrdinalIgnoreCase)
-    {
-        WebhookEvents.ContentPublished,
-        WebhookEvents.ContentUnpublished,
-        WebhookEvents.ContentArchived,
-        WebhookEvents.MediaUploaded,
-        WebhookEvents.NavigationUpdated,
-    };
+    private static readonly HashSet<string> KnownEvents = new(WebhookEvents.All, StringComparer.OrdinalIgnoreCase);
 }
 
 // ── Request / Response DTOs ─────────────────────────────────────────────────
