@@ -9,6 +9,8 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using VA.CMS.API.Observability;
+using VA.CMS.API.RateLimiting;
+using VA.CMS.API.Search;
 using VA.CMS.API;
 using VA.CMS.API.Auth;
 using VA.CMS.API.GraphQL;
@@ -231,9 +233,26 @@ builder.Services.AddCmsAuthorization();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuditingAuthorizationResultHandler>();
 
 // -----------------------------------------------------------------------
+// Request bounds (#167): header/line limits on Kestrel explicitly (IIS in-process
+// applies its own requestLimits from web.config — see DEPLOYMENT.md); the body limit
+// is per request from api.maxRequestBodyBytes / media.maxUploadBytes in
+// UseSiteSettingGates so it can change without a restart.
+// -----------------------------------------------------------------------
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    kestrel.Limits.MaxRequestHeadersTotalSize = 32 * 1024;
+    kestrel.Limits.MaxRequestHeaderCount      = 100;
+    kestrel.Limits.MaxRequestLineSize         = 8 * 1024;
+    kestrel.AddServerHeader                   = false;
+});
+
+// -----------------------------------------------------------------------
 // Services
 // -----------------------------------------------------------------------
-builder.Services.AddControllers();
+// Every controller action gets a rate-limit policy by convention (#167) unless it
+// declares one; see RateLimitPolicyConvention for the mapping.
+builder.Services.AddControllers(options => options.Conventions.Add(new RateLimitPolicyConvention()));
+builder.Services.AddCmsRateLimiting();
 
 // -----------------------------------------------------------------------
 // Errors and health (#166, NFR-OPS-01/02)
@@ -350,6 +369,9 @@ builder.Services.AddScoped<VA.CMS.API.Services.IMediaUsageSyncService, VA.CMS.AP
 
 // Issue #49: Full-text search repository (FR-SEARCH-02)
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();
+// #167: search/click analytics rows go through a bounded channel + hosted writer,
+// never on the request's own (scoped, soon disposed) CmsDatabase.
+builder.Services.AddSearchLogQueue();
 
 // Issue #51: Search analytics repository (FR-SEARCH-06)
 builder.Services.AddScoped<ISearchAnalyticsRepository, SearchAnalyticsRepository>();
@@ -624,6 +646,7 @@ if (authOptions.Mode == AuthMode.DevBypass)
     app.UseDevBypassAuth();
 
 app.UseAuthentication();
+app.UseRateLimiter();       // #167: after authentication so the admin policy can key on the user id
 app.UseAuthHeaderRedaction();
 app.UseAuditContext();      // #165: actor / IP / agent / correlation id for every audit row
 app.UseAuthorization();
@@ -634,7 +657,8 @@ app.MapControllers();
 // Endpoint:  /api/graphql
 // Playground: /api/graphql/ui (Development only — HC disables Banana Cake Pop in non-dev by default)
 app.MapGraphQL("/api/graphql")
-   .AllowAnonymous();   // #156: anonymous = Published-only surface; CanRead JWT = full surface (see GraphQLAudience)
+   .AllowAnonymous()    // #156: anonymous = Published-only surface; CanRead JWT = full surface (see GraphQLAudience)
+   .RequireRateLimiting(RateLimitPolicies.PublicRead);   // #167: on top of the depth/cost limits
 
 app.MapCmsHealthChecks();   // #166: /health(/live) liveness, /health/ready readiness (+ /api/health aliases)
 

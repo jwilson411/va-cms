@@ -30,7 +30,7 @@ public class Issue50AcceptanceTests(DatabaseFixture fixture)
 
     private ISearchRepository Repo() => new SearchRepository(fixture.CreateDb());
 
-    private SearchController Controller() => new SearchController(Repo(), StaticSiteSettings.Defaults);
+    private SearchController Controller() => new SearchController(Repo(), StaticSiteSettings.Defaults, new InlineSearchLogQueue(search: Repo()));
 
     // ── AC1: date range filters ────────────────────────────────────────────────
 

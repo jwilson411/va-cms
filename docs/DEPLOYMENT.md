@@ -128,6 +128,25 @@ Site: VA CMS (port 443, HTTPS)
 └── /api       → C:\inetpub\vacms\api\      (ASP.NET Core via AspNetCoreModule)
 ```
 
+**web.config for /api:** `dotnet publish` writes the AspNetCoreModule stanza. Add explicit request limits
+(#167) — IIS enforces `maxAllowedContentLength` *before* the API's own per-request limit, so it must be at
+least `media.maxUploadBytes` (default 100 MB) plus a little headroom, while the API keeps every non-upload
+request at `api.maxRequestBodyBytes` (default 1 MB):
+
+```xml
+<system.webServer>
+  <security>
+    <requestFiltering>
+      <requestLimits maxAllowedContentLength="110000000" maxUrl="4096" maxQueryString="8192" />
+    </requestFiltering>
+  </security>
+</system.webServer>
+```
+
+Rate limiting (`api.rateLimits.*`, docs/SETTINGS.md) keys anonymous requests by the client address the API
+sees, so `ForwardedHeaders__KnownProxies`/`KnownNetworks` must name the ARR / load-balancer hops — otherwise
+every visitor shares the proxy's bucket. IIS's own dynamic IP restrictions can stay on as an outer layer.
+
 **web.config for /admin:** `vite build` writes `dist/web.config` (SPA fallback rule plus the security
 headers and the admin Content-Security-Policy from `src/security/csp.ts`, #162). Deploy the `dist/` folder
 as-is; do not hand-edit the file — the build regenerates it and refuses to complete if `index.html` ever

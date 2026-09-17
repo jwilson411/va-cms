@@ -6439,20 +6439,24 @@
         "type": "object",
         "properties": {
           "query": {
+            "maxLength": 500,
             "type": "string",
             "nullable": true
           },
           "clickedSlug": {
+            "maxLength": 500,
             "type": "string",
             "nullable": true
           },
           "resultRank": {
+            "maximum": 1000,
+            "minimum": 0,
             "type": "integer",
             "format": "int32"
           }
         },
         "additionalProperties": false,
-        "description": "Request body for POST /api/v1/search/click."
+        "description": "Request body for POST /api/v1/search/click. Lengths match the SearchClickLog columns; the query cap is also enforced against search.maxQueryLength."
       },
       "LongRunningQueryRow": {
         "type": "object",

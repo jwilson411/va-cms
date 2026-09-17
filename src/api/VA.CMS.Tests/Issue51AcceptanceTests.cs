@@ -34,7 +34,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
 
     private ISearchAnalyticsRepository Repo() => new SearchAnalyticsRepository(fixture.CreateDb());
 
-    private SearchAnalyticsController Controller() => new SearchAnalyticsController(Repo(), StaticSiteSettings.Defaults);
+    private SearchAnalyticsController Controller() => new SearchAnalyticsController(Repo(), StaticSiteSettings.Defaults, new InlineSearchLogQueue(analytics: Repo()), new AnySlugPublishedStub());
 
     // ── AC1a: V026 migration — SPs and table exist ────────────────────────────
 

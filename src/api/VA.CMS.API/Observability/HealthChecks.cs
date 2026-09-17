@@ -57,9 +57,10 @@ public static class HealthEndpoints
 
         foreach (var prefix in Prefixes)
         {
-            app.MapHealthChecks(prefix,            live).AllowAnonymous();
-            app.MapHealthChecks($"{prefix}/live",  live).AllowAnonymous();
-            app.MapHealthChecks($"{prefix}/ready", ready).AllowAnonymous();
+            // Anonymous, but behind the public-read rate limit (#167): readiness touches SQL and storage.
+            app.MapHealthChecks(prefix,            live).AllowAnonymous().RequireRateLimiting(RateLimiting.RateLimitPolicies.PublicRead);
+            app.MapHealthChecks($"{prefix}/live",  live).AllowAnonymous().RequireRateLimiting(RateLimiting.RateLimitPolicies.PublicRead);
+            app.MapHealthChecks($"{prefix}/ready", ready).AllowAnonymous().RequireRateLimiting(RateLimiting.RateLimitPolicies.PublicRead);
         }
     }
 

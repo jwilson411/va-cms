@@ -1,6 +1,10 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using VA.CMS.API.Auth;
+using VA.CMS.API.RateLimiting;
+using VA.CMS.API.Search;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Settings;
@@ -21,18 +25,30 @@ namespace VA.CMS.API.Controllers.Admin;
 ///
 ///   POST /api/v1/search/click
 ///       Records a user click on a search result for CTR tracking.
-///       Public (no JWT) — called by the public-site search component.
+///       Public (no JWT) — called by the public-site search component. Bounded (#167):
+///       analytics-write rate limit per IP, query ≤ search.maxQueryLength, slug ≤ 500 and
+///       must be a published entry, rank 0–1000; the row is queued, not written inline.
 /// </summary>
 [ApiController]
 public class SearchAnalyticsController : ControllerBase
 {
+    public const int MaxResultRank = 1000;
+
     private readonly ISearchAnalyticsRepository _analytics;
     private readonly ISiteSettingsService       _settings;
+    private readonly ISearchLogQueue            _log;
+    private readonly IContentEntryRepository    _entries;
 
-    public SearchAnalyticsController(ISearchAnalyticsRepository analytics, ISiteSettingsService settings)
+    public SearchAnalyticsController(
+        ISearchAnalyticsRepository analytics,
+        ISiteSettingsService       settings,
+        ISearchLogQueue            log,
+        IContentEntryRepository    entries)
     {
         _analytics = analytics;
         _settings  = settings;
+        _log       = log;
+        _entries   = entries;
     }
 
     // ── Dashboard summary widget ──────────────────────────────────────────────
@@ -120,6 +136,7 @@ public class SearchAnalyticsController : ControllerBase
     /// </summary>
     [HttpPost("api/v1/search/click")]
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitPolicies.AnalyticsWrite)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> LogClick([FromBody] LogClickRequest request)
@@ -127,23 +144,38 @@ public class SearchAnalyticsController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Query) || string.IsNullOrWhiteSpace(request.ClickedSlug))
             return BadRequest(new { error = "query and clickedSlug are required." });
 
-        await _analytics.LogClickAsync(
-            query:       request.Query.Trim(),
-            clickedSlug: request.ClickedSlug.Trim(),
-            resultRank:  request.ResultRank,
-            userId:      null); // public endpoint — no authenticated user
+        var query = request.Query.Trim();
+        var slug  = request.ClickedSlug.Trim().TrimStart('/');
 
+        var maxLength = _settings.GetInt(SiteSettingKeys.SearchMaxQueryLength);
+        if (query.Length > maxLength)
+            return BadRequest(new { error = $"query must be at most {maxLength} characters." });
+
+        // Only a slug that resolves to a published entry is worth a row: anything else is
+        // noise at best and a disk-fill vector at worst.
+        if (await _entries.GetPublishedBySlugAsync(slug) is null)
+            return BadRequest(new { error = "clickedSlug does not match a published entry." });
+
+        if (!_settings.GetBool(SiteSettingKeys.FeatureSearchAnalytics))
+            return NoContent();
+
+        _log.TryEnqueue(new SearchClickLogItem(query, slug, request.ResultRank, UserId: null));   // public endpoint — no authenticated user
         return NoContent();
     }
 }
 
 // ── Request / Response DTOs ───────────────────────────────────────────────────
 
-/// <summary>Request body for POST /api/v1/search/click.</summary>
+/// <summary>Request body for POST /api/v1/search/click. Lengths match the SearchClickLog columns; the query cap is also enforced against search.maxQueryLength.</summary>
 public sealed class LogClickRequest
 {
+    [MaxLength(500)]
     public string Query       { get; init; } = string.Empty;
+
+    [MaxLength(500)]
     public string ClickedSlug { get; init; } = string.Empty;
+
+    [Range(0, SearchAnalyticsController.MaxResultRank)]
     public int    ResultRank  { get; init; }
 }
 
