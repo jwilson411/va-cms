@@ -36,6 +36,7 @@ SharePoint 2016 on-prem is aging out. Drupal 11 (the only cleanly TRM-authorized
 - [Deployment Guide](docs/DEPLOYMENT.md)
 - [Content Owner Guide](docs/CONTENT_OWNER_GUIDE.md)
 - [Developer Guide](docs/DEVELOPER_GUIDE.md)
+- [Runtime Settings & Feature Flags](docs/SETTINGS.md)
 
 ## Local Development Setup
 
@@ -145,8 +146,14 @@ VACMS_CONNECTION_STRING="Server=localhost,14333;Database=VACMS_Dev;User Id=sa;Pa
 curl -s -X POST http://localhost:5100/api/v1/webhooks -H "X-Dev-User: alice@va.gov" \
   -H "Content-Type: application/json" \
   -d '{"name":"public-site","url":"http://localhost:3000/api/revalidate","secret":"dev-secret",
-       "events":["content.published","content.unpublished","content.archived","navigation.updated"]}'
+       "events":["content.published","content.unpublished","content.archived","navigation.updated","settings.updated"]}'
 ```
+
+Runtime configuration — feature flags, upload limits, token lifetimes, the public site's agency
+name and DAP codes, polling intervals — is **not** in appsettings. It lives in the `SiteSetting`
+table and is edited at http://localhost:5173/admin/settings; the running API applies a change
+immediately, no rebuild. See [docs/SETTINGS.md](docs/SETTINGS.md) for the full list and for what
+deliberately stays in appsettings (connection string, auth mode, signing key, storage backend).
 
 Uploaded media is written to `Storage:LocalRootPath` (`src/api/VA.CMS.API/.uploads`, gitignored, from
 the example settings) and served by `GET /api/v1/media/serve/{id}`.
