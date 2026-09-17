@@ -20,8 +20,7 @@
     "Instance": "https://login.microsoftonline.com/",
     "TenantId": "YOUR_TENANT_ID",
     "ClientId": "YOUR_CLIENT_ID",
-    "ClientSecret": "YOUR_CLIENT_SECRET_DEV_ONLY",
-    "CallbackPath": "/api/auth/callback"
+    "ClientSecret": "YOUR_CLIENT_SECRET_DEV_ONLY"
   },
   "Storage": {
     "Backend": "local",

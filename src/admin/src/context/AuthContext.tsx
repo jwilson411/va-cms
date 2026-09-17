@@ -45,7 +45,7 @@ interface AuthContextValue extends AuthState {
    * /api/auth/dev-login; the API returns 401/404 unless Auth:Mode=DevBypass.
    */
   devLogin: (upn: string) => Promise<void>;
-  /** Clear in-memory token and revoke refresh cookie. */
+  /** Clear in-memory token, revoke refresh cookie, and (AzureAd mode) navigate to the AAD sign-out. */
   logout: () => Promise<void>;
   /** True if the SPA has a valid, non-expired access token. */
   isAuthenticated: boolean;
@@ -182,15 +182,24 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   );
 
   const logout = useCallback(async () => {
+    // In AzureAd mode the API answers { signOutUrl } pointing at GET /api/auth/signout;
+    // navigating there lets the browser complete the Azure AD end-session round trip
+    // (a fetch cannot). Any other answer just clears local state.
+    let signOutUrl: string | null = null;
     try {
-      await fetch(`${API_BASE}/auth/logout`, {
+      const res = await fetch(`${API_BASE}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });
+      if (res.ok && res.status !== 204) {
+        const body = (await res.json().catch(() => null)) as { signOutUrl?: string | null } | null;
+        signOutUrl = body?.signOutUrl ?? null;
+      }
     } catch {
       // Best-effort — clear local state regardless.
     }
     clearAuth();
+    if (signOutUrl) window.location.assign(signOutUrl);
   }, [clearAuth]);
 
   const authFetch = useCallback(

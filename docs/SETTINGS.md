@@ -117,6 +117,7 @@ Defaults are the values that were previously hard-coded.
 | `auth.accessTokenMinutes` | 15 |
 | `auth.refreshTokenHours` | 8 (also the `cms_rt` cookie Max-Age) |
 | `auth.previewTokenMinutes` | 60 |
+| `auth.azureAdSignOut` | true — logout also sends the browser to the Azure AD end-session endpoint (`GET /api/auth/signout`); off clears only the CMS cookies |
 
 ### Workflow
 | Key | Default | Scope |

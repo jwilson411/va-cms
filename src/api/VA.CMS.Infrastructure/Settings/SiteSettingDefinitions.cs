@@ -69,6 +69,7 @@ public static class SiteSettingKeys
     public const string AuthAccessTokenMinutes  = "auth.accessTokenMinutes";
     public const string AuthRefreshTokenHours   = "auth.refreshTokenHours";
     public const string AuthPreviewTokenMinutes = "auth.previewTokenMinutes";
+    public const string AuthAzureAdSignOut      = "auth.azureAdSignOut";
 
     // Workflow (Server)
     public const string WorkflowScheduledPublishPollSeconds = "workflow.scheduledPublishPollSeconds";
@@ -213,6 +214,9 @@ public static class SiteSettingDefinitions
           "Lifetime of refresh tokens and the cms_rt cookie in hours.", 20),
         I(SiteSettingKeys.AuthPreviewTokenMinutes, 60, SiteSettingCategories.Auth, SiteSettingScope.Server,
           "Lifetime of shareable preview links in minutes.", 30),
+        B(SiteSettingKeys.AuthAzureAdSignOut, true, SiteSettingCategories.Auth, SiteSettingScope.Server,
+          "On logout in AzureAd mode, also send the browser to the Azure AD end-session endpoint so the AAD session " +
+          "is cleared (VA 6500 AC-12). Off clears only the CMS cookies; the next login may sign in silently.", 40),
 
         // ── Workflow ────────────────────────────────────────────────────────
         I(SiteSettingKeys.WorkflowScheduledPublishPollSeconds, 60, SiteSettingCategories.Workflow, SiteSettingScope.Server,

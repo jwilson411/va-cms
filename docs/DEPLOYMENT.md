@@ -138,9 +138,11 @@ Set on the IIS application pool or via Windows environment:
 # API (VA.CMS.API)
 ASPNETCORE_ENVIRONMENT=Production
 ConnectionStrings__DefaultConnection=Server=SQLSERVER;Database=VACMS;User Id=vacms_app;Password=<pw>;TrustServerCertificate=False;
-Auth__AzureAd__TenantId=<aad_tenant_id>
-Auth__AzureAd__ClientId=<app_registration_client_id>
-Auth__AzureAd__ClientSecret=<client_secret>
+Auth__Mode=AzureAd
+AzureAd__Instance=https://login.microsoftonline.com/
+AzureAd__TenantId=<aad_tenant_id>
+AzureAd__ClientId=<app_registration_client_id>
+AzureAd__ClientSecret=<client_secret>            # see "Azure AD app registration" below for alternatives
 Storage__Backend=local
 Storage__LocalPath=D:\vacms-uploads
 Email__SmtpHost=mail.va.gov
@@ -151,6 +153,34 @@ Jwt__SigningKey=<256-bit-random-key>
 # Public site (Next.js)
 NEXT_PUBLIC_API_URL=https://cms.youragency.va.gov/api/v1
 ```
+
+#### Azure AD app registration
+
+The `AzureAd` section binds from the **top-level** `AzureAd__*` variables shown above
+(not `Auth__AzureAd__*`, which does not bind). Configure the app registration as follows:
+
+| Setting | Value |
+|---|---|
+| Platform | Web |
+| Redirect URI | `https://<host>/signin-oidc` — the OIDC handler's `AzureAd:CallbackPath` (leave unset to use this default; a value under `/api/` is rejected at startup) |
+| Front-channel logout / post-logout redirect URI | `https://<host>/login` — where `GET /api/auth/signout` returns the browser after the AAD end-session round trip |
+| ID token claims | `preferred_username`, `name`, `oid`; add the `groups` claim if AD-group → role mappings are used |
+
+Login flow: `GET /api/auth/login` → AAD → `/signin-oidc` (OIDC handler, sets the `cms_aad` session cookie) →
+`GET /api/auth/callback` (issues the `cms_rt` refresh cookie, then 302 into the SPA). The access token is
+never placed in a URL or response body; the SPA obtains it through `GET /api/auth/refresh`.
+Logout: `POST /api/auth/logout` revokes the refresh session and, when the `auth.azureAdSignOut` site setting is
+on (default), returns `{ "signOutUrl": "/api/auth/signout" }`, which the SPA navigates to.
+
+**Client credential.** Prefer a certificate or a Key Vault reference over a plaintext `AzureAd__ClientSecret`:
+
+- Certificate — set `AzureAd__ClientCredentials__0__SourceType=StoreWithThumbprint`,
+  `AzureAd__ClientCredentials__0__CertificateStorePath=LocalMachine/My` and
+  `AzureAd__ClientCredentials__0__CertificateThumbprint=<thumbprint>` (the app pool identity needs read access to the private key).
+- Key Vault — `AzureAd__ClientCredentials__0__SourceType=KeyVault`,
+  `AzureAd__ClientCredentials__0__KeyVaultUrl=https://<vault>.vault.azure.net` and
+  `AzureAd__ClientCredentials__0__KeyVaultCertificateName=<name>`, with the host's managed identity granted *get* on certificates.
+- If a secret must be used, inject it from the deployment platform's secret store at start-up; never commit it to `appsettings*.json`.
 
 # 4. Run migrations in production (DbUp runs automatically on startup)
 # Migrations run automatically when the API starts.

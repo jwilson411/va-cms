@@ -3,6 +3,7 @@ using DbUp.Engine;
 using DbUp.ScriptProviders;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web;
@@ -118,22 +119,62 @@ switch (authOptions.Mode)
 
     case AuthMode.AzureAd:
     default:
-        builder.Services
+        // The OIDC redirect URI (AzureAd:CallbackPath, default /signin-oidc) is owned by the
+        // OIDC handler. /api/auth/callback is the app's own post-login action, so the two must
+        // never coincide — the handler would swallow the second GET with "state is null" (#154).
+        var aadCallbackPath = builder.Configuration["AzureAd:CallbackPath"];
+        if (!string.IsNullOrEmpty(aadCallbackPath)
+            && aadCallbackPath.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"AzureAd:CallbackPath '{aadCallbackPath}' collides with the API routes. Leave it unset " +
+                $"(defaults to {AzureAdSchemes.CallbackPath}) and register that path as the redirect URI " +
+                "in the app registration.");
+        }
+
+        var useFakeOidc = builder.Configuration["AZUREAD_FAKE_OIDC"] == "true";
+        if (useFakeOidc && builder.Environment.IsProduction())
+            throw new InvalidOperationException("AZUREAD_FAKE_OIDC must not be used in Production.");
+
+        var aadBuilder = builder.Services
             .AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
-            })
-            .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"),
-                openIdConnectScheme: "AzureAd",
-                cookieScheme:        "AzureAdCookies")
-            .Services
-            .AddAuthentication()
-            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
-            {
-                var jwtSvc = new JwtService(jwtOptions);
-                options.TokenValidationParameters = jwtSvc.GetValidationParameters();
             });
+
+        if (useFakeOidc)
+        {
+            aadBuilder.AddCookie(AzureAdSchemes.Cookie);
+            aadBuilder.AddScheme<AuthenticationSchemeOptions, FakeAzureAdHandler>(
+                AzureAdSchemes.OpenIdConnect, _ => { });
+        }
+        else
+        {
+            aadBuilder.AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("AzureAd"),
+                openIdConnectScheme: AzureAdSchemes.OpenIdConnect,
+                cookieScheme:        AzureAdSchemes.Cookie);
+        }
+
+        // The AAD session cookie only has to survive the hop from /signin-oidc to
+        // /api/auth/callback and be present for sign-out; keep it tight.
+        builder.Services.Configure<CookieAuthenticationOptions>(AzureAdSchemes.Cookie, o =>
+        {
+            o.Cookie.Name         = AzureAdSchemes.CookieName;
+            o.Cookie.HttpOnly     = true;
+            o.Cookie.SameSite     = SameSiteMode.Lax;
+            o.Cookie.SecurePolicy = builder.Environment.IsProduction()
+                ? CookieSecurePolicy.Always
+                : CookieSecurePolicy.SameAsRequest;
+            o.ExpireTimeSpan      = TimeSpan.FromHours(8);
+            o.SlidingExpiration   = false;
+        });
+
+        aadBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+        {
+            var jwtSvc = new JwtService(jwtOptions);
+            options.TokenValidationParameters = jwtSvc.GetValidationParameters();
+        });
         break;
 }
 
