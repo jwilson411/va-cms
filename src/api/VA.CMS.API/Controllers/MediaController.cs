@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Net.Http.Headers;
 using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
@@ -30,6 +31,7 @@ public class MediaController : ControllerBase
     private readonly IStorageBackend          _storage;
     private readonly IWebhookBackgroundDispatcher _webhooks;
     private readonly ISiteSettingsService     _settings;
+    private readonly IAuthorizationService    _authorization;
 
     public MediaController(
         IMediaUploadService      uploader,
@@ -38,51 +40,87 @@ public class MediaController : ControllerBase
         IRbacService             rbac,
         IStorageBackend          storage,
         IWebhookBackgroundDispatcher webhooks,
-        ISiteSettingsService     settings)
+        ISiteSettingsService     settings,
+        IAuthorizationService    authorization)
     {
-        _settings = settings;
-        _uploader = uploader;
-        _assets   = assets;
-        _extended = extended;
-        _rbac     = rbac;
-        _storage  = storage;
-        _webhooks = webhooks;
+        _settings      = settings;
+        _uploader      = uploader;
+        _assets        = assets;
+        _extended      = extended;
+        _rbac          = rbac;
+        _storage       = storage;
+        _webhooks      = webhooks;
+        _authorization = authorization;
     }
 
     // ── Serve ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Stream a stored file. Anonymous: published pages and the admin library both
-    /// reference images as /api/v1/media/serve/{id}. Files are stored outside the
-    /// web root (FR-SECURITY-06) so this is the only way they are exposed.
-    /// ?variant=webp returns the generated WebP rendition when one exists.
+    /// Stream a stored file. Files are stored outside the web root (FR-SECURITY-06)
+    /// so this is the only way they are exposed. ?variant=webp returns the generated
+    /// WebP rendition when one exists.
+    ///
+    /// #158 audience rule: anonymous callers only get assets that published content
+    /// references (MediaUsage joined to a Published entry); anything else needs a
+    /// CanRead bearer token and answers 404 otherwise. Every response is nosniff;
+    /// raster images and SVG render inline under a sandbox CSP (SVG additionally
+    /// default-src 'none'); PDF renders inline without sandbox (browsers' PDF viewers
+    /// refuse a sandboxed document); everything else is an attachment. Caching is a
+    /// short public TTL with an ETag for public assets and private for the rest.
     /// </summary>
     [HttpGet("serve/{id:long}")]
     [AllowAnonymous]
-    [ResponseCache(Duration = 3600, Location = ResponseCacheLocation.Any)]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status304NotModified)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Serve(long id, [FromQuery] string? variant, CancellationToken ct)
     {
         var asset = await _assets.GetByIdAsync(id);
-        if (asset is null) return NotFound();
+        if (asset is null || asset.IsVirusScanPassed == false) return NotFound();
+
+        var isPublic = await IsReferencedByPublishedContentAsync(id);
+        if (!isPublic && !await CanReadAsync())
+            return NotFound();
 
         var useWebP = string.Equals(variant, "webp", StringComparison.OrdinalIgnoreCase)
                       && !string.IsNullOrEmpty(asset.WebPStoragePath);
         var path     = useWebP ? asset.WebPStoragePath! : asset.StoragePath;
         var mimeType = useWebP ? "image/webp" : asset.MimeType;
 
+        // Conditional GET: the ETag changes with the stored file, its variant and any metadata update.
+        var etag = new EntityTagHeaderValue($"\"{id}-{(useWebP ? "webp" : "orig")}-{asset.UpdatedAt.Ticks:x}\"");
+        Response.Headers.ETag = etag.ToString();
+        Response.Headers.CacheControl = isPublic ? "public, max-age=300" : "private, no-store";
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        Response.Headers.Vary = "Authorization";
+
+        if (Request.Headers.IfNoneMatch.Any(v => EntityTagHeaderValue.TryParse(v, out var tag) && tag.Compare(etag, useStrongComparison: false)))
+            return StatusCode(StatusCodes.Status304NotModified);
+
         var stream = await _storage.OpenReadAsync(path, ct);
         if (stream is null) return NotFound();
 
-        // Inline for images/PDFs; attachment for anything else so browsers don't render it.
-        var inline = mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
-                     || mimeType == "application/pdf";
-        if (!inline)
-            Response.Headers.ContentDisposition = $"attachment; filename=\"{Uri.EscapeDataString(asset.FileName)}\"";
+        var disposition = MediaResponsePolicy.For(mimeType);
+        if (disposition.Csp is not null)
+            Response.Headers.ContentSecurityPolicy = disposition.Csp;
+
+        var cd = new ContentDispositionHeaderValue(disposition.Inline ? "inline" : "attachment");
+        cd.SetHttpFileName(useWebP ? System.IO.Path.ChangeExtension(asset.FileName, ".webp") : asset.FileName);   // RFC 5987 filename*
+        Response.Headers.ContentDisposition = cd.ToString();
 
         return File(stream, mimeType, enableRangeProcessing: true);
     }
+
+    /// <summary>True when a Published entry references the asset (MediaUsage).</summary>
+    private async Task<bool> IsReferencedByPublishedContentAsync(long id)
+    {
+        var usage = await _extended.GetUsageAsync(id);
+        return usage.Any(u => string.Equals(u.Status, "Published", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<bool> CanReadAsync()
+        => User?.Identity?.IsAuthenticated == true
+        && (await _authorization.AuthorizeAsync(User, CmsRoles.Policies.CanRead)).Succeeded;
 
     // ── Upload ───────────────────────────────────────────────────────────────
 

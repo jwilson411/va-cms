@@ -130,7 +130,9 @@ public static class SiteSettingDefinitions
     public static readonly string[] DefaultAllowedMimeTypes =
     {
         // Images
-        "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/svg+xml", "image/tiff", "image/bmp",
+        // image/svg+xml is deliberately absent (#158): SVG can carry scripts. An administrator may
+        // add it to media.allowedMimeTypes; uploads are then sanitized and served sandboxed.
+        "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp", "image/tiff", "image/bmp",
         // Documents
         "application/pdf",
         "application/msword",

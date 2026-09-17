@@ -269,6 +269,7 @@ builder.Services.AddScoped<IDbMonitorRepository, DbMonitorRepository>();
 // Story #67: AD group role mapping repository and resolver
 builder.Services.AddScoped<IAdGroupMappingRepository, AdGroupMappingRepository>();
 builder.Services.AddScoped<IAdGroupRoleResolver, AdGroupRoleResolver>();
+builder.Services.AddScoped<VA.CMS.API.Services.IMediaUsageSyncService, VA.CMS.API.Services.MediaUsageSyncService>();
 
 // Issue #49: Full-text search repository (FR-SEARCH-02)
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();

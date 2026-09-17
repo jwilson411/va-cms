@@ -108,7 +108,7 @@ Defaults are the values that were previously hard-coded.
 | Key | Default | Scope |
 |---|---|---|
 | `media.maxUploadBytes` | 104857600 (100 MB) | Admin — request body limit and service check for `POST /api/v1/media/upload` |
-| `media.allowedMimeTypes` | the BRD FR-SECURITY-06 list (JSON array) | Admin |
+| `media.allowedMimeTypes` | the BRD FR-SECURITY-06 list (JSON array) — `image/svg+xml` is **not** in it (#158); add it only if SVG is required: uploads are then sanitized (scripts, event handlers, foreignObject, external references stripped) and served with `Content-Security-Policy: sandbox; default-src 'none'`. Every upload's bytes must also match the declared type and extension. | Admin |
 | `media.imageMaxWidthPx` | 1920 | Server |
 | `media.webpQuality` | 80 | Server |
 

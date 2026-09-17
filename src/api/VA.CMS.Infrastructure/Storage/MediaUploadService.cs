@@ -65,7 +65,7 @@ public class MediaUploadService : IMediaUploadService
         if (maxBytes > 0 && file.Length > maxBytes)
             return (null, $"File is {file.Length:N0} bytes; the maximum upload size is {maxBytes:N0} bytes.");
 
-        // 2. Resolve MIME — prefer declared ContentType but normalise "image/jpg" → "image/jpeg"
+        // 2. Resolve MIME — the declared ContentType is a claim, normalised ("image/jpg" → "image/jpeg")
         var mimeType = NormaliseMime(file.ContentType);
 
         // 3. MIME allow-list check (BRD FR-SECURITY-06) against media.allowedMimeTypes
@@ -74,10 +74,37 @@ public class MediaUploadService : IMediaUploadService
             return (null, $"File type '{mimeType}' is not permitted. " +
                           $"Allowed types: {string.Join(", ", allowed)}.");
 
+        // 3a. The bytes must agree with the claim (#158): sniff the content and check the
+        //     extension, so a script-bearing SVG or HTML cannot arrive as "image/png".
+        var safeFileName = SanitizeFileName(file.FileName);
+        var ext          = Path.GetExtension(safeFileName).TrimStart('.').ToLowerInvariant();
+        IReadOnlyList<string> detected;
+        using (var sniff = file.OpenReadStream())
+            detected = MediaContentSniffer.Detect(sniff);
+
+        if (!detected.Contains(mimeType, StringComparer.OrdinalIgnoreCase))
+        {
+            var seen = detected.Count == 0 ? "an unrecognised format" : $"'{detected[0]}'";
+            return (null, $"File content does not match the declared type '{mimeType}' (content looks like {seen}).");
+        }
+        if (string.IsNullOrEmpty(ext) || !MediaContentSniffer.ExtensionMatches(mimeType, ext))
+            return (null, $"File extension '.{ext}' does not match the declared type '{mimeType}'.");
+
+        // 3b. SVG is only reachable when an administrator has added it to the allow-list;
+        //     even then active content is stripped before the file is stored.
+        byte[]? replacementBytes = null;
+        if (mimeType == "image/svg+xml")
+        {
+            using var svgStream = file.OpenReadStream();
+            var (sanitized, svgError) = SvgSanitizer.Sanitize(svgStream);
+            if (sanitized is null)
+                return (null, svgError);
+            replacementBytes = sanitized;
+        }
+
         // 4. Build a safe storage path: yyyy/MM/<guid>.<ext>
         //    Using a GUID prevents enumeration; the original filename is preserved in FileName column.
-        var ext        = Path.GetExtension(file.FileName)?.TrimStart('.').ToLowerInvariant() ?? string.Empty;
-        var safeExt    = string.IsNullOrWhiteSpace(ext) ? "bin" : ext;
+        var safeExt    = ext;
         var datePath   = DateTime.UtcNow.ToString("yyyy/MM");
         var guid       = Guid.NewGuid().ToString("N");
         var uniqueName = $"{guid}.{safeExt}";
@@ -96,7 +123,9 @@ public class MediaUploadService : IMediaUploadService
         string savedPath;
         try
         {
-            savedPath = await _storage.SaveAsync(file, storagePath, ct);
+            savedPath = replacementBytes is null
+                ? await _storage.SaveAsync(file, storagePath, ct)
+                : await _storage.SaveBytesAsync(replacementBytes, storagePath, ct);
         }
         catch (Exception ex)
         {
@@ -128,11 +157,11 @@ public class MediaUploadService : IMediaUploadService
             // Create a tombstone asset row so the rejection is auditable (IsVirusScanPassed=0).
             var rejectedAsset = new MediaAsset
             {
-                FileName       = Path.GetFileName(file.FileName),
+                FileName       = safeFileName,
                 StoragePath    = savedPath,      // path that was deleted
                 StorageBackend = _storage.BackendName,
                 MimeType       = mimeType,
-                FileSizeBytes  = file.Length,
+                FileSizeBytes  = replacementBytes?.LongLength ?? file.Length,
                 Width          = width,
                 Height         = height,
                 UploadedById   = uploadedById,
@@ -148,11 +177,11 @@ public class MediaUploadService : IMediaUploadService
         // 8. Create MediaAsset row via stored procedure (EXEC usp_MediaAsset_Create)
         var asset = new MediaAsset
         {
-            FileName       = Path.GetFileName(file.FileName),
+            FileName       = safeFileName,
             StoragePath    = savedPath,
             StorageBackend = _storage.BackendName,
             MimeType       = mimeType,
-            FileSizeBytes  = file.Length,
+            FileSizeBytes  = replacementBytes?.LongLength ?? file.Length,
             Width          = width,
             Height         = height,
             UploadedById   = uploadedById,
@@ -220,6 +249,31 @@ public class MediaUploadService : IMediaUploadService
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>Longest stored file name; the column allows 500 but 255 is what file systems and browsers handle.</summary>
+    public const int MaxFileNameLength = 255;
+
+    /// <summary>
+    /// The client's file name is display-only, but it is echoed in Content-Disposition
+    /// and the admin UI: drop any path, control characters and quotes, and cap the length
+    /// while keeping the extension (#158).
+    /// </summary>
+    public static string SanitizeFileName(string? raw)
+    {
+        var name = (raw ?? string.Empty).Replace('\\', '/');
+        name = name[(name.LastIndexOf('/') + 1)..].Trim();
+        name = new string(name.Where(c => !char.IsControl(c) && c != '"' && c != ';').ToArray());
+        if (name.Length == 0 || name == "." || name == "..")
+            return "upload";
+
+        if (name.Length > MaxFileNameLength)
+        {
+            var ext  = Path.GetExtension(name);
+            var stem = Path.GetFileNameWithoutExtension(name);
+            name = stem[..Math.Max(1, MaxFileNameLength - ext.Length)] + ext;
+        }
+        return name;
+    }
 
     private static string NormaliseMime(string? raw)
     {
