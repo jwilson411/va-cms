@@ -568,6 +568,7 @@ internal sealed class Issue38TestFactory : WebApplicationFactory<Program>
         {
             Replace<IUserRepository>(services,              _ => new Issue68UserStub());
             Replace<IDbMonitorRepository>(services,         _ => new Issue68DbMonitorStub());
+            AuthTestStubs.UseInMemoryAuth(services);
             Replace<IContentEntryRepository>(services,      _ => _entries);
             Replace<IContentVersionRepository>(services,    _ => new Issue23ContentVersionStub());
             Replace<IContentTypeRepository>(services,       _ => new Issue23ContentTypeStub());

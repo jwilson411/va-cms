@@ -235,7 +235,7 @@ public class Issue155AcceptanceTests
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
         client.DefaultRequestHeaders.Add(FakeAzureAdHandler.TestUpnHeader, "stranger@va.gov");
 
-        var login = await client.GetAsync("/api/auth/login");
+        var login = await client.GetAsync("/api/auth/login?ack=1");
         var aad   = await client.GetAsync(login.Headers.Location);
         var cb    = await client.GetAsync(aad.Headers.Location);
 
@@ -268,7 +268,7 @@ public class Issue155AcceptanceTests
         var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
         client.DefaultRequestHeaders.Add(FakeNegotiateHandler.TestUpnHeader, Issue155TestFactory.KnownUpn);
 
-        var login = await client.GetAsync("/api/auth/login?returnUrl=%2Fadmin%2Fcontent");
+        var login = await client.GetAsync("/api/auth/login?returnUrl=%2Fadmin%2Fcontent&ack=1");
         Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
         Assert.StartsWith("/api/auth/windows-login?returnUrl=", login.Headers.Location!.ToString());
 
@@ -279,7 +279,7 @@ public class Issue155AcceptanceTests
         Assert.DoesNotContain("accessToken", await win.Content.ReadAsStringAsync());
 
         // The cookie jar now carries cms_rt: the SPA's silent refresh yields the JWT.
-        var refresh = await client.GetAsync("/api/auth/refresh");
+        var refresh = await client.PostAsync("/api/auth/refresh", null);
         Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
 
         // A hostile returnUrl falls back to the SPA root.
@@ -358,6 +358,7 @@ public sealed class Issue155TestFactory : WebApplicationFactory<Program>
         {
             Replace<IUserRepository>(services,         _ => new KnownUserRepository());
             Replace<IDbMonitorRepository>(services,    _ => new AuthTestStubs.StubDbMonitorRepository());
+            AuthTestStubs.UseInMemoryAuth(services);
             Replace<INavigationRepository>(services,   _ => new NavigationStub());
             Replace<INavigationMenuRepository>(services, _ => new MenuStub());
             Replace<IContentEntryRepository>(services, _ => new PublishedSlugStub(_publishedSlug));

@@ -112,6 +112,12 @@ public class User
     public string DisplayName { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public DateTime? LastLoginAt { get; set; }
+    /// <summary>
+    /// Bumped by usp_RefreshToken_RevokeAllForUser (deactivate, role change, "sign out
+    /// everywhere"). Access tokens carry it as the "sv" claim and are rejected once it
+    /// moves on (#163).
+    /// </summary>
+    public int SessionVersion { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
@@ -140,5 +146,15 @@ public class AuditLog
     public string? DiffJson { get; set; }
     public string? IpAddress { get; set; }
     public string? UserAgent { get; set; }
+    public string? CorrelationId { get; set; }
+    /// <summary>"Success" or "Failure" (#165, NIST AU-3 outcome).</summary>
+    public string Outcome { get; set; } = AuditOutcome.Success;
     public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>Values of AuditLog.Outcome (CK_AuditLog_Outcome).</summary>
+public static class AuditOutcome
+{
+    public const string Success = "Success";
+    public const string Failure = "Failure";
 }

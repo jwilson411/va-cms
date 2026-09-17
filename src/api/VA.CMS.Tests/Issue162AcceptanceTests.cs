@@ -214,8 +214,22 @@ public class Issue162AcceptanceTests
             if (knownNetwork is not null)
                 builder.UseSetting("ForwardedHeaders:KnownNetworks:0", knownNetwork);
             builder.UseSetting("SKIP_MIGRATIONS", "true");
-            builder.UseSetting("Auth:Mode", "WindowsAuth");
-            builder.UseSetting("WINDOWS_AUTH_FAKE_NEGOTIATE", "true");
+            // #164: the fake Negotiate handler is refused outside Development, and the real
+            // one cannot run on TestServer. Non-Development hosts use the AzureAd registration
+            // instead; these hosts only exercise /health, swagger and bearer-authenticated routes.
+            if (environment == "Development")
+            {
+                builder.UseSetting("Auth:Mode", "WindowsAuth");
+                builder.UseSetting("WINDOWS_AUTH_FAKE_NEGOTIATE", "true");
+            }
+            else
+            {
+                builder.UseSetting("Auth:Mode", "AzureAd");
+                builder.UseSetting("AzureAd:Instance",     "https://login.microsoftonline.com/");
+                builder.UseSetting("AzureAd:TenantId",     "00000000-0000-0000-0000-000000000001");
+                builder.UseSetting("AzureAd:ClientId",     "00000000-0000-0000-0000-000000000002");
+                builder.UseSetting("AzureAd:ClientSecret", "test-secret");
+            }
             builder.UseSetting("Jwt:SigningKey",  "issue-162-acceptance-key-32chars!");
             builder.UseSetting("Jwt:Issuer",      "va-cms-api");
             builder.UseSetting("Jwt:Audience",    "va-cms-spa");
@@ -229,6 +243,7 @@ public class Issue162AcceptanceTests
                 Replace<IMediaExtendedRepository>(services, _ => new Issue158AcceptanceTests.UsageRepoStub());
                 Replace<IStorageBackend>(services,          _ => new Issue158AcceptanceTests.StorageStub());
                 Replace<IDbMonitorRepository>(services,     _ => new AuthTestStubs.StubDbMonitorRepository());
+                AuthTestStubs.UseInMemoryAuth(services);
                 services.AddSingleton<ISiteSettingsService>(StaticSiteSettings.Defaults
                     .With(SiteSettingKeys.SecurityCspReportOnly, cspReportOnly)
                     .With(SiteSettingKeys.SecurityHstsPreload,   hstsPreload)

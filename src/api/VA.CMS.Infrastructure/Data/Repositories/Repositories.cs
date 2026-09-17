@@ -471,20 +471,31 @@ public class NavigationMenuRepository : INavigationMenuRepository
 
 /// <summary>
 /// AuditLog repository. Write-only — no UPDATE or DELETE permitted by the app service account.
-/// Reads go through EXEC usp_AuditLog_List.
+/// Reads go through EXEC usp_AuditLog_List / _ListPaged / _ExportCsv.
+/// Rows written from C# carry the scope's <see cref="IAuditContext"/> explicitly (#165) — the
+/// SESSION_CONTEXT fallback only covers authenticated requests, and logon events happen before
+/// there is an actor.
 /// </summary>
 public class AuditLogRepository : IAuditLogRepository
 {
     private readonly CmsDatabase _db;
+    private readonly IAuditContext _ctx;
 
-    public AuditLogRepository(CmsDatabase db) => _db = db;
+    public AuditLogRepository(CmsDatabase db) : this(db, db.Audit) { }
+
+    public AuditLogRepository(CmsDatabase db, IAuditContext ctx)
+    {
+        _db  = db;
+        _ctx = ctx;
+    }
 
     public async Task WriteAsync(long? actorId, string entityType, long entityId,
-        string action, string? diffJson = null)
+        string action, string? diffJson = null, string outcome = AuditOutcome.Success)
     {
         await _db.ExecuteAsync(
-            "EXEC usp_AuditLog_Write @0, @1, @2, @3, @4",
-            actorId, entityType, entityId, action, diffJson);
+            "EXEC usp_AuditLog_Write @0, @1, @2, @3, @4, @5, @6, @7, @8",
+            (object?)actorId, entityType, entityId, action, (object?)diffJson,
+            outcome, (object?)_ctx.SourceIp, (object?)_ctx.UserAgent, (object?)_ctx.CorrelationId);
     }
 
     public async Task<IEnumerable<AuditLog>> ListAsync(long? actorId = null,
@@ -501,14 +512,15 @@ public class AuditLogRepository : IAuditLogRepository
     public async Task<AuditLogPage> ListPagedAsync(
         long? actorId = null, string? action = null, string? entityType = null,
         DateTime? fromDate = null, DateTime? toDate = null,
-        int page = 1, int pageSize = 50)
+        int page = 1, int pageSize = 50,
+        string? outcome = null, string? ipAddress = null)
     {
         await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
             "EXEC usp_AuditLog_ListPaged " +
-            "@ActorId, @Action, @EntityType, @FromDate, @ToDate, @Page, @PageSize, @TotalRows OUTPUT";
+            "@ActorId, @Action, @EntityType, @FromDate, @ToDate, @Page, @PageSize, @TotalRows OUTPUT, @Outcome, @IpAddress";
         cmd.Parameters.AddWithValue("@ActorId",     (object?)actorId    ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Action",      (object?)action     ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@EntityType",  (object?)entityType ?? DBNull.Value);
@@ -516,6 +528,8 @@ public class AuditLogRepository : IAuditLogRepository
         cmd.Parameters.AddWithValue("@ToDate",      (object?)toDate     ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Page",        page);
         cmd.Parameters.AddWithValue("@PageSize",    pageSize);
+        cmd.Parameters.AddWithValue("@Outcome",     (object?)outcome    ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@IpAddress",   (object?)ipAddress  ?? DBNull.Value);
 
         var totalRowsParam = cmd.Parameters.Add("@TotalRows", System.Data.SqlDbType.Int);
         totalRowsParam.Direction = System.Data.ParameterDirection.Output;
@@ -538,18 +552,21 @@ public class AuditLogRepository : IAuditLogRepository
 
     public async Task<IReadOnlyList<AuditLogRow>> ExportAsync(
         long? actorId = null, string? action = null, string? entityType = null,
-        DateTime? fromDate = null, DateTime? toDate = null)
+        DateTime? fromDate = null, DateTime? toDate = null,
+        string? outcome = null, string? ipAddress = null)
     {
         await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText =
-            "EXEC usp_AuditLog_ExportCsv @ActorId, @Action, @EntityType, @FromDate, @ToDate";
+            "EXEC usp_AuditLog_ExportCsv @ActorId, @Action, @EntityType, @FromDate, @ToDate, @Outcome, @IpAddress";
         cmd.Parameters.AddWithValue("@ActorId",    (object?)actorId    ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@Action",     (object?)action     ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@EntityType", (object?)entityType ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@FromDate",   (object?)fromDate   ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@ToDate",     (object?)toDate     ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@Outcome",    (object?)outcome    ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@IpAddress",  (object?)ipAddress  ?? DBNull.Value);
 
         var items = new List<AuditLogRow>();
         await using var reader = await cmd.ExecuteReaderAsync();
@@ -568,7 +585,104 @@ public class AuditLogRepository : IAuditLogRepository
         EntityId         = r.GetString(r.GetOrdinal("EntityId")),
         Action           = r.GetString(r.GetOrdinal("Action")),
         DiffJson         = r.IsDBNull(r.GetOrdinal("DiffJson"))         ? null : r.GetString(r.GetOrdinal("DiffJson")),
+        IpAddress        = r.IsDBNull(r.GetOrdinal("IpAddress"))        ? null : r.GetString(r.GetOrdinal("IpAddress")),
+        UserAgent        = r.IsDBNull(r.GetOrdinal("UserAgent"))        ? null : r.GetString(r.GetOrdinal("UserAgent")),
+        CorrelationId    = r.IsDBNull(r.GetOrdinal("CorrelationId"))    ? null : r.GetString(r.GetOrdinal("CorrelationId")),
+        Outcome          = r.GetString(r.GetOrdinal("Outcome")),
         CreatedAt        = r.GetDateTime(r.GetOrdinal("CreatedAt")),
     };
+}
+
+/// <summary>
+/// Refresh token store (#163). Hashes only; see usp_RefreshToken_* in V044.
+/// </summary>
+public class RefreshTokenRepository : IRefreshTokenRepository
+{
+    private readonly CmsDatabase _db;
+
+    public RefreshTokenRepository(CmsDatabase db) => _db = db;
+
+    public async Task<long> IssueAsync(long userId, byte[] tokenHash, DateTime expiresAt, DateTime absoluteExpiresAt,
+        string? createdByIp, string? userAgent, string? groupsJson)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_RefreshToken_Issue @UserId, @TokenHash, @ExpiresAt, @AbsoluteExpiresAt, @CreatedByIp, @UserAgent, @GroupsJson, @NewId OUTPUT";
+        cmd.Parameters.AddWithValue("@UserId",            userId);
+        cmd.Parameters.Add("@TokenHash", System.Data.SqlDbType.Binary, 32).Value = tokenHash;
+        cmd.Parameters.AddWithValue("@ExpiresAt",         expiresAt);
+        cmd.Parameters.AddWithValue("@AbsoluteExpiresAt", absoluteExpiresAt);
+        cmd.Parameters.AddWithValue("@CreatedByIp",       (object?)createdByIp ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@UserAgent",         (object?)userAgent   ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@GroupsJson",        (object?)groupsJson  ?? DBNull.Value);
+        var newId = cmd.Parameters.Add("@NewId", System.Data.SqlDbType.BigInt);
+        newId.Direction = System.Data.ParameterDirection.Output;
+        await cmd.ExecuteNonQueryAsync();
+        return (long)newId.Value;
+    }
+
+    public async Task<RefreshTokenLookup?> ValidateAsync(byte[] tokenHash, int idleMinutes, int rotationGraceSeconds,
+        string? sourceIp, string? userAgent)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_RefreshToken_Validate @TokenHash, @IdleMinutes, @RotationGraceSeconds, @SourceIp, @UserAgent";
+        cmd.Parameters.Add("@TokenHash", System.Data.SqlDbType.Binary, 32).Value = tokenHash;
+        cmd.Parameters.AddWithValue("@IdleMinutes",          idleMinutes);
+        cmd.Parameters.AddWithValue("@RotationGraceSeconds", rotationGraceSeconds);
+        cmd.Parameters.AddWithValue("@SourceIp",             (object?)sourceIp  ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@UserAgent",            (object?)userAgent ?? DBNull.Value);
+
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (!await r.ReadAsync()) return null;
+        return new RefreshTokenLookup
+        {
+            Status            = r.GetString(r.GetOrdinal("Status")),
+            Id                = r.GetInt64(r.GetOrdinal("Id")),
+            UserId            = r.GetInt64(r.GetOrdinal("UserId")),
+            FamilyId          = r.GetGuid(r.GetOrdinal("FamilyId")),
+            GroupsJson        = r.IsDBNull(r.GetOrdinal("GroupsJson")) ? null : r.GetString(r.GetOrdinal("GroupsJson")),
+            AbsoluteExpiresAt = r.GetDateTime(r.GetOrdinal("AbsoluteExpiresAt")),
+        };
+    }
+
+    public async Task<long> RotateAsync(long oldId, byte[] newTokenHash, DateTime expiresAt, string? createdByIp, string? userAgent)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText =
+            "EXEC usp_RefreshToken_Rotate @OldId, @NewTokenHash, @ExpiresAt, @CreatedByIp, @UserAgent, @NewId OUTPUT";
+        cmd.Parameters.AddWithValue("@OldId", oldId);
+        cmd.Parameters.Add("@NewTokenHash", System.Data.SqlDbType.Binary, 32).Value = newTokenHash;
+        cmd.Parameters.AddWithValue("@ExpiresAt",   expiresAt);
+        cmd.Parameters.AddWithValue("@CreatedByIp", (object?)createdByIp ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@UserAgent",   (object?)userAgent   ?? DBNull.Value);
+        var newId = cmd.Parameters.Add("@NewId", System.Data.SqlDbType.BigInt);
+        newId.Direction = System.Data.ParameterDirection.Output;
+        await cmd.ExecuteNonQueryAsync();
+        return (long)newId.Value;
+    }
+
+    public async Task RevokeAsync(byte[] tokenHash, string reason)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_RefreshToken_Revoke @TokenHash, @Reason";
+        cmd.Parameters.Add("@TokenHash", System.Data.SqlDbType.Binary, 32).Value = tokenHash;
+        cmd.Parameters.AddWithValue("@Reason", reason);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    public async Task RevokeAllForUserAsync(long userId, long? actorId, string reason)
+    {
+        await _db.ExecuteAsync("EXEC usp_RefreshToken_RevokeAllForUser @0, @1, @2",
+            userId, (object?)actorId, reason);
+    }
 }
 

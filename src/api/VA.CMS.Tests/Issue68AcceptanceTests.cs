@@ -314,6 +314,7 @@ public sealed class Issue68TestFactory : WebApplicationFactory<Program>
         {
             Replace<IUserRepository>(services,      _ => new Issue68UserStub());
             Replace<IDbMonitorRepository>(services, _ => new Issue68DbMonitorStub());
+            AuthTestStubs.UseInMemoryAuth(services);
         });
     }
 
@@ -354,6 +355,7 @@ public sealed class Issue68ProductionTestFactory : WebApplicationFactory<Program
         {
             Replace<IUserRepository>(services,      _ => new Issue68UserStub());
             Replace<IDbMonitorRepository>(services, _ => new Issue68DbMonitorStub());
+            AuthTestStubs.UseInMemoryAuth(services);
         });
     }
 

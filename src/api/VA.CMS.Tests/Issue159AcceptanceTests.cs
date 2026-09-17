@@ -333,6 +333,7 @@ public class Issue159AcceptanceTests
                 Replace<IStorageBackend>(services,          _ => new InMemoryStorageBackend());
                 Replace<IAuditLogRepository>(services,      _ => new Issue67AuditLogStub());
                 Replace<IDbMonitorRepository>(services,     _ => new AuthTestStubs.StubDbMonitorRepository());
+                AuthTestStubs.UseInMemoryAuth(services);
                 services.AddSingleton<ISiteSettingsService>(StaticSiteSettings.Defaults);
             });
         }

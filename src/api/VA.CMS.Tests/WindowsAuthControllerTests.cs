@@ -157,9 +157,9 @@ public class WindowsAuthControllerTests
         // Issue a refresh token via the in-process service
         using var scope  = factory.Services.CreateScope();
         var refreshSvc   = scope.ServiceProvider.GetRequiredService<IRefreshTokenService>();
-        var refreshToken = refreshSvc.Issue(userId: WindowsAuthTestStubs.ActiveUserId);
+        var refreshToken = await refreshSvc.IssueAsync(userId: WindowsAuthTestStubs.ActiveUserId);
 
-        var req = new HttpRequestMessage(HttpMethod.Get, "/api/auth/refresh");
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/auth/refresh");
         req.Headers.Add("Cookie", $"{AuthCookieHelper.RefreshTokenCookieName}={refreshToken}");
 
         var response = await client.SendAsync(req);
@@ -245,6 +245,7 @@ public sealed class WindowsAuthTestFactory : WebApplicationFactory<Program>
             // Stub DB monitor repository
             ReplaceService<IDbMonitorRepository>(services,
                 _ => new WindowsAuthTestStubs.StubDbMonitorRepository());
+            AuthTestStubs.UseInMemoryAuth(services);
         });
     }
 

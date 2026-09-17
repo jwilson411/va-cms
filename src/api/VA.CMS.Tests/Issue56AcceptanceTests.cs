@@ -1,3 +1,5 @@
+using VA.CMS.Infrastructure.Settings;
+using VA.CMS.API.Auth;
 using System.Net;
 using System.Net.Http;
 using Microsoft.AspNetCore.Http;
@@ -38,7 +40,7 @@ public class Issue56AcceptanceTests(DatabaseFixture fixture)
 
     private UserRoleController Controller(long actorId)
     {
-        var ctrl = new UserRoleController(UserRepo(), UserRoleRepo(), RoleRepo());
+        var ctrl = new UserRoleController(UserRepo(), UserRoleRepo(), RoleRepo(), new SessionRevocationGuard(StaticSiteSettings.Defaults));
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext

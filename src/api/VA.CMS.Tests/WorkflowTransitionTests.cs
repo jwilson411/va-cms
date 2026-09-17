@@ -240,6 +240,7 @@ public class WorkflowTransitionTests
             {
                 Replace<IUserRepository>(services,           _ => new Issue68UserStub());
                 Replace<IDbMonitorRepository>(services,      _ => new Issue68DbMonitorStub());
+                AuthTestStubs.UseInMemoryAuth(services);
                 Replace<IContentEntryRepository>(services,   _ => _entries);
                 Replace<IContentVersionRepository>(services, _ => _versions);
                 Replace<IContentTypeRepository>(services,    _ => new Issue23ContentTypeStub());
