@@ -7,8 +7,10 @@
  *   variables at build/render time.
  *
  * Environment variables (set in .env.local or deployment config):
- *   NEXT_PUBLIC_DAP_AGENCY    — Agency code, e.g. "VA"
- *   NEXT_PUBLIC_DAP_SUBAGENCY — Sub-agency code, e.g. "VHA" (optional)
+ *   analytics.dapEnabled   — site setting; master switch
+ *   analytics.dapAgency    — site setting; agency code, e.g. "VA"
+ *   analytics.dapSubagency — site setting; sub-agency code, e.g. "VHA" (optional)
+ * (issue #149, epic #141 — no environment variables are read)
  *
  * The script uses next/script with strategy="afterInteractive" so it loads
  * asynchronously and never blocks the initial page render.
@@ -19,9 +21,14 @@ import Script from 'next/script';
 const DAP_SRC = 'https://dap.digitalgov.gov/Universal-Federated-Analytics-Min.js';
 
 export interface DapScriptProps {
-  /** Agency code for DAP (e.g. "VA"). Defaults to NEXT_PUBLIC_DAP_AGENCY env var. */
+  /**
+   * Master switch — the analytics.dapEnabled site setting. Defaults to true so a
+   * caller that only passes an agency still gets the tag.
+   */
+  enabled?: boolean;
+  /** Agency code for DAP (e.g. "VA") — the analytics.dapAgency site setting. */
   agency?: string;
-  /** Sub-agency code for DAP (e.g. "VHA"). Defaults to NEXT_PUBLIC_DAP_SUBAGENCY env var. */
+  /** Sub-agency code for DAP (e.g. "VHA") — the analytics.dapSubagency site setting. */
   subagency?: string;
 }
 
@@ -34,12 +41,12 @@ export interface DapScriptProps {
  * - If agency is not configured the component renders nothing rather than
  *   emitting an unconfigured tag.
  */
-export function DapScript({ agency, subagency }: DapScriptProps) {
-  const resolvedAgency = agency ?? process.env.NEXT_PUBLIC_DAP_AGENCY ?? '';
-  const resolvedSubagency = subagency ?? process.env.NEXT_PUBLIC_DAP_SUBAGENCY ?? '';
+export function DapScript({ enabled = true, agency, subagency }: DapScriptProps) {
+  const resolvedAgency = (agency ?? '').trim();
+  const resolvedSubagency = (subagency ?? '').trim();
 
-  if (!resolvedAgency) {
-    // Do not inject if agency is not configured — avoids unconfigured DAP hits.
+  if (!enabled || !resolvedAgency) {
+    // Do not inject if disabled or the agency is not configured — avoids unconfigured DAP hits.
     return null;
   }
 

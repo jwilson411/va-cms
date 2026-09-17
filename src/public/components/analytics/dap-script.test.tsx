@@ -53,11 +53,21 @@ describe('DapScript', () => {
     expect(script).toBeNull();
   });
 
-  it('renders script tag when NEXT_PUBLIC_DAP_AGENCY env var is set', () => {
+  it('ignores NEXT_PUBLIC_DAP_AGENCY — configuration comes from site settings (epic #141)', () => {
     process.env.NEXT_PUBLIC_DAP_AGENCY = 'VA';
     const { container } = render(<DapScript />);
     const script = container.querySelector('[data-testid="dap-script"]');
-    expect(script).not.toBeNull();
+    expect(script).toBeNull();
+  });
+
+  it('renders nothing when enabled=false even if an agency is configured', () => {
+    const { container } = render(<DapScript enabled={false} agency="VA" />);
+    expect(container.querySelector('[data-testid="dap-script"]')).toBeNull();
+  });
+
+  it('renders nothing when the agency is blank', () => {
+    const { container } = render(<DapScript enabled agency="   " />);
+    expect(container.querySelector('[data-testid="dap-script"]')).toBeNull();
   });
 
   // ---------------------------------------------------------------------------
@@ -71,14 +81,7 @@ describe('DapScript', () => {
     expect(src).toContain('agency=VA');
   });
 
-  it('includes agency param from env var when no prop is given', () => {
-    process.env.NEXT_PUBLIC_DAP_AGENCY = 'DOD';
-    const { container } = render(<DapScript />);
-    const src = container.querySelector('[data-testid="dap-script"]')?.getAttribute('data-src') ?? '';
-    expect(src).toContain('agency=DOD');
-  });
-
-  it('prop agency overrides env var', () => {
+  it('env var never leaks into the src', () => {
     process.env.NEXT_PUBLIC_DAP_AGENCY = 'DOD';
     const { container } = render(<DapScript agency="VA" />);
     const src = container.querySelector('[data-testid="dap-script"]')?.getAttribute('data-src') ?? '';
@@ -96,21 +99,13 @@ describe('DapScript', () => {
     expect(src).toContain('subagency=VHA');
   });
 
-  it('includes subagency param from env var when no subagency prop is given', () => {
-    process.env.NEXT_PUBLIC_DAP_AGENCY = 'VA';
-    process.env.NEXT_PUBLIC_DAP_SUBAGENCY = 'VBA';
-    const { container } = render(<DapScript />);
-    const src = container.querySelector('[data-testid="dap-script"]')?.getAttribute('data-src') ?? '';
-    expect(src).toContain('subagency=VBA');
-  });
-
   it('does not include subagency param when not configured', () => {
     const { container } = render(<DapScript agency="VA" />);
     const src = container.querySelector('[data-testid="dap-script"]')?.getAttribute('data-src') ?? '';
     expect(src).not.toContain('subagency');
   });
 
-  it('prop subagency overrides env var', () => {
+  it('env var subagency never leaks into the src', () => {
     process.env.NEXT_PUBLIC_DAP_AGENCY = 'VA';
     process.env.NEXT_PUBLIC_DAP_SUBAGENCY = 'VBA';
     const { container } = render(<DapScript agency="VA" subagency="VHA" />);

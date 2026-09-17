@@ -26,6 +26,8 @@ export interface UswdsHeaderProps {
   navigation: NavItem[];
   /** Optional: override the search action URL. Defaults to '/search'. */
   searchAction?: string;
+  /** Render the search form. Driven by the features.publicSearch site setting. Defaults to true. */
+  showSearch?: boolean;
 }
 
 export function UswdsHeader({
@@ -33,6 +35,7 @@ export function UswdsHeader({
   siteTitleHref = '/',
   navigation,
   searchAction = '/search',
+  showSearch = true,
 }: UswdsHeaderProps): React.ReactElement {
   const [menuOpen, setMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -78,6 +81,7 @@ export function UswdsHeader({
             <span className="usa-sr-only">Close</span>
           </button>
 
+          {showSearch && (
           <div className="usa-search usa-search--small" role="search">
             <form action={searchAction} method="get">
               <label className="usa-sr-only" htmlFor="extended-search-field-small">
@@ -105,6 +109,7 @@ export function UswdsHeader({
               </button>
             </form>
           </div>
+          )}
 
           <ul className="usa-nav__primary usa-accordion">
             {navigation.map((item) => (

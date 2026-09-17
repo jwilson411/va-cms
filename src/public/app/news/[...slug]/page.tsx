@@ -22,6 +22,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { fetchNewsArticle } from '@/lib/cms/content';
 import { fetchPrimaryNav } from '@/lib/cms/navigation';
+import { fetchSiteSettings } from '@/lib/cms/settings';
 import { NewsArticleTemplate } from '@/components/templates/NewsArticleTemplate';
 import type { BreadcrumbItem } from '@/components/uswds/UswdsBreadcrumb';
 
@@ -46,13 +47,13 @@ function buildCanonicalUrl(slug: string): string {
  * Runs on the server alongside the page component.
  */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const article = await fetchNewsArticle(slugFromParams(params));
+  const [article, site] = await Promise.all([fetchNewsArticle(slugFromParams(params)), fetchSiteSettings()]);
   if (!article) return { title: 'Page Not Found' };
 
   const canonicalUrl = buildCanonicalUrl(slugFromParams(params));
 
   return {
-    title: `${article.fields.title} | Department of Veterans Affairs`,
+    title: `${article.fields.title} | ${site.siteTitle}`,
     description: article.fields.summary,
     alternates: {
       canonical: canonicalUrl,
@@ -82,9 +83,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function NewsArticlePage({
   params,
 }: PageProps): Promise<React.ReactElement> {
-  const [article, navigation] = await Promise.all([
+  const [article, navigation, site] = await Promise.all([
     fetchNewsArticle(slugFromParams(params)),
     fetchPrimaryNav(),
+    fetchSiteSettings(),
   ]);
 
   if (!article) {
@@ -114,6 +116,7 @@ export default async function NewsArticlePage({
       tags={article.fields.topics ?? []}
       breadcrumbs={breadcrumbs}
       navigation={navigation}
+      site={site}
       canonicalUrl={canonicalUrl}
     />
   );

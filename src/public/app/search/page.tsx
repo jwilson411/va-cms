@@ -21,14 +21,18 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { fetchSearchResults, totalPages } from '@/lib/cms/search';
+import { fetchSiteSettings } from '@/lib/cms/settings';
 import { SearchResultCard } from '@/components/search/SearchResultCard';
 import { SearchFilters } from '@/components/search/SearchFilters';
 import { SearchPagination } from '@/components/search/SearchPagination';
 
-export const metadata: Metadata = {
-  title: 'Search — Department of Veterans Affairs',
-  description: 'Search published VA content',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await fetchSiteSettings();
+  return {
+    title: `Search — ${site.siteTitle}`,
+    description: `Search published ${site.agencyShortName} content`,
+  };
+}
 
 /** Force dynamic rendering — search is never static. */
 export const dynamic = 'force-dynamic';
@@ -54,7 +58,30 @@ export default async function SearchPage({
   const tagParam = searchParams.tag ? parseInt(searchParams.tag, 10) : null;
   const pageParam = searchParams.page ? Math.max(1, parseInt(searchParams.page, 10)) : 1;
 
-  const PAGE_SIZE = 10;
+  // Page size and the on/off switch are site settings (issue #149, epic #141).
+  const site = await fetchSiteSettings();
+  const PAGE_SIZE = site.searchPageSize;
+
+  if (!site.publicSearchEnabled) {
+    return (
+      <div className="grid-container">
+        <div className="grid-row margin-top-4 margin-bottom-2">
+          <div className="tablet:grid-col-12">
+            <h1 className="usa-heading">Search</h1>
+            <div className="usa-alert usa-alert--info" role="status" id="main-search-results">
+              <div className="usa-alert__body">
+                <h2 className="usa-alert__heading">Search is currently unavailable</h2>
+                <p className="usa-alert__text">
+                  Site search has been turned off by an administrator.{' '}
+                  <a href="/" className="usa-link">Browse the site</a> to find what you need.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const response = query
     ? await fetchSearchResults(query, {
@@ -201,7 +228,7 @@ export default async function SearchPage({
         <div className="grid-row" id="main-search-results">
           <div className="tablet:grid-col-12">
             <p className="usa-prose">
-              Enter a search term above to find VA content.
+              Enter a search term above to find {site.agencyShortName} content.
             </p>
           </div>
         </div>

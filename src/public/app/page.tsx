@@ -1,4 +1,5 @@
 import { UswdsBanner, UswdsHeader, UswdsFooter, UswdsIdentifier } from '@/components/uswds';
+import { fetchSiteSettings } from '@/lib/cms/settings';
 
 const NAV = [
   { label: 'Home', href: '/' },
@@ -6,25 +7,29 @@ const NAV = [
   { label: 'About', href: '/about' },
 ];
 
-export default function HomePage(): React.ReactElement {
+export default async function HomePage(): Promise<React.ReactElement> {
+  const site = await fetchSiteSettings();
+
   return (
     <>
-      <UswdsBanner />
-      <UswdsHeader siteTitle="Department of Veterans Affairs" navigation={NAV} />
+      <UswdsBanner lang={site.bannerLang} />
+      <UswdsHeader siteTitle={site.siteTitle} navigation={NAV} showSearch={site.publicSearchEnabled} />
       <main id="main-content">
         <div className="grid-container">
           <h1>Welcome</h1>
-          <p>VA CMS public site</p>
+          <p>{site.metaTitle}</p>
         </div>
       </main>
       <UswdsFooter
-        agencyName="Department of Veterans Affairs"
-        agencyHref="https://www.va.gov"
+        agencyName={site.agencyName}
+        agencyHref={site.agencyHref}
+        agencyLogoSrc={site.agencyLogoSrc || undefined}
       />
       <UswdsIdentifier
-        agencyName="Department of Veterans Affairs"
-        agencyShortName="VA"
-        agencyHref="https://www.va.gov"
+        agencyName={site.agencyName}
+        agencyShortName={site.agencyShortName}
+        agencyHref={site.agencyHref}
+        agencyLogoSrc={site.agencyLogoSrc || undefined}
       />
     </>
   );

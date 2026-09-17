@@ -15,15 +15,17 @@
 
 import type { Metadata } from 'next';
 import { fetchPrimaryNav } from '@/lib/cms/navigation';
+import { fetchSiteSettings } from '@/lib/cms/settings';
 import { NotFoundTemplate } from '@/components/templates/NotFoundTemplate';
 
-export const metadata: Metadata = {
-  title: 'Page Not Found | Department of Veterans Affairs',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = await fetchSiteSettings();
+  return { title: `Page Not Found | ${site.siteTitle}` };
+}
 
 export default async function NotFoundPage(): Promise<React.ReactElement> {
-  // Fetch CMS navigation — fall back to empty array if API is unavailable.
-  const navigation = await fetchPrimaryNav().catch(() => []);
+  // Fetch CMS navigation and site settings — both fall back if the API is unavailable.
+  const [navigation, site] = await Promise.all([fetchPrimaryNav().catch(() => []), fetchSiteSettings()]);
 
-  return <NotFoundTemplate navigation={navigation} />;
+  return <NotFoundTemplate navigation={navigation} site={site} />;
 }
