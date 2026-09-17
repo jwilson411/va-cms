@@ -17,6 +17,7 @@
 
 import React, { useState } from 'react';
 import { useSearchAnalyticsFull } from './useSearchAnalytics';
+import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
 
 const DAYS_OPTIONS = [
   { value: 7,  label: 'Last 7 days' },
@@ -24,9 +25,11 @@ const DAYS_OPTIONS = [
   { value: 90, label: 'Last 90 days' },
 ];
 
-const PAGE_SIZE = 50;
 
 export function SearchAnalyticsPage(): JSX.Element {
+  // Rows per page: admin.searchAnalyticsPageSize (site setting, default 50)
+  const clientSettings = useClientSettings();
+  const PAGE_SIZE = Math.max(1, clientSettings.getInt(clientSettingKeys.adminSearchAnalyticsPageSize));
   const [daysBack, setDaysBack] = useState<number>(30);
   const [page, setPage] = useState<number>(1);
 

@@ -8,6 +8,16 @@ import { MemoryRouter } from 'react-router-dom';
 import { AuditLogPage } from './AuditLogPage';
 import * as hooks from './useAuditLog';
 
+// Site settings (epic #141): render with the code defaults, no QueryClient needed.
+vi.mock('../siteSettings/useClientSettings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../siteSettings/useClientSettings')>();
+  return {
+    ...actual,
+    useClientSettings: () => actual.buildClientSettings({}, { isLoading: false, isError: false }),
+  };
+});
+
+
 // ── Mock hooks ────────────────────────────────────────────────────────────────
 
 vi.mock('./useAuditLog');

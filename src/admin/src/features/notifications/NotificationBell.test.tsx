@@ -15,6 +15,18 @@ import { MemoryRouter } from 'react-router-dom';
 import { NotificationBell } from './NotificationBell';
 import * as hooks from './useNotifications';
 
+// Site settings (epic #141): render with the code defaults, no QueryClient needed.
+import * as siteSettings from '../siteSettings/useClientSettings';
+
+vi.mock('../siteSettings/useClientSettings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../siteSettings/useClientSettings')>();
+  return {
+    ...actual,
+    useClientSettings: vi.fn(() => actual.buildClientSettings({}, { isLoading: false, isError: false })),
+  };
+});
+
+
 vi.mock('./useNotifications');
 
 const mockUseNotifications = vi.mocked(hooks.useNotifications);
@@ -221,5 +233,19 @@ describe('NotificationBell', () => {
     fireEvent.click(screen.getByRole('button', { name: /Notifications/ }));
     fireEvent.click(within(screen.getByTestId('notification-1')).getByRole('link'));
     expect(screen.queryByRole('region', { name: 'Notifications' })).not.toBeInTheDocument();
+  });
+
+  it('renders nothing while features.notifications is off (epic #141)', () => {
+    vi.mocked(siteSettings.useClientSettings).mockReturnValueOnce(
+      siteSettings.buildClientSettings({ 'features.notifications': 'false' }, { isLoading: false, isError: false }),
+    );
+    mockUseNotifications.mockReturnValue({ data: undefined, isLoading: false, isError: false } as never);
+    render(
+      <MemoryRouter>
+        <NotificationBell />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId('notification-bell')).toBeNull();
+    expect(mockUseNotifications).toHaveBeenCalledWith(undefined, { enabled: false });
   });
 });

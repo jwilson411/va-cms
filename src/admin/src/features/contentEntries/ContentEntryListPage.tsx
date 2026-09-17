@@ -7,6 +7,7 @@ import type {
   SortDir,
   ContentTypeSummaryForPicker,
 } from './types';
+import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
 
 const STATUS_OPTIONS = ['Draft', 'InReview', 'Approved', 'Published'];
 
@@ -144,13 +145,15 @@ function SortHeader({
 // ── Main list component ───────────────────────────────────────────────────────
 
 export function ContentEntryListPage(): JSX.Element {
+  const clientSettings = useClientSettings();
   const navigate = useNavigate();
   // Filter state
   const [filters, setFilters] = useState<ContentEntryListFilters>({});
   const [sortBy,  setSortBy]  = useState<SortBy>('UpdatedAt');
   const [sortDir, setSortDir] = useState<SortDir>('DESC');
   const [page,    setPage]    = useState(1);
-  const PAGE_SIZE = 25;
+  // Rows per page: admin.contentListPageSize (site setting, default 25)
+  const PAGE_SIZE = Math.max(1, clientSettings.getInt(clientSettingKeys.adminContentListPageSize));
 
   // Modal state
   const [pickerOpen, setPickerOpen] = useState(false);

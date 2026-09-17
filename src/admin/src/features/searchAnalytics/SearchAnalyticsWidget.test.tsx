@@ -9,6 +9,16 @@ import { SearchAnalyticsWidget } from './SearchAnalyticsWidget';
 import { SearchAnalyticsPage } from './SearchAnalyticsPage';
 import * as hooks from './useSearchAnalytics';
 
+// Site settings (epic #141): render with the code defaults, no QueryClient needed.
+vi.mock('../siteSettings/useClientSettings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../siteSettings/useClientSettings')>();
+  return {
+    ...actual,
+    useClientSettings: () => actual.buildClientSettings({}, { isLoading: false, isError: false }),
+  };
+});
+
+
 // ── mock the hooks ─────────────────────────────────────────────────────────────
 
 vi.mock('./useSearchAnalytics');
