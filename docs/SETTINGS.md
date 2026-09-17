@@ -14,6 +14,7 @@ public site without a deploy.
 | `Auth:Mode`, `AzureAd:*`, `Auth:DevBypassAllowedUsers` | Chooses the auth pipeline at startup; secrets |
 | `Jwt:SigningKey`, `Jwt:Issuer`, `Jwt:Audience` | Secret; validation parameters are built at startup |
 | `Storage:*` (backend, paths, Azure connection string) | Switching backends at runtime would orphan files; secrets |
+| `Media:Scanner:*` (`Mode` = Disabled \| Icap \| ClamAv, `Host`, `Port`, `ServicePath`, `TimeoutSeconds`, `FailClosed`) | Malware-engine wiring (#159). `Disabled` is refused in Production; `FailClosed` defaults to true outside Development so an unreachable engine rejects uploads with 503 instead of storing unscanned files |
 | `Email:Smtp:*` (host, port, security, username, password) | SMTP relay address and credentials; secrets bound to the deployment (issue #39). The switch, sender and link origin are `notifications.*` settings below. |
 | `Database:MigrateOnStartup` | Whether the API applies migrations itself at startup (default: Development only). Off, it only verifies nothing is pending and exits 1 otherwise — deployments run `vacms db migrate` with an elevated login |
 | `SKIP_MIGRATIONS`, `WINDOWS_AUTH_FAKE_NEGOTIATE`, `AZUREAD_FAKE_OIDC` | Test/host bootstrap switches |

@@ -278,6 +278,9 @@ internal class InMemoryStorageBackend : IStorageBackend
 
     public byte[]? GetBytes(string storagePath) =>
         _files.TryGetValue(storagePath, out var b) ? b : null;
+
+    /// <summary>Paths currently held (after deletes).</summary>
+    public IReadOnlyCollection<string> Paths => _files.Keys;
 }
 
 /// <summary>

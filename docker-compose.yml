@@ -45,5 +45,26 @@ services:
       - "8025:8025"
     restart: unless-stopped
 
+  # ClamAV for the upload virus scan (issue #159): `docker compose --profile clamav up -d`,
+  # then Media__Scanner__Mode=ClamAv (host localhost, port 3310). The integration test
+  # that uploads EICAR runs when CLAMAV_HOST is set (see Issue159AcceptanceTests).
+  # First start downloads signatures; wait for the healthcheck before scanning.
+  clamav:
+    image: clamav/clamav-debian:stable   # multi-arch (amd64/arm64)
+    container_name: va-cms-clamav
+    profiles: ["clamav"]
+    ports:
+      - "3310:3310"
+    volumes:
+      - va-cms-clamav-db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+
 volumes:
   va-cms-sqldata:
+  va-cms-clamav-db:

@@ -26,6 +26,16 @@
     "Backend": "local",
     "LocalRootPath": ".uploads"
   },
+  "Media": {
+    "Scanner": {
+      "Mode": "Disabled",
+      "Host": "localhost",
+      "Port": 0,
+      "ServicePath": "/avscan",
+      "TimeoutSeconds": 30,
+      "FailClosed": null
+    }
+  },
   "Jwt": {
     "SigningKey": "REPLACE_WITH_32_CHAR_OR_LONGER_SECRET",
     "Issuer": "va-cms-api",

@@ -306,10 +306,35 @@ IStorageBackend storageBackend = storageOptions.Backend?.ToLowerInvariant() swit
 };
 builder.Services.AddSingleton<IStorageBackend>(storageBackend);
 builder.Services.AddSingleton<IImageProcessingService, ImageProcessingService>();
-// Issue #45: virus scan hook — default no-op; VA teams replace with real AV implementation via DI
-builder.Services.AddSingleton<IVirusScanService, NoOpVirusScanService>();
+// Virus scanning (#159, BRD FR-MEDIA-04, NIST SI-3): Media:Scanner selects ICAP (enterprise
+// engines), ClamAV (dev/CI) or Disabled. Disabled is refused in Production; FailClosed
+// defaults to true outside Development so an unreachable engine rejects uploads.
+var scannerOptions = builder.Configuration
+    .GetSection(MediaScannerOptions.SectionName)
+    .Get<MediaScannerOptions>() ?? new MediaScannerOptions();
+if (scannerOptions.Mode == MediaScannerMode.Disabled && builder.Environment.IsProduction())
+{
+    throw new InvalidOperationException(
+        "Media:Scanner:Mode=Disabled is not permitted in Production. Configure Mode=Icap (host, port, service path) " +
+        "or Mode=ClamAv so uploads are scanned for malware (NIST SI-3).");
+}
+builder.Services.AddSingleton(scannerOptions);
+builder.Services.AddSingleton<IVirusScanService>(scannerOptions.Mode switch
+{
+    MediaScannerMode.Icap   => new IcapVirusScanService(scannerOptions),
+    MediaScannerMode.ClamAv => new ClamAvVirusScanService(scannerOptions),
+    _                       => new NoOpVirusScanService(),
+});
 builder.Services.AddScoped<IMediaExtendedRepository, MediaExtendedRepository>();
-builder.Services.AddScoped<IMediaUploadService, MediaUploadService>();
+builder.Services.AddScoped<IMediaUploadService>(sp => new MediaUploadService(
+    sp.GetRequiredService<IStorageBackend>(),
+    sp.GetRequiredService<IMediaAssetRepository>(),
+    sp.GetRequiredService<IImageProcessingService>(),
+    sp.GetRequiredService<IVirusScanService>(),
+    sp.GetRequiredService<IMediaExtendedRepository>(),
+    sp.GetRequiredService<ISiteSettingsService>(),
+    failClosed: scannerOptions.ResolveFailClosed(builder.Environment.IsDevelopment()),
+    audit: sp.GetRequiredService<IAuditLogRepository>()));
 
 // Preview token service — issue #34 (BRD FR-AUTH-08)
 builder.Services.AddSingleton<IPreviewTokenService, PreviewTokenService>();

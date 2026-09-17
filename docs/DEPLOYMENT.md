@@ -167,6 +167,11 @@ AzureAd__ClientId=<app_registration_client_id>
 AzureAd__ClientSecret=<client_secret>            # see "Azure AD app registration" below for alternatives
 Storage__Backend=local
 Storage__LocalPath=D:\vacms-uploads
+Media__Scanner__Mode=Icap                        # or ClamAv; Disabled is refused in Production
+Media__Scanner__Host=avscan.va.gov
+Media__Scanner__Port=1344
+Media__Scanner__ServicePath=/avscan              # the engine's RESPMOD service (vendor-specific)
+Media__Scanner__FailClosed=true                  # unreachable engine ⇒ upload rejected (503), nothing stored
 Email__SmtpHost=mail.va.gov
 Email__SmtpPort=587
 Email__FromAddress=noreply-cms@va.gov
@@ -214,6 +219,16 @@ endpoint and a "no access" page in the admin SPA.
 # Migrations are NOT applied by the API. Run them as the deployment account before starting the app pool:
 vacms db migrate --connection "<deployment-account connection string>"
 # The API verifies the schema at startup and exits 1 with the list of pending scripts if it is behind.
+
+### 5. Malware scanning (NIST SI-3)
+
+Every upload is streamed to the configured engine before it is recorded. `Media__Scanner__Mode=Icap` speaks
+ICAP RESPMOD (Trend Micro, McAfee/Trellix, Symantec Protection Engine and similar enterprise scanners expose
+this; ask the AV team for the host, port and service path). `ClamAv` uses clamd's INSTREAM command and is what
+local development and CI use (`docker compose --profile clamav up -d`, then `Media__Scanner__Mode=ClamAv`).
+An infected file is deleted from storage, kept as an `IsVirusScanPassed = 0` tombstone row, and written to the
+audit log (`VirusDetected`); an unreachable engine with `FailClosed=true` rejects the upload with 503 and audits
+`VirusScanUnavailable`. Run `CLAMAV_HOST=localhost dotnet test --filter Eicar` to prove the wiring end to end.
 
 ### 6. SSL / TLS
 

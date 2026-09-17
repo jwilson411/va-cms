@@ -142,6 +142,7 @@ public class MediaController : ControllerBase
     [ProducesResponseType(typeof(MediaErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(MediaErrorResponse), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> Upload(
         IFormFile file,
         CancellationToken ct)
@@ -155,10 +156,16 @@ public class MediaController : ControllerBase
 
         var userId = _rbac.GetUserId(User) ?? 0;
 
-        var (asset, error) = await _uploader.UploadAsync(file, userId, ct);
+        var outcome = await _uploader.UploadAsync(file, userId, ct);
+        var (asset, error) = outcome;
 
         if (error is not null)
-            return BadRequest(new MediaErrorResponse(error));
+        {
+            // #159: an unreachable scanner is a service problem, not a client error.
+            return outcome.Failure == MediaUploadFailure.ScannerUnavailable
+                ? StatusCode(StatusCodes.Status503ServiceUnavailable, new MediaErrorResponse(error))
+                : BadRequest(new MediaErrorResponse(error));
+        }
 
         _webhooks.Enqueue(WebhookEvents.MediaUploaded, new { id = asset!.Id, fileName = asset.FileName, mimeType = asset.MimeType });
 
