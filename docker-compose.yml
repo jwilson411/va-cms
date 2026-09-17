@@ -33,5 +33,17 @@ services:
       start_period: 30s
     restart: unless-stopped
 
+  # Local SMTP sink for workflow emails (issue #39): `docker compose --profile mail up -d`,
+  # then point the API at it (Email__Smtp__Host=localhost, Port 1025, Security None) and
+  # read the mail at http://localhost:8025.
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: va-cms-mailpit
+    profiles: ["mail"]
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
+
 volumes:
   va-cms-sqldata:

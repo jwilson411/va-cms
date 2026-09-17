@@ -7,6 +7,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Email;
 
 namespace VA.CMS.Tests;
 
@@ -74,7 +75,7 @@ public class Issue38AcceptanceTests(DatabaseFixture fixture)
     {
         var s = await Scenario.CreateAsync(fixture.ConnectionString, slug: "hr/benefits/page");
 
-        var count = await Repo().CreateForWorkflowEventAsync(s.EntryId, NotificationEventTypes.ReviewRequested, s.AuthorId);
+        var count = (await Repo().CreateForWorkflowEventAsync(s.EntryId, NotificationEventTypes.ReviewRequested, s.AuthorId)).Count;
 
         // At least: global Editor + global SystemAdmin + section-scoped Editor whose section
         // matches "hr/". Other tests in the shared DB seed more global reviewers, so the
@@ -94,7 +95,7 @@ public class Issue38AcceptanceTests(DatabaseFixture fixture)
         var s = await Scenario.CreateAsync(fixture.ConnectionString, slug: "hr/self-submit");
 
         // The global editor submits their own content: every other reviewer hears about it, they don't.
-        var count = await Repo().CreateForWorkflowEventAsync(s.EntryId, NotificationEventTypes.ReviewRequested, s.GlobalEditorId);
+        var count = (await Repo().CreateForWorkflowEventAsync(s.EntryId, NotificationEventTypes.ReviewRequested, s.GlobalEditorId)).Count;
 
         Assert.True(count >= 2, $"expected at least 2 recipients, got {count}");
         Assert.Empty(await Repo().ListForUserAsync(s.GlobalEditorId));
@@ -164,9 +165,9 @@ public class Issue38AcceptanceTests(DatabaseFixture fixture)
     {
         var s = await Scenario.CreateAsync(fixture.ConnectionString, slug: "hr/approved", title: "Approved Page");
 
-        var count = await Repo().CreateForWorkflowEventAsync(s.EntryId, NotificationEventTypes.ContentApproved, s.GlobalEditorId);
+        var recipients = await Repo().CreateForWorkflowEventAsync(s.EntryId, NotificationEventTypes.ContentApproved, s.GlobalEditorId);
 
-        Assert.Equal(1, count);
+        Assert.Equal(s.AuthorId, Assert.Single(recipients).RecipientUserId);
         var n = Assert.Single(await Repo().ListForUserAsync(s.AuthorId));
         Assert.Equal("ContentApproved", n.EventType);
         Assert.Equal($"{s.GlobalEditorName} approved \"Approved Page\"", n.Message);
@@ -179,10 +180,10 @@ public class Issue38AcceptanceTests(DatabaseFixture fixture)
     {
         var s = await Scenario.CreateAsync(fixture.ConnectionString, slug: "hr/returned", title: "Returned Page");
 
-        var count = await Repo().CreateForWorkflowEventAsync(
+        var recipients = await Repo().CreateForWorkflowEventAsync(
             s.EntryId, NotificationEventTypes.ContentReturned, s.GlobalEditorId, "Please fix the heading.");
 
-        Assert.Equal(1, count);
+        Assert.Equal(s.AuthorId, Assert.Single(recipients).RecipientUserId);
         var n = Assert.Single(await Repo().ListForUserAsync(s.AuthorId));
         Assert.Equal("ContentReturned", n.EventType);
         Assert.Equal($"{s.GlobalEditorName} returned \"Returned Page\" to draft", n.Message);
@@ -194,9 +195,9 @@ public class Issue38AcceptanceTests(DatabaseFixture fixture)
     {
         var s = await Scenario.CreateAsync(fixture.ConnectionString, slug: "hr/self-approve");
 
-        var count = await Repo().CreateForWorkflowEventAsync(s.EntryId, NotificationEventTypes.ContentApproved, s.AuthorId);
+        var recipients = await Repo().CreateForWorkflowEventAsync(s.EntryId, NotificationEventTypes.ContentApproved, s.AuthorId);
 
-        Assert.Equal(0, count);
+        Assert.Empty(recipients);
         Assert.Empty(await Repo().ListForUserAsync(s.AuthorId));
     }
 
@@ -471,6 +472,12 @@ internal sealed class Issue38NotificationStub : INotificationRepository
     public bool  ThrowOnCreate    { get; init; }
     public long? LastListedUserId { get; private set; }
 
+    /// <summary>
+    /// Recipients every CreateForWorkflowEvent call reports back (issue #39): the notifier
+    /// turns each into an email. Empty by default, as for an entry nobody else reviews.
+    /// </summary>
+    public List<NotificationRecipient> Recipients { get; } = [];
+
     private readonly List<Notification> _rows = [];
     private long _nextId = 1;
 
@@ -484,11 +491,20 @@ internal sealed class Issue38NotificationStub : INotificationRepository
         });
     }
 
-    public Task<int> CreateForWorkflowEventAsync(long contentEntryId, string eventType, long actorId, string? comment = null)
+    public Task<IReadOnlyList<NotificationRecipient>> CreateForWorkflowEventAsync(long contentEntryId, string eventType, long actorId, string? comment = null)
     {
         if (ThrowOnCreate) throw new InvalidOperationException("notification store unavailable");
         Events.Add((contentEntryId, eventType, actorId, comment));
-        return Task.FromResult(0);
+        IReadOnlyList<NotificationRecipient> result = Recipients
+            .Select(r => new NotificationRecipient
+            {
+                Id = r.Id, RecipientUserId = r.RecipientUserId, RecipientEmail = r.RecipientEmail,
+                RecipientDisplayName = r.RecipientDisplayName, EventType = eventType, ContentEntryId = contentEntryId,
+                ContentTitle = r.ContentTitle, Message = $"Someone {eventType} \"{r.ContentTitle}\"",
+                ActorDisplayName = "Someone", Comment = comment,
+            })
+            .ToList();
+        return Task.FromResult(result);
     }
 
     public Task<IReadOnlyList<Notification>> ListForUserAsync(long userId, bool unreadOnly = false, int limit = 50)
@@ -523,11 +539,14 @@ internal sealed class Issue38TestFactory : WebApplicationFactory<Program>
 {
     private readonly Issue38NotificationStub _notifications;
     private readonly WorkflowTransitionTests.WorkflowEntryStub _entries;
+    private readonly IEmailDispatcher? _email;
 
-    public Issue38TestFactory(Issue38NotificationStub notifications, string initialStatus)
+    /// <param name="email">Issue #39: replaces the background email dispatcher so tests can see what the notifier queued.</param>
+    public Issue38TestFactory(Issue38NotificationStub notifications, string initialStatus, IEmailDispatcher? email = null)
     {
         _notifications = notifications;
         _entries       = new WorkflowTransitionTests.WorkflowEntryStub(initialStatus);   // one instance: status carries across requests
+        _email         = email;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -555,6 +574,8 @@ internal sealed class Issue38TestFactory : WebApplicationFactory<Program>
             Replace<IContentTypeRepository>(services,       _ => new Issue23ContentTypeStub());
             Replace<IMediaAltTextGuardRepository>(services, _ => new NoMissingAltTextStub());
             Replace<INotificationRepository>(services,      _ => _notifications);
+            if (_email is not null)
+                Replace<IEmailDispatcher>(services,         _ => _email);
         });
     }
 

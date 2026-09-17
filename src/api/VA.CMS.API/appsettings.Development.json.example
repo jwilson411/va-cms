@@ -31,5 +31,17 @@
     "SigningKey": "REPLACE_WITH_32_CHAR_OR_LONGER_SECRET",
     "Issuer": "va-cms-api",
     "Audience": "va-cms-spa"
+  },
+  "Email": {
+    "From": "cms-noreply@va.gov",
+    "FromName": "VA CMS",
+    "AdminBaseUrl": "http://localhost:5173",
+    "Smtp": {
+      "Host": "",
+      "Port": 587,
+      "Security": "StartTls",
+      "Username": "",
+      "Password": ""
+    }
   }
 }
