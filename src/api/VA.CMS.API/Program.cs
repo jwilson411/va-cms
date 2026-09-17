@@ -7,6 +7,8 @@ using Microsoft.Identity.Web;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using VA.CMS.API.Observability;
 using VA.CMS.API;
 using VA.CMS.API.Auth;
 using VA.CMS.API.GraphQL;
@@ -26,12 +28,29 @@ using VA.CMS.API.Webhooks;
 var builder = WebApplication.CreateBuilder(args);
 
 // -----------------------------------------------------------------------
+// Logging (#166, NFR-OPS-02): Serilog with compact JSON, sinks from Logging:Sinks
+// (console, rolling file, Windows Event Log, Splunk HEC), levels from Logging:LogLevel.
+// A bootstrap logger covers the lines emitted before the host exists.
+// -----------------------------------------------------------------------
+Log.Logger = SerilogSetup.CreateBootstrapLogger(builder.Environment.IsDevelopment());
+builder.Host.UseSerilog((context, services, configuration) =>
+    SerilogSetup.Configure(configuration, context.Configuration, context.HostingEnvironment));
+
+// -----------------------------------------------------------------------
 // Fail-fast configuration validation (#173)
 // Every environment/secret rule is evaluated here, before a single service is
 // registered, and reported as one numbered list. See StartupValidation for the
 // rules and docs/DEPLOYMENT.md "Startup validation" for the operator view.
 // -----------------------------------------------------------------------
-StartupValidation.Run(builder.Configuration, builder.Environment);
+try
+{
+    StartupValidation.Run(builder.Configuration, builder.Environment);
+}
+catch (InvalidOperationException ex)
+{
+    Log.Fatal("{StartupProblems}", ex.Message);
+    throw;
+}
 
 // -----------------------------------------------------------------------
 // Configuration
@@ -52,8 +71,7 @@ if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey))
     // Development only — StartupValidation refuses an empty key everywhere else.
     jwtOptions.SigningKey = Convert.ToBase64String(
         System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
-    Console.WriteLine("⚠  Jwt:SigningKey not configured — using a randomly generated key. " +
-                      "Tokens will not survive a restart. Set Jwt:SigningKey for persistence.");
+    Log.Warning("Jwt:SigningKey not configured; using a randomly generated key. Tokens will not survive a restart. Set Jwt:SigningKey for persistence.");
 }
 
 // Options classes are also registered through the options pipeline with
@@ -85,6 +103,11 @@ builder.Services.AddOptions<EmailOptions>()
     .Bind(builder.Configuration.GetSection(EmailOptions.SectionName))
     .Validate(o => StartupValidation.ValidateSmtp(o, builder.Environment.IsDevelopment()) is null,
               "Email:Smtp options are invalid (see StartupValidation.ValidateSmtp).")
+    .ValidateOnStart();
+builder.Services.AddOptions<LoggingSinkOptions>()
+    .Bind(builder.Configuration.GetSection(LoggingSinkOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(o => !o.Validate(builder.Environment.IsDevelopment()).Any(), "Logging:Sinks options are invalid (see LoggingSinkOptions.Validate).")
     .ValidateOnStart();
 
 // -----------------------------------------------------------------------
@@ -211,6 +234,25 @@ builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuditingAut
 // Services
 // -----------------------------------------------------------------------
 builder.Services.AddControllers();
+
+// -----------------------------------------------------------------------
+// Errors and health (#166, NFR-OPS-01/02)
+// Unhandled exceptions become RFC 7807 ProblemDetails carrying the correlation id
+// and nothing else (the exception itself is logged with the same id); exception
+// text is only added to the body in Development. Health checks: see HealthEndpoints.
+// -----------------------------------------------------------------------
+builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = ctx =>
+{
+    ctx.ProblemDetails.Extensions["correlationId"] = ctx.HttpContext.GetCorrelationId();
+    // .NET 8's exception handler exposes the error via the feature, not ProblemDetailsContext.Exception.
+    var error = ctx.Exception ?? ctx.HttpContext.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+    if (error is not null && builder.Environment.IsDevelopment())
+    {
+        ctx.ProblemDetails.Detail = error.Message;
+        ctx.ProblemDetails.Extensions["exception"] = error.ToString();
+    }
+});
+builder.Services.AddCmsHealthChecks();
 
 // -----------------------------------------------------------------------
 // OpenAPI / Swagger (Issue #55 — BRD FR-DEV-01)
@@ -368,7 +410,8 @@ builder.Services.AddScoped<IMediaUploadService>(sp => new MediaUploadService(
     sp.GetRequiredService<IMediaExtendedRepository>(),
     sp.GetRequiredService<ISiteSettingsService>(),
     failClosed: scannerOptions.ResolveFailClosed(builder.Environment.IsDevelopment()),
-    audit: sp.GetRequiredService<IAuditLogRepository>()));
+    audit: sp.GetRequiredService<IAuditLogRepository>(),
+    logger: sp.GetRequiredService<ILogger<MediaUploadService>>()));
 
 // Preview token service — issue #34 (BRD FR-AUTH-08)
 builder.Services.AddSingleton<IPreviewTokenService, PreviewTokenService>();
@@ -408,7 +451,7 @@ if (emailOptions.IsEnabled)
 else
 {
     builder.Services.AddSingleton<IEmailSender, DisabledEmailSender>();
-    Console.WriteLine("ℹ  Email:Smtp:Host not configured — workflow emails will be logged, not sent.");
+    Log.Information("Email:Smtp:Host not configured; workflow emails will be logged, not sent.");
 }
 builder.Services.AddSingleton<IEmailDispatcher, BackgroundEmailDispatcher>();
 
@@ -485,42 +528,61 @@ if (!skipMigrations)
         var result = VA.CMS.Infrastructure.Data.Migrations.MigrationRunner.Upgrade(connectionString, migrationsPath);
         if (!result.Successful)
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.Error.WriteLine($"Migration failed: {result.Error}");
-            Console.ResetColor();
+            app.Logger.LogCritical("Migration failed: {Error}", result.Error);
             return 1;
         }
 
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine("Database migrations applied successfully.");
-        Console.ResetColor();
+        app.Logger.LogInformation("Database migrations applied successfully.");
     }
     else
     {
         var status = await VA.CMS.Infrastructure.Data.Migrations.MigrationRunner.CheckAsync(connectionString, migrationsPath);
         if (!status.IsUpToDate)
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.Error.WriteLine(status.Error ?? "The database is behind the deployed migration set.");
-            Console.Error.WriteLine($"Pending migrations ({status.Pending.Count}): {string.Join(", ", status.Pending)}");
-            Console.Error.WriteLine("Run `vacms db migrate` with the deployment account, or set Database:MigrateOnStartup=true.");
-            Console.ResetColor();
+            app.Logger.LogCritical(
+                "{Error} Pending migrations ({PendingCount}): {Pending}. Run `vacms db migrate` with the deployment account, or set Database:MigrateOnStartup=true.",
+                status.Error ?? "The database is behind the deployed migration set.", status.Pending.Count, string.Join(", ", status.Pending));
             return 1;
         }
 
-        Console.WriteLine($"Database schema is current ({status.Applied.Count} migrations applied).");
+        app.Logger.LogInformation("Database schema is current ({AppliedCount} migrations applied).", status.Applied.Count);
     }
 }
 
 // -----------------------------------------------------------------------
 // HTTP pipeline
 // -----------------------------------------------------------------------
-// Forwarded headers first so Request.Scheme / RemoteIpAddress are right for
-// everything below (HTTPS redirect, Secure cookies, HSTS, audit source IPs).
+// Correlation id first (#166) so the exception handler, the request log line and
+// every audit row of a request share one id; then the exception handler so any
+// failure below becomes ProblemDetails instead of an empty 500.
+app.UseCorrelationId();
+app.UseExceptionHandler();
+
+// Forwarded headers next so Request.Scheme / RemoteIpAddress are right for
+// everything below (HTTPS redirect, Secure cookies, HSTS, audit source IPs, request log).
 if (forwardedHeaders is not null)
     app.UseForwardedHeaders(forwardedHeaders);
 
 app.UseSecurityHeaders();   // #162: on every response, including errors
+
+// One structured line per request (#166). The enricher runs at completion, so the
+// user id is available even though authentication happens further down; UPN/e-mail
+// are deliberately not logged (docs/LOGGING.md). Liveness polls are demoted to Debug.
+app.UseSerilogRequestLogging(options =>
+{
+    options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+    options.GetLevel = (httpContext, elapsed, ex) =>
+        ex is not null || httpContext.Response.StatusCode >= 500 ? Serilog.Events.LogEventLevel.Error
+        : HealthEndpoints.Prefixes.Any(p => httpContext.Request.Path.StartsWithSegments(p)) ? Serilog.Events.LogEventLevel.Debug
+        : Serilog.Events.LogEventLevel.Information;
+    options.EnrichDiagnosticContext = (diagnostics, httpContext) =>
+    {
+        diagnostics.Set("UserId",   long.TryParse(httpContext.User.FindFirst("cms_user_id")?.Value, out var id) ? id : null);
+        diagnostics.Set("ClientIp", httpContext.Connection.RemoteIpAddress?.ToString());
+        diagnostics.Set("Scheme",   httpContext.Request.Scheme);
+        diagnostics.Set("Host",     httpContext.Request.Host.Value);
+    };
+});
 
 if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
@@ -574,11 +636,16 @@ app.MapControllers();
 app.MapGraphQL("/api/graphql")
    .AllowAnonymous();   // #156: anonymous = Published-only surface; CanRead JWT = full surface (see GraphQLAudience)
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
-   .AllowAnonymous();
+app.MapCmsHealthChecks();   // #166: /health(/live) liveness, /health/ready readiness (+ /api/health aliases)
 
-app.Run();
-
-return 0;
+try
+{
+    app.Run();
+    return 0;
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
 public partial class Program { }

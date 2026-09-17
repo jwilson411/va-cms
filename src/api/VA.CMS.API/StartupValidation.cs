@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Text;
 using Microsoft.Data.SqlClient;
 using VA.CMS.API.Auth;
+using VA.CMS.API.Observability;
 using VA.CMS.Infrastructure.Email;
 using VA.CMS.Infrastructure.Storage;
 
@@ -55,6 +56,7 @@ public static class StartupValidation
         var storage = configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new StorageOptions();
         var scanner = configuration.GetSection(MediaScannerOptions.SectionName).Get<MediaScannerOptions>() ?? new MediaScannerOptions();
         var email   = configuration.GetSection(EmailOptions.SectionName).Get<EmailOptions>() ?? new EmailOptions();
+        var sinks   = configuration.GetSection(LoggingSinkOptions.SectionName).Get<LoggingSinkOptions>() ?? new LoggingSinkOptions();
 
         var problems = new List<string?>
         {
@@ -79,6 +81,10 @@ public static class StartupValidation
         problems.AddRange(ValidateAnnotations(storage, StorageOptions.SectionName));
         problems.AddRange(ValidateAnnotations(scanner, MediaScannerOptions.SectionName));
         problems.AddRange(ValidateAnnotations(email.Smtp, $"{EmailOptions.SectionName}:Smtp"));
+        problems.AddRange(sinks.Validate(isDevelopment));
+        problems.AddRange(ValidateAnnotations(sinks.File,     $"{LoggingSinkOptions.SectionName}:File"));
+        problems.AddRange(ValidateAnnotations(sinks.EventLog, $"{LoggingSinkOptions.SectionName}:EventLog"));
+        problems.AddRange(ValidateAnnotations(sinks.Splunk,   $"{LoggingSinkOptions.SectionName}:Splunk"));
 
         return problems.Where(p => !string.IsNullOrEmpty(p)).Select(p => p!).ToList();
     }

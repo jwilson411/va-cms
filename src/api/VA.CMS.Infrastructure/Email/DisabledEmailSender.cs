@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 
+using VA.CMS.Infrastructure.Logging;
+
 namespace VA.CMS.Infrastructure.Email;
 
 /// <summary>
@@ -17,7 +19,7 @@ public sealed class DisabledEmailSender : IEmailSender
     {
         foreach (var message in messages)
             _logger.LogInformation("Email not sent (Email:Smtp:Host is not configured) to {To}: {Subject}",
-                message.ToAddress, message.Subject);
+                PiiMask.Email(message.ToAddress), message.Subject);
         return Task.CompletedTask;
     }
 }

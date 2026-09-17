@@ -162,6 +162,11 @@ Email__Smtp__Host=mail.va.gov                    # sender address/name and the o
 Email__Smtp__Port=587
 Email__Smtp__Security=StartTls                   # None is refused outside Development (#173)
 Jwt__SigningKey=<256-bit-random-key>             # `openssl rand -base64 48`; 32+ bytes, never the example value (#173)
+Logging__Sinks__File__Enabled=true               # structured JSON logs (#166; see docs/LOGGING.md for every sink)
+Logging__Sinks__File__Path=D:\logs\vacms\api-.json
+Logging__Sinks__Splunk__Enabled=true             # on-prem Splunk HTTP Event Collector
+Logging__Sinks__Splunk__HecUrl=https://splunk-hec.va.gov:8088
+Logging__Sinks__Splunk__Token=<hec token>
 
 # Public site (Next.js)
 NEXT_PUBLIC_API_URL=https://cms.youragency.va.gov/api/v1
@@ -327,15 +332,17 @@ audit log (`VirusDetected`); an unreachable engine with `FailClosed=true` reject
 - Minimum TLS 1.2 (configure via IIS Crypto or registry)
 - Disable TLS 1.0 and 1.1
 
-### 7. Health Check Endpoints
+### 7. Health Check Endpoints (#166)
 
 | Endpoint | Returns |
 |---|---|
-| `GET /api/health` | 200 OK `{"status":"healthy","db":"ok","storage":"ok"}` |
-| `GET /api/health/live` | 200 OK (just "alive" — no dependencies) |
-| `GET /api/health/ready` | 200 OK when DB is reachable |
+| `GET /health`, `GET /health/live` | 200 `{"status":"Healthy"}` while the process serves requests — no dependencies; use for the load balancer |
+| `GET /health/ready` | 200 `{"status":"Healthy"}` / `"Degraded"` when SQL Server, the storage root, the settings snapshot and (if enabled) the SMTP relay check out; 503 `{"status":"Unhealthy"}` otherwise |
 
-Configure VA monitoring tools to poll `/api/health/ready` every 60 seconds.
+The same routes exist under `/api/health`. Both are anonymous; the readiness body only lists the individual
+checks (name, duration, failure text) for a caller with the Developer role. Configure VA monitoring tools to
+poll `/health/ready` every 60 seconds and alert on 503. Logging, correlation ids and the full health-check
+description are in `docs/LOGGING.md`.
 
 ## Backup and Recovery
 
@@ -354,5 +361,5 @@ Configure VA monitoring tools to poll `/api/health/ready` every 60 seconds.
 # 6. Deploy new admin/public builds
 # 7. Restart app pool
 # 8. Remove maintenance mode
-# 9. Smoke test: /api/health, /admin, /
+# 9. Smoke test: /health/ready, /admin, /
 ```

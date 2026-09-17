@@ -206,7 +206,7 @@ public class AuthController : ControllerBase
         var cookieOpts   = AuthCookieHelper.BuildCookieOptions(SecureCookies, lifetime: _refreshTokens.Lifetime);
         Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, refreshToken, cookieOpts);
 
-        _logger.LogInformation("AzureAd login: session issued for {Upn} (userId={UserId})", upn, userId);
+        _logger.LogInformation("AzureAd login: session issued for userId={UserId} ({GroupCount} groups).", userId, adGroups.Count);
         await _audit.WriteAsync(userId, AuthAudit.EntityType, userId, AuthAudit.Logon,
             AuthAudit.Diff(new { mode = "AzureAd", upn, systemUseAcknowledged = ack == "1", groups = adGroups.Count }));
 

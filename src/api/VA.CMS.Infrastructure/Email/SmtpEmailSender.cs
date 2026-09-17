@@ -4,6 +4,8 @@ using Microsoft.Extensions.Logging;
 using MimeKit;
 using VA.CMS.Infrastructure.Settings;
 
+using VA.CMS.Infrastructure.Logging;
+
 namespace VA.CMS.Infrastructure.Email;
 
 /// <summary>
@@ -58,14 +60,14 @@ public sealed class SmtpEmailSender : IEmailSender
                 try
                 {
                     await client.SendAsync(Build(from, message), cancellationToken);
-                    _logger.LogInformation("Email sent to {To}: {Subject}", message.ToAddress, message.Subject);
+                    _logger.LogInformation("Email sent to {To}: {Subject}", PiiMask.Email(message.ToAddress), message.Subject);
                 }
                 catch (SmtpCommandException ex)
                 {
                     // Recipient / message-level rejection (bad address, mailbox full, size limit):
                     // the connection is still good, carry on with the next recipient.
                     _logger.LogError(ex, "SMTP rejected email to {To} ({Subject}): {StatusCode} {Message}",
-                        message.ToAddress, message.Subject, ex.StatusCode, ex.Message);
+                        PiiMask.Email(message.ToAddress), message.Subject, ex.StatusCode, ex.Message);
                 }
             }
         }

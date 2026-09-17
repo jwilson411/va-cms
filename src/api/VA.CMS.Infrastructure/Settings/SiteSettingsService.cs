@@ -303,7 +303,10 @@ public sealed class StaticSiteSettings : SiteSettingsBase
             SortOrder    = d.SortOrder,
         }).ToList();
 
-    public override DateTime? LoadedAtUtc => null;
+    // A static source is "loaded" from the moment it exists: the readiness check (#166)
+    // treats a null LoadedAtUtc as "the database has never answered".
+    private readonly DateTime _createdAt = DateTime.UtcNow;
+    public override DateTime? LoadedAtUtc => _createdAt;
 
     public override Task RefreshAsync(CancellationToken ct = default) => Task.CompletedTask;
 

@@ -5391,18 +5391,6 @@
         }
       }
     },
-    "/health": {
-      "get": {
-        "tags": [
-          "VA.CMS.API"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/api/v1/webhooks": {
       "post": {
         "tags": [

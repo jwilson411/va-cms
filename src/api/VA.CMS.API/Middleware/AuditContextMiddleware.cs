@@ -9,14 +9,12 @@ namespace VA.CMS.API.Middleware;
 /// the values into SESSION_CONTEXT on every connection it opens, and
 /// AuditLogRepository stamps them on rows written from C#.
 ///
-/// The correlation id honours an inbound X-Correlation-Id (an IIS ARR or load
-/// balancer can set one) and otherwise uses the request's trace identifier; it is
-/// echoed back on the response so a support ticket can quote it. #166 will route
-/// the same id through structured logging.
+/// The correlation id is the one <see cref="CorrelationIdMiddleware"/> resolved at the top
+/// of the pipeline (#166), so audit rows, log lines and the response header all agree.
 /// </summary>
 public sealed class AuditContextMiddleware
 {
-    public const string CorrelationHeader = "X-Correlation-Id";
+    public const string CorrelationHeader = CorrelationIdMiddleware.Header;
 
     private readonly RequestDelegate _next;
 
@@ -24,29 +22,12 @@ public sealed class AuditContextMiddleware
 
     public Task InvokeAsync(HttpContext context, AuditContext audit)
     {
-        // An inbound id is untrusted: keep only token characters so it can be echoed
-        // as a response header and stored without becoming an injection vector.
-        var inbound = Sanitize(context.Request.Headers[CorrelationHeader].ToString());
-        var correlation = AuditContext.Truncate(
-            inbound.Length == 0 ? context.TraceIdentifier : inbound,
-            AuditContext.CorrelationIdMaxLength);
-
         audit.ActorId       = long.TryParse(context.User.FindFirst("cms_user_id")?.Value, out var id) ? id : null;
         audit.SourceIp      = AuditContext.Truncate(context.Connection.RemoteIpAddress?.ToString(), AuditContext.SourceIpMaxLength);
         audit.UserAgent     = AuditContext.Truncate(context.Request.Headers.UserAgent.ToString(), AuditContext.UserAgentMaxLength);
-        audit.CorrelationId = correlation;
-
-        if (correlation is not null)
-            context.Response.Headers[CorrelationHeader] = correlation;
+        audit.CorrelationId = AuditContext.Truncate(context.GetCorrelationId(), AuditContext.CorrelationIdMaxLength);
 
         return _next(context);
-    }
-
-    private static string Sanitize(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-        var chars = value.Trim().Where(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or ':').ToArray();
-        return new string(chars);
     }
 }
 

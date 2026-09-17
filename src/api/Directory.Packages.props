@@ -27,6 +27,14 @@
     <PackageVersion Include="Microsoft.Identity.Web" Version="4.14.2" />
     <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="8.22.0" />
     <PackageVersion Include="PetaPoco.Compiled" Version="6.0.683" />
+    <!-- #166 observability. Serilog.AspNetCore 8.x keeps Microsoft.Extensions.* at 8.0 on net8.0;
+         Serilog itself is pinned directly so the Splunk/EventLog sinks' floor (4.x) resolves. -->
+    <PackageVersion Include="Serilog" Version="4.3.1" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />
+    <PackageVersion Include="Serilog.Sinks.EventLog" Version="4.0.0" />
+    <PackageVersion Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageVersion Include="Serilog.Sinks.Splunk" Version="5.2.0" />
     <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="8.1.4" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
