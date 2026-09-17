@@ -27,6 +27,7 @@ export const clientSettingKeys = {
   adminContentListPageSize: 'admin.contentListPageSize',
   adminAuditLogPageSize: 'admin.auditLogPageSize',
   adminSearchAnalyticsPageSize: 'admin.searchAnalyticsPageSize',
+  authIdleTimeoutMinutes: 'auth.idleTimeoutMinutes',
 } as const;
 
 export type ClientSettingKey = (typeof clientSettingKeys)[keyof typeof clientSettingKeys];
@@ -45,6 +46,7 @@ export const CLIENT_SETTING_DEFAULTS: Record<ClientSettingKey, string> = {
   'admin.contentListPageSize': '25',
   'admin.auditLogPageSize': '50',
   'admin.searchAnalyticsPageSize': '50',
+  'auth.idleTimeoutMinutes': '15',
 };
 
 export type ClientSettingsMap = Record<string, string | null>;

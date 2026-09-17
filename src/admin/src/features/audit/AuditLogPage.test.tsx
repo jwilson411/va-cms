@@ -37,6 +37,10 @@ function buildRow(overrides: Partial<hooks.AuditLogRow> = {}): hooks.AuditLogRow
     entityId:         '42',
     action:           'Publish',
     diffJson:         null,
+    ipAddress:        '10.20.30.40',
+    userAgent:        'Mozilla/5.0',
+    correlationId:    'corr-1',
+    outcome:          'Success',
     createdAt:        '2026-09-15T12:00:00Z',
     ...overrides,
   };
@@ -157,6 +161,42 @@ describe('AuditLogPage — rows rendered', () => {
     renderPage();
     expect(screen.getByText('Publish')).toBeTruthy();
     expect(screen.getByText('Deactivate')).toBeTruthy();
+  });
+
+  // #165: outcome and source IP columns
+  it('shows outcome and source IP for each row', () => {
+    mockUseAuditLog.mockReturnValue({
+      data: buildPage([
+        buildRow({ id: 1, outcome: 'Success', ipAddress: '10.20.30.40' }),
+        buildRow({ id: 2, action: 'LogonFailure', outcome: 'Failure', ipAddress: null }),
+      ], 2),
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof hooks.useAuditLog>);
+    renderPage();
+    expect(screen.getAllByText('Outcome').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Source IP').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('10.20.30.40')).toBeTruthy();
+    expect(screen.getAllByText('Failure').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Success').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('applies outcome and IP filters to the query (#165)', async () => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText('Outcome'), { target: { value: 'Failure' } });
+    fireEvent.change(screen.getByLabelText('Source IP'), { target: { value: ' 10.20.30.40 ' } });
+    fireEvent.submit(screen.getByRole('form', { name: 'Audit log filters' }));
+
+    await waitFor(() =>
+      expect(mockUseAuditLog).toHaveBeenLastCalledWith(
+        expect.objectContaining({ outcome: 'Failure', ipAddress: '10.20.30.40' }),
+        1,
+        50,
+      ),
+    );
+    expect(mockBuildExportUrl).toHaveBeenLastCalledWith(
+      expect.objectContaining({ outcome: 'Failure', ipAddress: '10.20.30.40' }),
+    );
   });
 });
 
