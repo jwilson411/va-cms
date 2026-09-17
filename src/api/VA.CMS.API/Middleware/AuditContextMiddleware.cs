@@ -24,9 +24,11 @@ public sealed class AuditContextMiddleware
 
     public Task InvokeAsync(HttpContext context, AuditContext audit)
     {
-        var inbound = context.Request.Headers[CorrelationHeader].ToString();
+        // An inbound id is untrusted: keep only token characters so it can be echoed
+        // as a response header and stored without becoming an injection vector.
+        var inbound = Sanitize(context.Request.Headers[CorrelationHeader].ToString());
         var correlation = AuditContext.Truncate(
-            string.IsNullOrWhiteSpace(inbound) ? context.TraceIdentifier : inbound.Trim(),
+            inbound.Length == 0 ? context.TraceIdentifier : inbound,
             AuditContext.CorrelationIdMaxLength);
 
         audit.ActorId       = long.TryParse(context.User.FindFirst("cms_user_id")?.Value, out var id) ? id : null;
@@ -38,6 +40,13 @@ public sealed class AuditContextMiddleware
             context.Response.Headers[CorrelationHeader] = correlation;
 
         return _next(context);
+    }
+
+    private static string Sanitize(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var chars = value.Trim().Where(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or ':').ToArray();
+        return new string(chars);
     }
 }
 

@@ -303,9 +303,9 @@ public class Issue164AcceptanceTests
         Assert.NotEmpty(anon.Headers.GetValues(AuditContextMiddleware.CorrelationHeader).Single());
 
         var req = new HttpRequestMessage(HttpMethod.Get, "/health");
-        req.Headers.Add(AuditContextMiddleware.CorrelationHeader, "lb-abc-123");
+        req.Headers.Add(AuditContextMiddleware.CorrelationHeader, "lb-abc-123 <script>");   // untrusted: only token chars survive
         var echoed = await client.SendAsync(req);
-        Assert.Equal("lb-abc-123", echoed.Headers.GetValues(AuditContextMiddleware.CorrelationHeader).Single());
+        Assert.Equal("lb-abc-123script", echoed.Headers.GetValues(AuditContextMiddleware.CorrelationHeader).Single());
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
