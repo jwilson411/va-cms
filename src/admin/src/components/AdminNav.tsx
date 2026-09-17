@@ -15,12 +15,15 @@
 
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { clientSettingKeys, useClientSettings, type ClientSettingKey } from '../features/siteSettings/useClientSettings';
 
 interface NavItem {
   label: string;
   to: string;
   /** aria-label override when the visible label alone is ambiguous. */
   ariaLabel?: string;
+  /** Site setting (bool) that must be on for the item to render. */
+  feature?: ClientSettingKey;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -30,7 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Content Types', to: '/admin/content-types' },
   { label: 'Users', to: '/admin/users', ariaLabel: 'User directory' },
   { label: 'Audit Log', to: '/admin/audit' },
-  { label: 'Search Analytics', to: '/admin/search/analytics' },
+  { label: 'Search Analytics', to: '/admin/search/analytics', feature: clientSettingKeys.featureSearchAnalytics },
   { label: 'Navigation', to: '/admin/navigation', ariaLabel: 'Navigation menu editor' },
   { label: 'Redirects', to: '/admin/redirects', ariaLabel: 'Redirect management' },
   { label: 'Search Pins', to: '/admin/search/pins' },
@@ -64,6 +67,10 @@ export function SkipNav(): JSX.Element {
 }
 
 export function AdminNav(): JSX.Element {
+  // Feature-flagged items (site settings) disappear from the nav while the flag is off.
+  const settings = useClientSettings();
+  const visibleItems = NAV_ITEMS.filter((item) => !item.feature || settings.getBool(item.feature));
+
   return (
     <>
       <nav
@@ -72,7 +79,7 @@ export function AdminNav(): JSX.Element {
       >
         {/* USWDS 3 sidenav: the class goes on the <ul>, items on <li> */}
         <ul className="usa-sidenav">
-          {NAV_ITEMS.map(({ label, to, ariaLabel }) => (
+          {visibleItems.map(({ label, to, ariaLabel }) => (
             <li key={to} className="usa-sidenav__item">
               <NavLink
                 to={to}

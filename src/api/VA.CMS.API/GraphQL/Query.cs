@@ -1,6 +1,7 @@
 using VA.CMS.API.GraphQL.DataLoaders;
 using VA.CMS.API.GraphQL.Types;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.GraphQL;
 
@@ -28,17 +29,18 @@ public class Query
 
     /// <summary>
     /// List content entries with optional status/type filters.
-    /// Returns up to <paramref name="first"/> rows (default 25, max 100).
+    /// Returns up to <paramref name="first"/> rows (default 25, max api.maxPageSize).
     /// </summary>
     public async Task<IReadOnlyList<ContentEntryType>> GetContentEntriesAsync(
         [Service] IContentEntryRepository repo,
+        [Service] ISiteSettingsService settings,
         string? status = null,
         long?   contentTypeId = null,
         int     first  = 25,
         int     page   = 1,
         CancellationToken ct = default)
     {
-        var pageSize = Math.Min(Math.Max(first, 1), 100);
+        var pageSize = settings.ClampPageSize(first);
         var result   = await repo.ListAsync(page, pageSize, status, contentTypeId);
 
         return result.Items
@@ -61,13 +63,14 @@ public class Query
     /// </summary>
     public async Task<IReadOnlyList<MediaAssetType>> GetMediaAssetsAsync(
         [Service] IMediaAssetRepository repo,
+        [Service] ISiteSettingsService settings,
         string? mimeTypePrefix = null,
         string? searchTerm     = null,
         int     first  = 25,
         int     page   = 1,
         CancellationToken ct = default)
     {
-        var pageSize = Math.Min(Math.Max(first, 1), 100);
+        var pageSize = settings.ClampPageSize(first);
         var result   = await repo.ListAsync(page, pageSize, mimeTypePrefix, searchTerm);
 
         return result.Items

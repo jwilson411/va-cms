@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Controllers;
 
@@ -22,28 +23,28 @@ namespace VA.CMS.API.Controllers;
 [Authorize(Policy = CmsRoles.Policies.CanRead)]
 public class NotificationsController : ControllerBase
 {
-    private const int DefaultLimit = 50;
-    private const int MaxLimit     = 200;
-
     private readonly INotificationRepository _notifications;
     private readonly IRbacService _rbac;
+    private readonly ISiteSettingsService _settings;
 
-    public NotificationsController(INotificationRepository notifications, IRbacService rbac)
+    public NotificationsController(INotificationRepository notifications, IRbacService rbac, ISiteSettingsService settings)
     {
         _notifications = notifications;
         _rbac          = rbac;
+        _settings      = settings;
     }
 
     /// <summary>Newest-first inbox for the current user, with the unread count for the badge.</summary>
     [HttpGet]
     [ProducesResponseType(typeof(NotificationListResponse), StatusCodes.Status200OK)]
-    public async Task<IActionResult> List([FromQuery] bool unreadOnly = false, [FromQuery] int limit = DefaultLimit)
+    public async Task<IActionResult> List([FromQuery] bool unreadOnly = false, [FromQuery] int? limit = null)
     {
         var userId = _rbac.GetUserId(User);
         if (userId is null) return Unauthorized();
 
-        limit = Math.Clamp(limit, 1, MaxLimit);
-        var items  = await _notifications.ListForUserAsync(userId.Value, unreadOnly, limit);
+        // Default is notifications.panelLimit; ceiling is api.maxPageSize (issue #147).
+        var effectiveLimit = _settings.ClampPageSize(limit ?? _settings.GetInt(SiteSettingKeys.NotificationsPanelLimit));
+        var items  = await _notifications.ListForUserAsync(userId.Value, unreadOnly, effectiveLimit);
         var unread = await _notifications.UnreadCountAsync(userId.Value);
 
         return Ok(new NotificationListResponse(

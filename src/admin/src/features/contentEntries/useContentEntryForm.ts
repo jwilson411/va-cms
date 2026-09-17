@@ -21,11 +21,11 @@ import type {
   ContentEntryCreateBody,
 } from './formTypes';
 import { authorizedFetch } from '../../lib/authorizedFetch';
+import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
 
 const ADMIN_CONTENT_TYPES_API = '/api/v1/admin/content-types';
 const CONTENT_API = '/api/v1/content';
 
-const AUTO_SAVE_INTERVAL_MS = 60_000;
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
@@ -171,6 +171,7 @@ export function useContentEntryForm({
   onCreated,
 }: UseContentEntryFormOptions): UseContentEntryFormResult {
   const queryClient = useQueryClient();
+  const clientSettings = useClientSettings();
   const isEditMode = entryId !== undefined;
 
   // ── Schema query ────────────────────────────────────────────────────────────
@@ -405,16 +406,19 @@ export function useContentEntryForm({
     [validateAll, updateMutation, updateSlugMutation, createMutation, existingEntry, contentTypeName],
   );
 
-  // ── Auto-save every 60 seconds (edit mode only) ──────────────────────────────
+  // ── Auto-save every admin.autoSaveIntervalSeconds (site setting, default 60; 0 = off) ──
+  // Edit mode only.
+  const autoSaveSeconds = clientSettings.getInt(clientSettingKeys.adminAutoSaveIntervalSeconds);
   useEffect(() => {
     if (!isEditMode && savedEntryIdRef.current === undefined) return;
+    if (autoSaveSeconds <= 0) return;
 
     const interval = setInterval(() => {
       void doSave(true /* silent */);
-    }, AUTO_SAVE_INTERVAL_MS);
+    }, autoSaveSeconds * 1000);
 
     return () => clearInterval(interval);
-  }, [isEditMode, doSave]);
+  }, [isEditMode, doSave, autoSaveSeconds]);
 
   // ── Explicit save ────────────────────────────────────────────────────────────
   const handleSave = useCallback(async (): Promise<void> => {

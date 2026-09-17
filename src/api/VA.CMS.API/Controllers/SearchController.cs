@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Controllers;
 
@@ -28,11 +29,13 @@ namespace VA.CMS.API.Controllers;
 [AllowAnonymous]
 public class SearchController : ControllerBase
 {
-    private readonly ISearchRepository _search;
+    private readonly ISearchRepository    _search;
+    private readonly ISiteSettingsService _settings;
 
-    public SearchController(ISearchRepository search)
+    public SearchController(ISearchRepository search, ISiteSettingsService settings)
     {
-        _search = search;
+        _search   = search;
+        _settings = settings;
     }
 
     /// <summary>
@@ -45,7 +48,7 @@ public class SearchController : ControllerBase
     ///   to         — optional; ISO 8601 UTC date — only entries published on/before.
     ///   tag        — optional; taxonomy term ID — only entries tagged with this term.
     ///   page       — optional; 1-based page number (default 1).
-    ///   pageSize   — optional; results per page, 1–100 (default 25).
+    ///   pageSize   — optional; results per page, 1–search.maxPageSize (default search.defaultPageSize).
     ///
     /// Response body:
     ///   {
@@ -81,14 +84,13 @@ public class SearchController : ControllerBase
         [FromQuery] DateTime? to = null,
         [FromQuery] long? tag = null,
         [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 25)
+        [FromQuery] int? pageSize = null)
     {
         if (string.IsNullOrWhiteSpace(q))
             return BadRequest(new { error = "Query parameter 'q' is required." });
 
         if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 1;
-        if (pageSize > 100) pageSize = 100;
+        var effectivePageSize = _settings.ClampSearchPageSize(pageSize);
 
         var results = await _search.FullTextSearchAsync(
             q.Trim(),
@@ -97,18 +99,19 @@ public class SearchController : ControllerBase
             toDate: to,
             tagTermId: tag,
             page: page,
-            pageSize: pageSize);
+            pageSize: effectivePageSize);
 
-        // Log every search query for admin analytics (issue #49 / FR-SEARCH-02).
-        // Fire-and-forget: we do not await to avoid delaying the HTTP response.
-        // A failure here does not affect the search result.
-        _ = _search.LogQueryAsync(q.Trim(), (int)results.TotalItems);
+        // Log every search query for admin analytics (issue #49 / FR-SEARCH-02) unless
+        // features.searchAnalytics is off. Fire-and-forget: we do not await to avoid delaying
+        // the HTTP response. A failure here does not affect the search result.
+        if (_settings.GetBool(SiteSettingKeys.FeatureSearchAnalytics))
+            _ = _search.LogQueryAsync(q.Trim(), (int)results.TotalItems);
 
         return Ok(new SearchResponse
         {
             Query      = q.Trim(),
             Page       = page,
-            PageSize   = pageSize,
+            PageSize   = effectivePageSize,
             TotalItems = (int)results.TotalItems,
             Items      = results.Items.Select(r => new SearchResultDto
             {

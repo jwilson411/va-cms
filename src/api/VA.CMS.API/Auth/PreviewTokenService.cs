@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
+using VA.CMS.Infrastructure.Settings;
+
 namespace VA.CMS.API.Auth;
 
 /// <summary>
@@ -29,11 +31,13 @@ public interface IPreviewTokenService
 
 public sealed class PreviewTokenService : IPreviewTokenService
 {
-    private const int TtlMinutes = 60;
     private readonly byte[] _keyBytes;
+    private readonly ISiteSettingsService _settings;
 
-    public PreviewTokenService(JwtOptions jwtOptions)
+    /// <param name="settings">Source of auth.previewTokenMinutes (issue #146); code default when null.</param>
+    public PreviewTokenService(JwtOptions jwtOptions, ISiteSettingsService? settings = null)
     {
+        _settings = settings ?? StaticSiteSettings.Defaults;
         // Derive a separate subkey so preview tokens can't be confused with user JWTs
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(jwtOptions.SigningKey));
         _keyBytes = hmac.ComputeHash(Encoding.UTF8.GetBytes("preview-token-subkey-v1"));
@@ -44,7 +48,7 @@ public sealed class PreviewTokenService : IPreviewTokenService
         var payload = new PreviewTokenPayload
         {
             EntryId = entryId,
-            Exp     = DateTimeOffset.UtcNow.AddMinutes(TtlMinutes).ToUnixTimeSeconds(),
+            Exp     = DateTimeOffset.UtcNow.AddMinutes(Math.Max(1, _settings.GetInt(SiteSettingKeys.AuthPreviewTokenMinutes))).ToUnixTimeSeconds(),
             Nonce   = Base64UrlEncode(RandomNumberGenerator.GetBytes(8)),
         };
 

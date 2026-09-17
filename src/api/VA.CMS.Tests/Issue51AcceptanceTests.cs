@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Controllers.Admin;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Tests;
 
@@ -33,7 +34,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
 
     private ISearchAnalyticsRepository Repo() => new SearchAnalyticsRepository(fixture.CreateDb());
 
-    private SearchAnalyticsController Controller() => new SearchAnalyticsController(Repo());
+    private SearchAnalyticsController Controller() => new SearchAnalyticsController(Repo(), StaticSiteSettings.Defaults);
 
     // ── AC1a: V026 migration — SPs and table exist ────────────────────────────
 

@@ -25,6 +25,7 @@ import { UswdsHeader, NavItem } from '@/components/uswds/UswdsHeader';
 import { UswdsFooter } from '@/components/uswds/UswdsFooter';
 import { UswdsIdentifier } from '@/components/uswds/UswdsIdentifier';
 import { UswdsBreadcrumb, BreadcrumbItem } from '@/components/uswds/UswdsBreadcrumb';
+import { DEFAULT_SITE_SETTINGS, type SiteChrome } from '@/lib/cms/settings';
 
 /** A media asset reference returned by the API for featuredImage fields */
 export interface FeaturedImage {
@@ -69,6 +70,8 @@ export interface NewsArticleTemplateProps {
   breadcrumbs?: BreadcrumbItem[];
   /** CMS-managed primary navigation items for the header */
   navigation: NavItem[];
+  /** Site chrome (titles, agency, banner language) from CMS settings; code defaults when omitted. */
+  site?: SiteChrome;
   /** Canonical URL of this article (used in JSON-LD) */
   canonicalUrl?: string;
 }
@@ -96,6 +99,7 @@ function formatPublishDate(isoDate: string): string {
  */
 function buildArticleJsonLd(props: NewsArticleTemplateProps): string {
   const { title, author, publishedAt, featuredImage, canonicalUrl } = props;
+  const site = props.site ?? DEFAULT_SITE_SETTINGS;
 
   const jsonLd: Record<string, unknown> = {
     '@context': 'https://schema.org',
@@ -114,8 +118,8 @@ function buildArticleJsonLd(props: NewsArticleTemplateProps): string {
     ...(canonicalUrl && { url: canonicalUrl }),
     publisher: {
       '@type': 'Organization',
-      name: 'Department of Veterans Affairs',
-      url: 'https://www.va.gov',
+      name: site.agencyName,
+      url: site.agencyHref,
     },
   };
 
@@ -126,7 +130,7 @@ function buildArticleJsonLd(props: NewsArticleTemplateProps): string {
  * Full-page News Article layout.
  *
  * Layout structure:
- *   <UswdsBanner />       — top-of-page official gov banner (mandatory)
+ *   <UswdsBanner lang={site.bannerLang} />       — top-of-page official gov banner (mandatory)
  *   <UswdsHeader />       — primary nav (mandatory)
  *   <main #main-content>
  *     <grid-container>
@@ -154,6 +158,7 @@ export function NewsArticleTemplate({
   tags = [],
   breadcrumbs = [],
   navigation,
+  site = DEFAULT_SITE_SETTINGS,
   canonicalUrl,
 }: NewsArticleTemplateProps): React.ReactElement {
   const jsonLd = buildArticleJsonLd({
@@ -165,6 +170,7 @@ export function NewsArticleTemplate({
     tags,
     breadcrumbs,
     navigation,
+    site,
     canonicalUrl,
   });
 
@@ -178,11 +184,12 @@ export function NewsArticleTemplate({
       />
 
       {/* Mandatory: Official government banner — top of every public page */}
-      <UswdsBanner />
+      <UswdsBanner lang={site.bannerLang} />
 
       {/* Mandatory: USWDS extended header with CMS-managed navigation */}
       <UswdsHeader
-        siteTitle="Department of Veterans Affairs"
+        siteTitle={site.siteTitle}
+        showSearch={site.publicSearchEnabled}
         navigation={navigation}
       />
 
@@ -269,15 +276,17 @@ export function NewsArticleTemplate({
 
       {/* Mandatory: USWDS big footer */}
       <UswdsFooter
-        agencyName="Department of Veterans Affairs"
-        agencyHref="https://www.va.gov"
+        agencyName={site.agencyName}
+        agencyHref={site.agencyHref}
+        agencyLogoSrc={site.agencyLogoSrc || undefined}
       />
 
       {/* Mandatory: USWDS Identifier — required by 21st Century IDEA Act */}
       <UswdsIdentifier
-        agencyName="Department of Veterans Affairs"
-        agencyShortName="VA"
-        agencyHref="https://www.va.gov"
+        agencyName={site.agencyName}
+        agencyShortName={site.agencyShortName}
+        agencyHref={site.agencyHref}
+        agencyLogoSrc={site.agencyLogoSrc || undefined}
       />
     </>
   );

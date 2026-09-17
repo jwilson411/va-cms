@@ -20,21 +20,25 @@ import {
   type NotificationItem,
 } from './useNotifications';
 import { formatRelativeTime } from './relativeTime';
+import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
 
 const PANEL_ID = 'va-cms-notification-panel';
-const PANEL_LIMIT = 20;
 
 export function entryLink(n: NotificationItem): string {
   return `/admin/content/${n.contentEntryId}/edit`;
 }
 
-export function NotificationBell(): JSX.Element {
+export function NotificationBell(): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
   const markedRef = useRef<Set<number>>(new Set());
 
-  const { data, isLoading, isError } = useNotifications(PANEL_LIMIT);
+  // features.notifications (site setting) hides the bell and stops polling.
+  const settings = useClientSettings();
+  const enabled = settings.getBool(clientSettingKeys.featureNotifications);
+
+  const { data, isLoading, isError } = useNotifications(undefined, { enabled });
   const markRead = useMarkNotificationsRead();
   const markAllRead = useMarkAllNotificationsRead();
 
@@ -82,6 +86,8 @@ export function NotificationBell(): JSX.Element {
     unreadCount === 0
       ? 'Notifications'
       : `Notifications, ${unreadCount} unread`;
+
+  if (!enabled) return null;
 
   return (
     <div className="va-cms-notifications" ref={containerRef} data-testid="notification-bell">

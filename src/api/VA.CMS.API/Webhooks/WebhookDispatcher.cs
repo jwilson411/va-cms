@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Webhooks;
 
@@ -17,12 +18,20 @@ public static class WebhookEvents
     public const string ContentArchived    = "content.archived";
     public const string MediaUploaded      = "media.uploaded";
     public const string NavigationUpdated  = "navigation.updated";
+    /// <summary>A site setting was changed or reset (epic #141). Payload: { key, scope }.</summary>
+    public const string SettingsUpdated    = "settings.updated";
+
+    public static readonly IReadOnlyList<string> All = new[]
+    {
+        ContentPublished, ContentUnpublished, ContentArchived, MediaUploaded, NavigationUpdated, SettingsUpdated,
+    };
 }
 
 /// <summary>
 /// Dispatches webhook deliveries for CMS events.
 /// Signs each payload with HMAC-SHA256 in X-CMS-Signature header.
-/// Retries up to 3 times with exponential backoff on non-2xx responses.
+/// Retries on non-2xx responses; attempts, delays and timeout are the webhooks.* site
+/// settings (issue #147), defaults 3 attempts / 5 s, 25 s / 15 s.
 /// Issue #54 — BRD FR-DEV-07.
 /// </summary>
 public interface IWebhookDispatcher
@@ -40,24 +49,32 @@ public class WebhookDispatcher : IWebhookDispatcher
     private readonly IWebhookRepository _repo;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<WebhookDispatcher> _logger;
-
-    // Retry: up to 3 attempts; delays: 5s, 25s after first failure
-    private static readonly TimeSpan[] RetryDelays =
-    {
-        TimeSpan.FromSeconds(5),
-        TimeSpan.FromSeconds(25),
-    };
-    private const int MaxAttempts = 3;
+    private readonly ISiteSettingsService _settings;
 
     public WebhookDispatcher(
         IWebhookRepository repo,
         IHttpClientFactory httpClientFactory,
-        ILogger<WebhookDispatcher> logger)
+        ILogger<WebhookDispatcher> logger,
+        ISiteSettingsService? settings = null)
     {
         _repo              = repo;
         _httpClientFactory = httpClientFactory;
         _logger            = logger;
+        _settings          = settings ?? StaticSiteSettings.Defaults;
     }
+
+    private int MaxAttempts => Math.Max(1, _settings.GetInt(SiteSettingKeys.WebhooksMaxAttempts));
+
+    /// <summary>Delay before retry number <paramref name="attempt"/> (1-based). The last configured delay repeats.</summary>
+    private TimeSpan RetryDelay(int attempt)
+    {
+        var delays = _settings.GetIntList(SiteSettingKeys.WebhooksRetryDelaysSeconds);
+        if (delays.Count == 0) return TimeSpan.FromSeconds(5);
+        var idx = Math.Min(attempt - 1, delays.Count - 1);
+        return TimeSpan.FromSeconds(Math.Max(0, delays[idx]));
+    }
+
+    private TimeSpan Timeout => TimeSpan.FromSeconds(Math.Max(1, _settings.GetInt(SiteSettingKeys.WebhooksTimeoutSeconds)));
 
     /// <inheritdoc />
     public async Task DispatchAsync(string eventName, object payload, CancellationToken ct = default)
@@ -79,8 +96,9 @@ public class WebhookDispatcher : IWebhookDispatcher
         string payloadJson,
         CancellationToken ct)
     {
-        var attempt = 0;
-        while (attempt < MaxAttempts)
+        var attempt     = 0;
+        var maxAttempts = MaxAttempts;   // snapshot so one delivery sees a consistent policy
+        while (attempt < maxAttempts)
         {
             attempt++;
             var (statusCode, errorMsg) = await TrySendAsync(target.Url, target.Secret ?? string.Empty, eventName, payloadJson, ct);
@@ -107,18 +125,17 @@ public class WebhookDispatcher : IWebhookDispatcher
 
             _logger.LogWarning(
                 "Webhook {WebhookId} delivery failed on attempt {Attempt}/{MaxAttempts} — HTTP {Status}: {Error}",
-                target.Id, attempt, MaxAttempts, statusCode, errorMsg);
+                target.Id, attempt, maxAttempts, statusCode, errorMsg);
 
-            if (attempt < MaxAttempts)
+            if (attempt < maxAttempts)
             {
-                var delay = RetryDelays[attempt - 1]; // attempt 1→5s, attempt 2→25s
-                await Task.Delay(delay, ct);
+                await Task.Delay(RetryDelay(attempt), ct);   // defaults: attempt 1→5s, attempt 2→25s
             }
         }
 
         _logger.LogError(
             "Webhook {WebhookId} exhausted {MaxAttempts} attempts for event {Event}. Giving up.",
-            target.Id, MaxAttempts, eventName);
+            target.Id, maxAttempts, eventName);
     }
 
     private async Task<(int? StatusCode, string? ErrorMessage)> TrySendAsync(
@@ -136,7 +153,11 @@ public class WebhookDispatcher : IWebhookDispatcher
             request.Headers.TryAddWithoutValidation("X-CMS-Signature", $"sha256={signature}");
             request.Headers.TryAddWithoutValidation("X-CMS-Event", eventName);   // lets one endpoint handle several events
 
-            using var response = await client.SendAsync(request, ct);
+            // Per-delivery timeout (webhooks.timeoutSeconds) — the named client is created once at
+            // startup, so its Timeout cannot follow the setting; a linked token can.
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(Timeout);
+            using var response = await client.SendAsync(request, timeoutCts.Token);
             return ((int)response.StatusCode, null);
         }
         catch (Exception ex)

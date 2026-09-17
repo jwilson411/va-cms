@@ -21,6 +21,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { fetchStandardPage, extractH2Sections, injectH2Ids } from '@/lib/cms/content';
 import { fetchPrimaryNav } from '@/lib/cms/navigation';
+import { fetchSiteSettings } from '@/lib/cms/settings';
 import { StandardPageTemplate } from '@/components/templates/StandardPageTemplate';
 import { BreadcrumbItem } from '@/components/uswds/UswdsBreadcrumb';
 
@@ -36,11 +37,11 @@ const slugFromParams = (params: PageProps['params']): string => params.slug.join
  * Runs on the server alongside the page component.
  */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const page = await fetchStandardPage(slugFromParams(params));
+  const [page, site] = await Promise.all([fetchStandardPage(slugFromParams(params)), fetchSiteSettings()]);
   if (!page) return { title: 'Page Not Found' };
 
   return {
-    title: `${page.fields.title} | Department of Veterans Affairs`,
+    title: `${page.fields.title} | ${site.siteTitle}`,
     description: undefined, // Standard pages do not have a summary field in #58 scope
   };
 }
@@ -55,9 +56,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  * 5. Renders StandardPageTemplate with all required USWDS chrome
  */
 export default async function StandardPage({ params }: PageProps): Promise<React.ReactElement> {
-  const [page, navigation] = await Promise.all([
+  const [page, navigation, site] = await Promise.all([
     fetchStandardPage(slugFromParams(params)),
     fetchPrimaryNav(),
+    fetchSiteSettings(),
   ]);
 
   if (!page) {
@@ -91,6 +93,7 @@ export default async function StandardPage({ params }: PageProps): Promise<React
       breadcrumbs={breadcrumbs}
       sections={sections}
       navigation={navigation}
+      site={site}
     />
   );
 }

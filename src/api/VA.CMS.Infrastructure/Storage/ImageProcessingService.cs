@@ -1,11 +1,12 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Webp;
 using SixLabors.ImageSharp.Processing;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Infrastructure.Storage;
 
 /// <summary>
-/// Processes image uploads: resizes to max 1920px wide (preserving aspect ratio)
+/// Processes image uploads: resizes to media.imageMaxWidthPx wide (default 1920, preserving aspect ratio)
 /// and encodes a WebP variant.
 ///
 /// Issue #41 — BRD FR-MEDIA-02.
@@ -39,7 +40,11 @@ public interface IImageProcessingService
 /// <inheritdoc />
 public class ImageProcessingService : IImageProcessingService
 {
-    private const int MaxWidthPx = 1920;
+    private readonly ISiteSettingsService _settings;
+
+    /// <param name="settings">Source of media.imageMaxWidthPx / media.webpQuality (issue #145); code defaults when null.</param>
+    public ImageProcessingService(ISiteSettingsService? settings = null)
+        => _settings = settings ?? StaticSiteSettings.Defaults;
 
     /// <inheritdoc />
     public bool ShouldProcess(string mimeType)
@@ -55,22 +60,25 @@ public class ImageProcessingService : IImageProcessingService
     {
         using var image = Image.Load(imageBytes);
 
+        var maxWidthPx = Math.Max(1, _settings.GetInt(SiteSettingKeys.MediaImageMaxWidthPx));
+        var quality    = Math.Clamp(_settings.GetInt(SiteSettingKeys.MediaWebpQuality), 1, 100);
+
         // Resize if the width exceeds the maximum. Height is computed automatically
         // by ImageSharp to preserve aspect ratio when only Width is supplied.
-        if (image.Width > MaxWidthPx)
+        if (image.Width > maxWidthPx)
         {
             image.Mutate(ctx =>
                 ctx.Resize(new ResizeOptions
                 {
-                    Size = new Size(MaxWidthPx, 0),   // 0 height = auto-calculate
+                    Size = new Size(maxWidthPx, 0),   // 0 height = auto-calculate
                     Mode = ResizeMode.Max,
                 }));
         }
 
-        // Encode as WebP (lossless=false, quality=80 — good balance for web assets)
+        // Encode as lossy WebP at the configured quality (default 80 — good balance for web assets)
         var encoder = new WebpEncoder
         {
-            Quality = 80,
+            Quality = quality,
             FileFormat = WebpFileFormatType.Lossy,
         };
 

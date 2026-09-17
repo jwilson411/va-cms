@@ -41,6 +41,12 @@ describe('POST /api/revalidate', () => {
     expect(revalidateTag).toHaveBeenCalledWith('cms-primary-nav');
   });
 
+  it('drops the site settings tag for settings.updated (epic #141)', async () => {
+    const res = await POST(req({ key: 'site.title', scope: 'Public' }, { 'x-cms-event': 'settings.updated' }));
+    expect(res.status).toBe(200);
+    expect(revalidateTag).toHaveBeenCalledWith('cms-site-settings');
+  });
+
   it('rejects a bad signature when REVALIDATE_SECRET is set', async () => {
     process.env.REVALIDATE_SECRET = 's3cret';
     const body = { slug: 'x' };

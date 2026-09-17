@@ -11,8 +11,20 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { AdminNav, SkipNav } from './AdminNav';
+
+// Site settings (epic #141): render with the code defaults, no QueryClient needed.
+import * as siteSettings from '../features/siteSettings/useClientSettings';
+
+vi.mock('../features/siteSettings/useClientSettings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../features/siteSettings/useClientSettings')>();
+  return {
+    ...actual,
+    useClientSettings: vi.fn(() => actual.buildClientSettings({}, { isLoading: false, isError: false })),
+  };
+});
+
 
 function renderNav(initialPath = '/admin') {
   return render(
@@ -66,5 +78,18 @@ describe('AdminNav', () => {
     renderNav('/admin/content');
     const mediaLink = screen.getByRole('link', { name: 'Media library' });
     expect(mediaLink).not.toHaveAttribute('aria-current');
+  });
+
+  it('hides the Search Analytics link while features.searchAnalytics is off (epic #141)', () => {
+    vi.mocked(siteSettings.useClientSettings).mockReturnValueOnce(
+      siteSettings.buildClientSettings({ 'features.searchAnalytics': 'false' }, { isLoading: false, isError: false }),
+    );
+    render(
+      <MemoryRouter>
+        <AdminNav />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('link', { name: /search analytics/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /audit log/i })).toBeDefined();
   });
 });

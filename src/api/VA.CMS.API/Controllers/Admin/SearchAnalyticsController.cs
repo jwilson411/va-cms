@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Controllers.Admin;
 
@@ -26,10 +27,12 @@ namespace VA.CMS.API.Controllers.Admin;
 public class SearchAnalyticsController : ControllerBase
 {
     private readonly ISearchAnalyticsRepository _analytics;
+    private readonly ISiteSettingsService       _settings;
 
-    public SearchAnalyticsController(ISearchAnalyticsRepository analytics)
+    public SearchAnalyticsController(ISearchAnalyticsRepository analytics, ISiteSettingsService settings)
     {
         _analytics = analytics;
+        _settings  = settings;
     }
 
     // ── Dashboard summary widget ──────────────────────────────────────────────
@@ -81,7 +84,7 @@ public class SearchAnalyticsController : ControllerBase
         [FromQuery] int page      = 1,
         [FromQuery] int pageSize  = 50)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        pageSize = _settings.ClampPageSize(pageSize);
         page     = Math.Max(1, page);
         daysBack = Math.Clamp(daysBack, 1, 365);
 

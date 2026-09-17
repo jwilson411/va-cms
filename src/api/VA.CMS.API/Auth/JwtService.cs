@@ -3,11 +3,12 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using VA.CMS.Infrastructure.Data.Pocos;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Auth;
 
 /// <summary>
-/// Issues HS256 JWT access tokens (15-minute lifetime) from CMS user/role data.
+/// Issues HS256 JWT access tokens (lifetime = auth.accessTokenMinutes, default 15) from CMS user/role data.
 /// Does NOT depend on Azure AD — the AD side is handled by Microsoft.Identity.Web
 /// in AuthController. This service only handles JWT minting and validation.
 /// </summary>
@@ -27,11 +28,14 @@ public sealed class JwtService : IJwtService
 {
     private readonly JwtOptions _options;
     private readonly SymmetricSecurityKey _signingKey;
+    private readonly ISiteSettingsService _settings;
 
-    public JwtService(JwtOptions options)
+    /// <param name="settings">Source of auth.accessTokenMinutes (issue #146); code default when null.</param>
+    public JwtService(JwtOptions options, ISiteSettingsService? settings = null)
     {
         _options = options;
         _signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.SigningKey));
+        _settings = settings ?? StaticSiteSettings.Defaults;
     }
 
     public string IssueAccessToken(User user, IEnumerable<UserRoleAssignment> roles)
@@ -69,7 +73,7 @@ public sealed class JwtService : IJwtService
             audience: _options.Audience,
             claims:   claims,
             notBefore: DateTime.UtcNow,
-            expires:   DateTime.UtcNow.AddMinutes(15),
+            expires:   DateTime.UtcNow.AddMinutes(Math.Max(1, _settings.GetInt(SiteSettingKeys.AuthAccessTokenMinutes))),
             signingCredentials: creds
         );
 

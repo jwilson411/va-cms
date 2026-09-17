@@ -6,6 +6,7 @@ using VA.CMS.API.GraphQL.DataLoaders;
 using VA.CMS.API.GraphQL.Types;
 using VA.CMS.Infrastructure.Data;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Tests;
 
@@ -48,6 +49,8 @@ public class Issue53AcceptanceTests(DatabaseFixture fixture)
         services.AddScoped<IMediaAssetRepository,   MediaAssetRepository>();
         services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>();
         services.AddScoped<ITaxonomyRepository,      TaxonomyRepository>();
+        // Page-size clamp comes from site settings (issue #147); defaults are enough here.
+        services.AddSingleton<ISiteSettingsService>(StaticSiteSettings.Defaults);
 
         services
             .AddGraphQLServer()
@@ -189,6 +192,8 @@ public class Issue53AcceptanceTests(DatabaseFixture fixture)
         services.AddScoped<IMediaAssetRepository,   MediaAssetRepository>();
         services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>();
         services.AddScoped<ITaxonomyRepository,      TaxonomyRepository>();
+        // Page-size clamp comes from site settings (issue #147); defaults are enough here.
+        services.AddSingleton<ISiteSettingsService>(StaticSiteSettings.Defaults);
 
         services
             .AddGraphQLServer()

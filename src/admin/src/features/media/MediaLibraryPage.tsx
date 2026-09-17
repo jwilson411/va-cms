@@ -15,6 +15,7 @@ import React, { useState, useCallback, useId } from 'react';
 import { useMediaAssets, useMediaDetail, useUpdateMediaMetadata } from './useMediaAssets';
 import { MediaUploadForm } from './MediaUploadForm';
 import type { MediaAssetSummary, MediaDetailDto } from './mediaTypes';
+import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,8 @@ const MIME_OPTIONS: { label: string; value: string }[] = [
  * and detail side-panel. Designed for the admin SPA at /admin/media.
  */
 export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Element {
+  const clientSettings = useClientSettings();
+  const uploadEnabled = clientSettings.getBool(clientSettingKeys.featureMediaUpload);
   const [viewMode, setViewMode]     = useState<ViewMode>('grid');
   const [search, setSearch]         = useState('');
   const [submittedSearch, setSubmittedSearch] = useState('');
@@ -111,8 +114,16 @@ export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Eleme
     <div className="grid-container" data-testid="media-library-page">
       <h1 className="page-heading">Media Library</h1>
 
-      {/* Upload — POST /api/v1/media/upload (issue #40) */}
-      <MediaUploadForm onUploaded={(id) => setSelectedId(id)} />
+      {/* Upload — POST /api/v1/media/upload (issue #40); hidden while features.mediaUpload is off */}
+      {uploadEnabled ? (
+        <MediaUploadForm onUploaded={(id) => setSelectedId(id)} />
+      ) : (
+        <div className="usa-alert usa-alert--info usa-alert--slim margin-bottom-2" data-testid="media-upload-disabled">
+          <div className="usa-alert__body">
+            <p className="usa-alert__text">Media uploads are currently disabled by a site administrator.</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       <div className="usa-prose display-flex flex-align-center flex-wrap margin-bottom-2">

@@ -16,8 +16,8 @@
 
 import React, { useState } from 'react';
 import { useAuditLog, buildExportUrl, type AuditLogFilters } from './useAuditLog';
+import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
 
-const PAGE_SIZE = 50;
 
 interface FilterState {
   actorId: string;
@@ -46,6 +46,9 @@ function filtersToQuery(f: FilterState): AuditLogFilters {
 }
 
 export function AuditLogPage(): JSX.Element {
+  // Rows per page: admin.auditLogPageSize (site setting, default 50)
+  const clientSettings = useClientSettings();
+  const PAGE_SIZE = Math.max(1, clientSettings.getInt(clientSettingKeys.adminAuditLogPageSize));
   const [draft, setDraft]       = useState<FilterState>(EMPTY_FILTERS);
   const [applied, setApplied]   = useState<AuditLogFilters>({});
   const [page, setPage]         = useState(1);

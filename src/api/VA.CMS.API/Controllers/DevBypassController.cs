@@ -127,7 +127,7 @@ public class DevBypassController : ControllerBase
         // Issue refresh token in httpOnly cookie (8 hr) — same as the AD callback,
         // so the SPA can silently refresh on reload instead of bouncing to login.
         var refreshToken = _refreshTokens.Issue(userId);
-        var cookieOpts   = AuthCookieHelper.BuildCookieOptions(isProduction: _env.IsProduction());
+        var cookieOpts   = AuthCookieHelper.BuildCookieOptions(isProduction: _env.IsProduction(), lifetime: _refreshTokens.Lifetime);
         Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, refreshToken, cookieOpts);
 
         _logger.LogInformation("DevBypass: issued JWT for '{Upn}'.", upn);

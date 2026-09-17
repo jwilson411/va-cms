@@ -24,6 +24,7 @@ import { UswdsHeader, NavItem } from '@/components/uswds/UswdsHeader';
 import { UswdsFooter } from '@/components/uswds/UswdsFooter';
 import { UswdsIdentifier } from '@/components/uswds/UswdsIdentifier';
 import { UswdsBreadcrumb, BreadcrumbItem } from '@/components/uswds/UswdsBreadcrumb';
+import { DEFAULT_SITE_SETTINGS, type SiteChrome } from '@/lib/cms/settings';
 
 /** A single content entry associated with this term */
 export interface TermEntryItem {
@@ -48,6 +49,8 @@ export interface TermLandingPageTemplateProps {
   totalEntries: number;
   /** CMS-managed primary navigation items for the header */
   navigation: NavItem[];
+  /** Site chrome (titles, agency, banner language) from CMS settings; code defaults when omitted. */
+  site?: SiteChrome;
   /** Optional breadcrumb trail */
   breadcrumbs?: BreadcrumbItem[];
 }
@@ -56,7 +59,7 @@ export interface TermLandingPageTemplateProps {
  * Full-page Term Landing Page layout.
  *
  * Layout structure:
- *   <UswdsBanner />              — top-of-page official gov banner (mandatory)
+ *   <UswdsBanner lang={site.bannerLang} />              — top-of-page official gov banner (mandatory)
  *   <UswdsHeader />              — primary nav (mandatory)
  *   <main #main-content>
  *     <grid-container>
@@ -78,16 +81,18 @@ export function TermLandingPageTemplate({
   entries,
   totalEntries,
   navigation,
+  site = DEFAULT_SITE_SETTINGS,
   breadcrumbs = [],
 }: TermLandingPageTemplateProps): React.ReactElement {
   return (
     <>
       {/* Mandatory: Official government banner — top of every public page */}
-      <UswdsBanner />
+      <UswdsBanner lang={site.bannerLang} />
 
       {/* Mandatory: USWDS extended header with CMS-managed navigation */}
       <UswdsHeader
-        siteTitle="Department of Veterans Affairs"
+        siteTitle={site.siteTitle}
+        showSearch={site.publicSearchEnabled}
         navigation={navigation}
       />
 
@@ -190,15 +195,17 @@ export function TermLandingPageTemplate({
 
       {/* Mandatory: USWDS big footer */}
       <UswdsFooter
-        agencyName="Department of Veterans Affairs"
-        agencyHref="https://www.va.gov"
+        agencyName={site.agencyName}
+        agencyHref={site.agencyHref}
+        agencyLogoSrc={site.agencyLogoSrc || undefined}
       />
 
       {/* Mandatory: USWDS Identifier — required by 21st Century IDEA Act */}
       <UswdsIdentifier
-        agencyName="Department of Veterans Affairs"
-        agencyShortName="VA"
-        agencyHref="https://www.va.gov"
+        agencyName={site.agencyName}
+        agencyShortName={site.agencyShortName}
+        agencyHref={site.agencyHref}
+        agencyLogoSrc={site.agencyLogoSrc || undefined}
       />
     </>
   );

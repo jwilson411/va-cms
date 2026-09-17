@@ -7,15 +7,18 @@ namespace VA.CMS.API.Auth;
 public static class AuthCookieHelper
 {
     public const string RefreshTokenCookieName = "cms_rt";
-    private static readonly TimeSpan Lifetime = TimeSpan.FromHours(8);
 
-    public static CookieOptions BuildCookieOptions(bool isProduction) => new()
+    /// <summary>Code default; the live value is auth.refreshTokenHours (issue #146).</summary>
+    public static readonly TimeSpan DefaultLifetime = TimeSpan.FromHours(8);
+
+    /// <param name="lifetime">Cookie Max-Age; should match the refresh token lifetime. Defaults to 8 h.</param>
+    public static CookieOptions BuildCookieOptions(bool isProduction, TimeSpan? lifetime = null) => new()
     {
         HttpOnly  = true,
         Secure    = isProduction,  // in dev we may run over HTTP
         SameSite  = SameSiteMode.Strict,
         Path      = "/api/auth",   // scoped so only auth endpoints receive the cookie
-        MaxAge    = Lifetime,
+        MaxAge    = lifetime ?? DefaultLifetime,
         IsEssential = true,
     };
 

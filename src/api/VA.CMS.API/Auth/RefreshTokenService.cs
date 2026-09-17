@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Auth;
 
@@ -6,10 +7,13 @@ namespace VA.CMS.API.Auth;
 /// Manages opaque refresh tokens stored in httpOnly cookies.
 /// The token itself is a cryptographically random 256-bit value (stored in-memory
 /// in this implementation — a future story will persist it to the DB for revocation).
-/// Token lifetime: 8 hours.
+/// Token lifetime: auth.refreshTokenHours (default 8).
 /// </summary>
 public interface IRefreshTokenService
 {
+    /// <summary>Current refresh token lifetime; also used for the cookie Max-Age.</summary>
+    TimeSpan Lifetime { get; }
+
     /// <summary>Generates a new refresh token string and records its association with a CMS user ID.</summary>
     string Issue(long userId);
 
@@ -29,7 +33,14 @@ public sealed class InMemoryRefreshTokenService : IRefreshTokenService
     private readonly record struct Entry(long UserId, DateTime ExpiresAt);
     private readonly Dictionary<string, Entry> _store = new();
     private readonly object _lock = new();
-    private static readonly TimeSpan Lifetime = TimeSpan.FromHours(8);
+    private readonly ISiteSettingsService _settings;
+
+    /// <param name="settings">Source of auth.refreshTokenHours (issue #146); code default when null.</param>
+    public InMemoryRefreshTokenService(ISiteSettingsService? settings = null)
+        => _settings = settings ?? StaticSiteSettings.Defaults;
+
+    public TimeSpan Lifetime =>
+        TimeSpan.FromHours(Math.Max(1, _settings.GetInt(SiteSettingKeys.AuthRefreshTokenHours)));
 
     public string Issue(long userId)
     {

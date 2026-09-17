@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Controllers.Admin;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Tests;
 
@@ -34,7 +35,7 @@ public class Issue57AcceptanceTests(DatabaseFixture fixture)
 
     private AuditLogController Controller()
     {
-        var ctrl = new AuditLogController(AuditRepo());
+        var ctrl = new AuditLogController(AuditRepo(), StaticSiteSettings.Defaults);
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext(),

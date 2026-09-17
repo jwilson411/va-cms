@@ -1,55 +1,32 @@
-using Microsoft.AspNetCore.Http;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Infrastructure.Storage;
 
 /// <summary>
 /// MIME type allow-list for file uploads.
 /// BRD FR-SECURITY-06: uploads validated against an allow-list of permitted MIME types.
+///
+/// The list itself is the <c>media.allowedMimeTypes</c> site setting (issue #145); the code
+/// default lives in <see cref="SiteSettingDefinitions.DefaultAllowedMimeTypes"/>. The static
+/// overloads evaluate against that default for callers that have no settings service.
 /// </summary>
 public static class MimeAllowList
 {
-    /// <summary>
-    /// Permitted MIME types for upload. Grouped by category.
-    /// Extension validation is layered on top at the service level.
-    /// </summary>
-    private static readonly HashSet<string> AllowedMimeTypes = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> DefaultAllowed =
+        new(SiteSettingDefinitions.DefaultAllowedMimeTypes, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Returns true if the MIME type is on the default allow-list.</summary>
+    public static bool IsAllowed(string mimeType) => IsAllowed(mimeType, DefaultAllowed);
+
+    /// <summary>Returns true if the MIME type is in <paramref name="allowed"/> (case-insensitive).</summary>
+    public static bool IsAllowed(string mimeType, IEnumerable<string> allowed)
     {
-        // Images
-        "image/jpeg",
-        "image/jpg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-        "image/svg+xml",
-        "image/tiff",
-        "image/bmp",
+        if (string.IsNullOrWhiteSpace(mimeType)) return false;
+        return allowed is HashSet<string> set && set.Comparer == StringComparer.OrdinalIgnoreCase
+            ? set.Contains(mimeType)
+            : allowed.Contains(mimeType, StringComparer.OrdinalIgnoreCase);
+    }
 
-        // Documents
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/vnd.ms-powerpoint",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-
-        // Text
-        "text/plain",
-        "text/csv",
-
-        // Archives (limited; virus scan hook is separate)
-        "application/zip",
-        "application/x-zip-compressed",
-    };
-
-    /// <summary>
-    /// Returns true if the MIME type is on the allow-list.
-    /// </summary>
-    public static bool IsAllowed(string mimeType) =>
-        !string.IsNullOrWhiteSpace(mimeType) && AllowedMimeTypes.Contains(mimeType);
-
-    /// <summary>
-    /// Returns all permitted MIME types (for error messages and API docs).
-    /// </summary>
-    public static IReadOnlyCollection<string> Allowed => AllowedMimeTypes;
+    /// <summary>The default permitted MIME types (for error messages and API docs).</summary>
+    public static IReadOnlyCollection<string> Allowed => DefaultAllowed;
 }

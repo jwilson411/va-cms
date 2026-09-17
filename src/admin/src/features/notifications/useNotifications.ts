@@ -1,16 +1,16 @@
 /**
  * API hooks for the in-app notification center (issue #38 — FR-WORKFLOW-02/03).
  *
- * The inbox is polled every POLL_INTERVAL_MS so the bell badge stays current
- * without a socket; every mutation invalidates the same query so the badge and
- * the panel never disagree.
+ * The inbox is polled every notifications.pollIntervalSeconds (site setting, default 30 s)
+ * so the bell badge stays current without a socket; every mutation invalidates the same
+ * query so the badge and the panel never disagree.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { authorizedFetch } from '../../lib/authorizedFetch';
+import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
 
 const NOTIFICATIONS_API = '/api/v1/notifications';
-const POLL_INTERVAL_MS = 30_000;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,15 +45,20 @@ export const notificationKeys = {
 
 // ── useNotifications ──────────────────────────────────────────────────────────
 
-export function useNotifications(limit = 20) {
+export function useNotifications(limit?: number, options: { enabled?: boolean } = {}) {
+  const settings = useClientSettings();
+  const effectiveLimit = limit ?? settings.getInt(clientSettingKeys.notificationsPanelLimit);
+  const pollMs = Math.max(5, settings.getInt(clientSettingKeys.notificationsPollIntervalSeconds)) * 1000;
+
   return useQuery<NotificationList>({
-    queryKey: [...notificationKeys.all(), limit],
+    queryKey: [...notificationKeys.all(), effectiveLimit],
     queryFn: async () => {
-      const res = await authorizedFetch(`${NOTIFICATIONS_API}?limit=${limit}`);
+      const res = await authorizedFetch(`${NOTIFICATIONS_API}?limit=${effectiveLimit}`);
       if (!res.ok) throw new Error(`Notifications fetch failed: ${res.status}`);
       return res.json() as Promise<NotificationList>;
     },
-    refetchInterval: POLL_INTERVAL_MS,
+    enabled: options.enabled ?? true,
+    refetchInterval: pollMs,
     staleTime: 10 * 1000,
   });
 }

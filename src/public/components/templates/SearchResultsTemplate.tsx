@@ -30,6 +30,7 @@ import { SearchFilters } from '@/components/search/SearchFilters';
 import { SearchPagination } from '@/components/search/SearchPagination';
 import type { SearchResultItem } from '@/lib/cms/search';
 import type { ContentTypeOption, TagOption } from '@/components/search/SearchFilters';
+import { DEFAULT_SITE_SETTINGS, type SiteChrome } from '@/lib/cms/settings';
 
 export interface SearchResultsTemplateProps {
   /** Current search query string (may be empty) */
@@ -50,6 +51,8 @@ export interface SearchResultsTemplateProps {
   tags: TagOption[];
   /** CMS-managed primary navigation items for the header */
   navigation: NavItem[];
+  /** Site chrome (titles, agency, banner language) from CMS settings; code defaults when omitted. */
+  site?: SiteChrome;
   /** Currently active filter values (for pre-filling the filter form) */
   selectedType?: string;
   selectedFrom?: string;
@@ -63,7 +66,7 @@ const PAGE_SIZE = 10;
  * Full-page Search Results layout.
  *
  * Layout structure:
- *   <UswdsBanner />             — top-of-page official gov banner (mandatory)
+ *   <UswdsBanner lang={site.bannerLang} />             — top-of-page official gov banner (mandatory)
  *   <UswdsHeader />             — primary nav (mandatory)
  *   <main #main-content>
  *     <grid-container>
@@ -89,6 +92,7 @@ export function SearchResultsTemplate({
   contentTypes,
   tags,
   navigation,
+  site = DEFAULT_SITE_SETTINGS,
   selectedType,
   selectedFrom,
   selectedTo,
@@ -100,11 +104,12 @@ export function SearchResultsTemplate({
   return (
     <>
       {/* Mandatory: Official government banner — top of every public page */}
-      <UswdsBanner />
+      <UswdsBanner lang={site.bannerLang} />
 
       {/* Mandatory: USWDS extended header with CMS-managed navigation */}
       <UswdsHeader
-        siteTitle="Department of Veterans Affairs"
+        siteTitle={site.siteTitle}
+        showSearch={site.publicSearchEnabled}
         navigation={navigation}
       />
 
@@ -242,15 +247,17 @@ export function SearchResultsTemplate({
 
       {/* Mandatory: USWDS big footer */}
       <UswdsFooter
-        agencyName="Department of Veterans Affairs"
-        agencyHref="https://www.va.gov"
+        agencyName={site.agencyName}
+        agencyHref={site.agencyHref}
+        agencyLogoSrc={site.agencyLogoSrc || undefined}
       />
 
       {/* Mandatory: USWDS Identifier — required by 21st Century IDEA Act */}
       <UswdsIdentifier
-        agencyName="Department of Veterans Affairs"
-        agencyShortName="VA"
-        agencyHref="https://www.va.gov"
+        agencyName={site.agencyName}
+        agencyShortName={site.agencyShortName}
+        agencyHref={site.agencyHref}
+        agencyLogoSrc={site.agencyLogoSrc || undefined}
       />
     </>
   );

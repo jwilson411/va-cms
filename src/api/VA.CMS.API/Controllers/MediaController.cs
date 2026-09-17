@@ -5,6 +5,7 @@ using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Storage;
 using VA.CMS.API.Webhooks;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Controllers;
 
@@ -28,6 +29,7 @@ public class MediaController : ControllerBase
     private readonly IRbacService             _rbac;
     private readonly IStorageBackend          _storage;
     private readonly IWebhookBackgroundDispatcher _webhooks;
+    private readonly ISiteSettingsService     _settings;
 
     public MediaController(
         IMediaUploadService      uploader,
@@ -35,8 +37,10 @@ public class MediaController : ControllerBase
         IMediaExtendedRepository extended,
         IRbacService             rbac,
         IStorageBackend          storage,
-        IWebhookBackgroundDispatcher webhooks)
+        IWebhookBackgroundDispatcher webhooks,
+        ISiteSettingsService     settings)
     {
+        _settings = settings;
         _uploader = uploader;
         _assets   = assets;
         _extended = extended;
@@ -94,7 +98,8 @@ public class MediaController : ControllerBase
     [HttpPost("upload")]
     [Authorize(Policy = CmsRoles.Policies.CanWrite)]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(104_857_600)] // 100 MB hard cap
+    // Body size limit is media.maxUploadBytes, applied per request by UseUploadSizeLimit() in
+    // Program.cs before the form is read (issue #145) — no compile-time [RequestSizeLimit].
     [ProducesResponseType(typeof(MediaUploadResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(MediaErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -103,6 +108,10 @@ public class MediaController : ControllerBase
         IFormFile file,
         CancellationToken ct)
     {
+        if (!_settings.GetBool(SiteSettingKeys.FeatureMediaUpload))
+            return StatusCode(StatusCodes.Status403Forbidden,
+                new MediaErrorResponse("Media uploads are currently disabled by a site administrator."));
+
         if (file is null || file.Length == 0)
             return BadRequest(new MediaErrorResponse("No file was provided or the file is empty."));
 
@@ -150,7 +159,7 @@ public class MediaController : ControllerBase
         [FromQuery] int page     = 1,
         [FromQuery] int pageSize = 50)
     {
-        pageSize = Math.Clamp(pageSize, 1, 200);
+        pageSize = _settings.ClampPageSize(pageSize);
         page     = Math.Max(1, page);
 
         var pageResult = await _assets.ListAsync(page, pageSize, mimeType, q);
