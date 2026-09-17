@@ -10,7 +10,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="dbup-sqlserver" Version="7.2.0" />
     <PackageReference Include="HotChocolate.AspNetCore" Version="14.3.2" />
     <PackageReference Include="HotChocolate.AspNetCore.Authorization" Version="14.3.2" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.31" />

@@ -15,7 +15,8 @@ public site without a deploy.
 | `Jwt:SigningKey`, `Jwt:Issuer`, `Jwt:Audience` | Secret; validation parameters are built at startup |
 | `Storage:*` (backend, paths, Azure connection string) | Switching backends at runtime would orphan files; secrets |
 | `Email:Smtp:*` (host, port, security, username, password) | SMTP relay address and credentials; secrets bound to the deployment (issue #39). The switch, sender and link origin are `notifications.*` settings below. |
-| `SKIP_MIGRATIONS`, `WINDOWS_AUTH_FAKE_NEGOTIATE` | Test/host bootstrap switches |
+| `Database:MigrateOnStartup` | Whether the API applies migrations itself at startup (default: Development only). Off, it only verifies nothing is pending and exits 1 otherwise — deployments run `vacms db migrate` with an elevated login |
+| `SKIP_MIGRATIONS`, `WINDOWS_AUTH_FAKE_NEGOTIATE`, `AZUREAD_FAKE_OIDC` | Test/host bootstrap switches |
 | Next.js: `NEXT_PUBLIC_API_URL`, `CMS_API_URL`, `REVALIDATE_SECRET`, `NEXT_PUBLIC_SITE_URL` | Needed to find the API / verify webhooks before settings can be read |
 
 Everything else is a site setting.

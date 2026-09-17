@@ -32,8 +32,8 @@ cp src/api/VA.CMS.API/appsettings.Development.json.example \
    src/api/VA.CMS.API/appsettings.Development.json
 # Edit: set ConnectionStrings:DefaultConnection
 
-# 4. Migrations run automatically on API startup (DbUp)
-# No separate migration command needed. On first run, all SQL scripts in /migrations/ execute.
+# 4. Migrations run automatically on API startup in Development (Database:MigrateOnStartup defaults
+#    to true there). Elsewhere, or to run them by hand: vacms db migrate
 
 # 5. Start API
 dotnet run --project VA.CMS.API
@@ -56,25 +56,47 @@ Swagger: `http://localhost:5100/swagger`
 
 ### 1. SQL Server Setup
 
-```sql
--- Create database
-CREATE DATABASE [VACMS]
-  COLLATE SQL_Latin1_General_CP1_CI_AS;
+Three identities touch the database, and only the first ever holds DDL rights:
 
--- Create application login (principle of least privilege)
-CREATE LOGIN [vacms_app] WITH PASSWORD = N'<strong_password>';
-USE [VACMS];
-CREATE USER [vacms_app] FOR LOGIN [vacms_app];
+| Identity | Used by | Rights |
+|---|---|---|
+| Deployment account (DBA / pipeline, e.g. `sa` or a `db_owner` + `securityadmin` login) | `vacms db provision-logins`, `vacms db migrate` | `CREATE DATABASE`, DDL, `CREATE LOGIN` |
+| `vacms_app` | the running API (`ConnectionStrings__DefaultConnection`) | `EXECUTE` on `dbo` procedures only; `SELECT/INSERT/UPDATE/DELETE` on tables denied; `UPDATE/DELETE` on `AuditLog` denied twice |
+| `vacms_readonly` | reporting / BI | `SELECT` only |
 
--- Grant required permissions (no DDL after migrations run)
-GRANT SELECT, INSERT, UPDATE, DELETE ON SCHEMA::dbo TO [vacms_app];
+**Step 1 — provision the logins** (once per SQL Server instance; rerun to rotate a password). Secrets come from the
+pipeline's secret store, never from a file in the repo. Either:
 
--- AuditLog is write-only for the app
-DENY UPDATE, DELETE ON dbo.AuditLog TO [vacms_app];
+```bash
+# SQLCMD
+sqlcmd -S SQLSERVER -d master -E \
+  -v VacmsAppPassword="$VACMS_APP_PASSWORD" VacmsReadonlyPassword="$VACMS_READONLY_PASSWORD" DatabaseName="VACMS" \
+  -i infra/sql/provision-logins.sql
 
--- Enable Full-Text Search
-EXEC sp_fulltext_database 'enable';
+# or the CLI (same script, no sqlcmd needed)
+VACMS_CONNECTION_STRING="Server=SQLSERVER;Database=VACMS;Integrated Security=True;Encrypt=True;" \
+  vacms db provision-logins --app-password "$VACMS_APP_PASSWORD" --readonly-password "$VACMS_READONLY_PASSWORD"
 ```
+
+The logins are created with `CHECK_POLICY = ON`. If the database already exists the script also maps the users and
+applies the grants; otherwise `V003__security_model.sql` does that during the next step.
+
+**Step 2 — migrate** as the deployment account. This creates the database on first run and applies every pending
+script in `migrations/` (DbUp journal: `dbo.SchemaVersions`):
+
+```bash
+vacms db migrate --connection "Server=SQLSERVER;Database=VACMS;Integrated Security=True;Encrypt=True;"
+vacms db migrate --check    --connection "…"    # exit 0 = current, 2 = pending (use as a deploy gate)
+vacms db migrate --dry-run  --connection "…"    # list what would run
+```
+
+**Step 3 — run the API as `vacms_app`.** `ConnectionStrings__DefaultConnection` uses `User Id=vacms_app`. At startup
+the API does **not** migrate; it calls `usp_Migrations_ListApplied`, compares with the scripts shipped beside the
+binaries, and refuses to start (exit 1, listing the pending scripts) if the database is behind. Set
+`Database__MigrateOnStartup=true` only in Development, where the connection is a DDL-capable dev login.
+
+Full-Text Search must be installed on the instance (`SELECT FULLTEXTSERVICEPROPERTY('IsFullTextInstalled')` = 1);
+the catalog is created by the migrations.
 
 ### 2. Build and Publish
 
@@ -189,11 +211,9 @@ endpoint and a "no access" page in the admin SPA.
   `AzureAd__ClientCredentials__0__KeyVaultCertificateName=<name>`, with the host's managed identity granted *get* on certificates.
 - If a secret must be used, inject it from the deployment platform's secret store at start-up; never commit it to `appsettings*.json`.
 
-# 4. Run migrations in production (DbUp runs automatically on startup)
-# Migrations run automatically when the API starts.
-# Verify the startup logs show "Successfully upgraded" before marking deployment complete.
-# To run manually (dry-run check):
-dotnet VA.CMS.API.dll --check-migrations
+# Migrations are NOT applied by the API. Run them as the deployment account before starting the app pool:
+vacms db migrate --connection "<deployment-account connection string>"
+# The API verifies the schema at startup and exits 1 with the list of pending scripts if it is behind.
 
 ### 6. SSL / TLS
 
@@ -225,7 +245,7 @@ Configure VA monitoring tools to poll `/api/health/ready` every 60 seconds.
 # 1. Put app in maintenance mode (IIS → stop site or swap to maintenance page)
 # 2. Backup DB
 # 3. Deploy new API build to staging directory
-# 4. Run migrations: dotnet VA.CMS.API.dll migrate
+# 4. Run migrations as the deployment account: vacms db migrate --connection "…"  (then: vacms db migrate --check)
 # 5. If migrations succeed: swap staging to production (xcopy or IIS virtual directory swap)
 # 6. Deploy new admin/public builds
 # 7. Restart app pool

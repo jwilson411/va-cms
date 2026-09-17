@@ -540,7 +540,8 @@ function verifyWebhook(payload: string, signature: string, secret: string): bool
 dotnet tool install --global VA.CMS.CLI
 
 # Commands
-vacms db migrate              # Run pending migrations
+vacms db migrate              # Apply pending migrations (deployment account; --check / --dry-run)
+vacms db provision-logins     # Create or rotate vacms_app / vacms_readonly (--app-password, --readonly-password)
 vacms db seed --demo          # Seed demo content
 vacms content-type scaffold NewsArticle  # Scaffold new type definition
 vacms migrate sharepoint --export ./sharepoint-export.zip  # Import from SharePoint

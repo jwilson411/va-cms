@@ -2,8 +2,7 @@ using DotNet.Testcontainers.Builders;
 using Microsoft.Data.SqlClient;
 using Testcontainers.MsSql;
 using VA.CMS.Infrastructure.Data;
-using DbUp;
-using DbUp.ScriptProviders;
+using VA.CMS.Infrastructure.Data.Migrations;
 
 namespace VA.CMS.Tests;
 
@@ -19,9 +18,28 @@ public class DatabaseFixture : IAsyncLifetime
 {
     private MsSqlContainer? _container;
 
+    /// <summary>Test-only secrets handed to infra/sql/provision-logins.sql (#157); never used outside the container.</summary>
+    public const string AppPassword      = "Fixture!Exec#2026aZ";
+    public const string ReadonlyPassword = "Fixture!Read#2026bY";
+
     public string ConnectionString { get; private set; } = string.Empty;
 
+    /// <summary>Where the migration scripts were loaded from.</summary>
+    public string MigrationsPath { get; private set; } = string.Empty;
+
     public CmsDatabase CreateDb() => new CmsDatabase(ConnectionString);
+
+    /// <summary>Connection string for the EXECUTE-only application login.</summary>
+    public string AppConnectionString() => AsLogin("vacms_app", AppPassword);
+
+    /// <summary>Connection string for the SELECT-only reporting login.</summary>
+    public string ReadonlyConnectionString() => AsLogin("vacms_readonly", ReadonlyPassword);
+
+    private string AsLogin(string user, string password)
+        => new SqlConnectionStringBuilder(ConnectionString)
+        {
+            UserID = user, Password = password, IntegratedSecurity = false,
+        }.ConnectionString;
 
     public async Task InitializeAsync()
     {
@@ -34,22 +52,28 @@ public class DatabaseFixture : IAsyncLifetime
 
         ConnectionString = _container.GetConnectionString();
 
-        // Run all migrations from the repo migrations/ folder
-        var migrationsPath = FindMigrationsPath();
+        // Provision the logins exactly as a deployment would (#157), then migrate
+        // with the SA connection — the same two steps DEPLOYMENT.md prescribes.
+        MigrationsPath = FindMigrationsPath();
+        var master = new SqlConnectionStringBuilder(ConnectionString) { InitialCatalog = "master" }.ConnectionString;
+        var dbName = new SqlConnectionStringBuilder(ConnectionString).InitialCatalog;
+        await SqlCmdScript.RunAsync(master, await File.ReadAllTextAsync(FindProvisionScript()), new Dictionary<string, string>
+        {
+            ["VacmsAppPassword"]      = AppPassword,
+            ["VacmsReadonlyPassword"] = ReadonlyPassword,
+            ["DatabaseName"]          = dbName,
+        });
 
-        EnsureDatabase.For.SqlDatabase(ConnectionString);
-
-        var upgrader = DeployChanges.To
-            .SqlDatabase(ConnectionString)
-            .WithScriptsFromFileSystem(migrationsPath,
-                new FileSystemScriptOptions { IncludeSubDirectories = false })
-            .WithTransactionPerScript()
-            .LogToConsole()
-            .Build();
-
-        var result = upgrader.PerformUpgrade();
+        var result = MigrationRunner.Upgrade(ConnectionString, MigrationsPath);
         if (!result.Successful)
             throw new InvalidOperationException($"Test DB migration failed: {result.Error}");
+    }
+
+    private static string FindProvisionScript()
+    {
+        var root = new DirectoryInfo(FindMigrationsPath()).Parent!.FullName;
+        var path = IoPath.Combine(root, "infra", "sql", "provision-logins.sql");
+        return File.Exists(path) ? path : throw new FileNotFoundException(path);
     }
 
     public async Task DisposeAsync()

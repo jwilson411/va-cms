@@ -1,6 +1,3 @@
-using DbUp;
-using DbUp.Engine;
-using DbUp.ScriptProviders;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -410,50 +407,51 @@ builder.Services.AddCustomFieldType<GeoPointFieldType>();
 var app = builder.Build();
 
 // -----------------------------------------------------------------------
-// DbUp migrations
+// Database migrations (#157)
+// Deployments run `vacms db migrate` with an elevated connection; the API's own
+// login is EXECUTE-only. Startup therefore only *checks* that nothing is pending
+// and refuses to serve a database that is behind, unless Database:MigrateOnStartup
+// opts in (default: Development only). SKIP_MIGRATIONS=true skips both (tests).
 // -----------------------------------------------------------------------
 var skipMigrations = builder.Configuration["SKIP_MIGRATIONS"] == "true";
 
 if (!skipMigrations)
 {
-// Walk up from bin/<Config>/<tfm>/ until a "migrations" folder is found (repo root
-// in source checkouts), otherwise expect it beside the binaries in a deployment.
-var migrationsPath = System.IO.Path.Combine(AppContext.BaseDirectory, "migrations");
-for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-{
-    var candidate = System.IO.Path.Combine(dir.FullName, "migrations");
-    if (Directory.Exists(candidate))
+    var migrateOnStartup = builder.Configuration.GetValue<bool?>("Database:MigrateOnStartup")
+                           ?? builder.Environment.IsDevelopment();
+    var migrationsPath = VA.CMS.Infrastructure.Data.Migrations.MigrationRunner.FindMigrationsPath();
+
+    if (migrateOnStartup)
     {
-        migrationsPath = candidate;
-        break;
+        var result = VA.CMS.Infrastructure.Data.Migrations.MigrationRunner.Upgrade(connectionString, migrationsPath);
+        if (!result.Successful)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine($"Migration failed: {result.Error}");
+            Console.ResetColor();
+            return 1;
+        }
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine("Database migrations applied successfully.");
+        Console.ResetColor();
+    }
+    else
+    {
+        var status = await VA.CMS.Infrastructure.Data.Migrations.MigrationRunner.CheckAsync(connectionString, migrationsPath);
+        if (!status.IsUpToDate)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Error.WriteLine(status.Error ?? "The database is behind the deployed migration set.");
+            Console.Error.WriteLine($"Pending migrations ({status.Pending.Count}): {string.Join(", ", status.Pending)}");
+            Console.Error.WriteLine("Run `vacms db migrate` with the deployment account, or set Database:MigrateOnStartup=true.");
+            Console.ResetColor();
+            return 1;
+        }
+
+        Console.WriteLine($"Database schema is current ({status.Applied.Count} migrations applied).");
     }
 }
-
-EnsureDatabase.For.SqlDatabase(connectionString);
-
-var upgrader = DeployChanges.To
-    .SqlDatabase(connectionString)
-    .WithScriptsFromFileSystem(
-        migrationsPath,
-        new FileSystemScriptOptions { IncludeSubDirectories = false })
-    .WithTransactionPerScript()
-    .LogToConsole()
-    .Build();
-
-DatabaseUpgradeResult result = upgrader.PerformUpgrade();
-if (!result.Successful)
-{
-    Console.ForegroundColor = ConsoleColor.Red;
-    Console.Error.WriteLine($"Migration failed: {result.Error}");
-    Console.ResetColor();
-    return 1;
-}
-
-Console.ForegroundColor = ConsoleColor.Green;
-Console.WriteLine("Database migrations applied successfully.");
-Console.ResetColor();
-
-} // end if (!skipMigrations)
 
 // -----------------------------------------------------------------------
 // HTTP pipeline
