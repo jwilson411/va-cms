@@ -1,0 +1,43 @@
+<Project>
+  <!--
+    Central package management (#160): every NuGet version is pinned here once.
+    Projects reference packages without a Version attribute. Bump versions here;
+    `dotnet list package -vulnerable -include-transitive` and NuGetAudit (see
+    Directory.Build.props) fail the build on a known advisory.
+  -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup Label="Runtime">
+    <PackageVersion Include="dbup-sqlserver" Version="7.2.0" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="14.3.2" />
+    <PackageVersion Include="HotChocolate.AspNetCore.Authorization" Version="14.3.2" />
+    <PackageVersion Include="MailKit" Version="4.18.0" />
+    <PackageVersion Include="Markdig" Version="0.37.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.31" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.Negotiate" Version="8.0.31" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.4" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="8.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
+    <PackageVersion Include="Microsoft.Identity.Web" Version="4.14.2" />
+    <PackageVersion Include="Microsoft.IdentityModel.Tokens" Version="8.22.0" />
+    <PackageVersion Include="PetaPoco.Compiled" Version="6.0.683" />
+    <PackageVersion Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="8.1.4" />
+    <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.22.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Tests">
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.31" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+</Project>

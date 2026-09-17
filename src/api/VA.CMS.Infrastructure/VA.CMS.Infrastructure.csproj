@@ -7,17 +7,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="dbup-sqlserver" Version="7.2.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.2.0" />
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
-    <PackageReference Include="MailKit" Version="4.18.0" />
-    <PackageReference Include="Markdig" Version="0.37.0" />
-    <PackageReference Include="PetaPoco" Version="5.1.304" />
-    <PackageReference Include="PetaPoco.Compiled" Version="6.0.683" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.8" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="dbup-sqlserver" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="MailKit" />
+    <PackageReference Include="Markdig" />
+    <PackageReference Include="PetaPoco.Compiled" />
+    <PackageReference Include="SixLabors.ImageSharp" />
   </ItemGroup>
 
 </Project>

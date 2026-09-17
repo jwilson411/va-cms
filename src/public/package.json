@@ -8,7 +8,7 @@
     "prebuild": "npm run uswds:assets",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:a11y": "playwright test tests/accessibility",
@@ -17,26 +17,28 @@
   "dependencies": {
     "@testing-library/dom": "^10.4.2",
     "@uswds/uswds": "^3.8.2",
-    "next": "14.2.29",
+    "next": "16.3.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.0",
-    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.5.2",
     "@types/jest-axe": "^3.5.9",
-    "@types/node": "^20.17.10",
+    "@types/node": "^22.0.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitejs/plugin-react": "^5.1.0",
+    "@vitest/coverage-v8": "^5.0.1",
     "axe-core": "^4.10.2",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.5",
     "jest-axe": "^9.0.0",
     "jsdom": "^25.0.1",
     "sass": "^1.104.1",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.9"
+    "vitest": "^5.0.1"
   }
 }

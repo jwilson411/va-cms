@@ -27,11 +27,12 @@ import { NewsArticleTemplate } from '@/components/templates/NewsArticleTemplate'
 import type { BreadcrumbItem } from '@/components/uswds/UswdsBreadcrumb';
 
 interface PageProps {
-  params: { slug: string[] };
+  /** Next 15+: route params resolve asynchronously. */
+  params: Promise<{ slug: string[] }>;
 }
 
 /** Join the catch-all segments back into the CMS slug. */
-const slugFromParams = (params: PageProps['params']): string => params.slug.join('/');
+const slugFromParams = async (params: PageProps['params']): Promise<string> => (await params).slug.join('/');
 
 /**
  * Canonical URL for this article — used in JSON-LD and <link rel="canonical">.
@@ -47,10 +48,10 @@ function buildCanonicalUrl(slug: string): string {
  * Runs on the server alongside the page component.
  */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const [article, site] = await Promise.all([fetchNewsArticle(slugFromParams(params)), fetchSiteSettings()]);
+  const [article, site] = await Promise.all([fetchNewsArticle(await slugFromParams(params)), fetchSiteSettings()]);
   if (!article) return { title: 'Page Not Found' };
 
-  const canonicalUrl = buildCanonicalUrl(slugFromParams(params));
+  const canonicalUrl = buildCanonicalUrl(await slugFromParams(params));
 
   return {
     title: `${article.fields.title} | ${site.siteTitle}`,
@@ -84,7 +85,7 @@ export default async function NewsArticlePage({
   params,
 }: PageProps): Promise<React.ReactElement> {
   const [article, navigation, site] = await Promise.all([
-    fetchNewsArticle(slugFromParams(params)),
+    fetchNewsArticle(await slugFromParams(params)),
     fetchPrimaryNav(),
     fetchSiteSettings(),
   ]);
@@ -104,7 +105,7 @@ export default async function NewsArticlePage({
     { label: article.fields.title },
   ];
 
-  const canonicalUrl = buildCanonicalUrl(slugFromParams(params));
+  const canonicalUrl = buildCanonicalUrl(await slugFromParams(params));
 
   return (
     <NewsArticleTemplate

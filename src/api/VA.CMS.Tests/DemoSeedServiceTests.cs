@@ -208,7 +208,14 @@ public class DemoSeedServiceTests(DatabaseFixture fixture)
         await using var conn = new SqlConnection(fixture.ConnectionString);
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM [dbo].[User] WHERE [ExternalId] LIKE 'demo-%'";
+        // One demo user per *system* role. Other test classes add throw-away roles to the
+        // shared database (StoredProcedureTests), which the seed also picks up, so count
+        // only the users that correspond to the six built-in roles.
+        cmd.CommandText = @"SELECT COUNT(*) FROM [dbo].[User] u
+                            WHERE u.[ExternalId] LIKE 'demo-%'
+                              AND EXISTS (SELECT 1 FROM [dbo].[Role] r
+                                          WHERE r.[IsSystemRole] = 1
+                                            AND u.[ExternalId] = 'demo-' + LOWER(r.[Name]))";
         return (int)(await cmd.ExecuteScalarAsync())!;
     }
 }

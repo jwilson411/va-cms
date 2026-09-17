@@ -32,7 +32,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Invalidate the navigation cache tag — Next.js will re-fetch on next request.
-  revalidateTag(NAV_CACHE_TAG);
+  revalidateTag(NAV_CACHE_TAG, 'max');
 
   return NextResponse.json({ revalidated: true, tag: NAV_CACHE_TAG });
 }

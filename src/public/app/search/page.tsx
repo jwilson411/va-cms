@@ -37,20 +37,24 @@ export async function generateMetadata(): Promise<Metadata> {
 /** Force dynamic rendering — search is never static. */
 export const dynamic = 'force-dynamic';
 
+interface SearchQuery {
+  q?: string;
+  type?: string;
+  from?: string;
+  to?: string;
+  tag?: string;
+  page?: string;
+}
+
 interface SearchPageProps {
-  searchParams: {
-    q?: string;
-    type?: string;
-    from?: string;
-    to?: string;
-    tag?: string;
-    page?: string;
-  };
+  /** Next 15+: search params resolve asynchronously. */
+  searchParams: Promise<SearchQuery>;
 }
 
 export default async function SearchPage({
-  searchParams,
+  searchParams: searchParamsPromise,
 }: SearchPageProps): Promise<React.ReactElement> {
+  const searchParams = await searchParamsPromise;
   const query = (searchParams.q ?? '').trim();
   const typeParam = searchParams.type ? parseInt(searchParams.type, 10) : null;
   const fromParam = searchParams.from ?? null;

@@ -1,0 +1,14 @@
+<Project>
+  <!--
+    Solution-wide build settings (#160).
+    NuGetAudit checks every direct and transitive package against the GitHub
+    Advisory Database on restore; NU1901–NU1904 are errors so a new advisory
+    breaks the build instead of scrolling past as a warning.
+  -->
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+</Project>

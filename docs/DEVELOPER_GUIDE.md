@@ -104,7 +104,7 @@ The CMS uses AD as the identity provider. The API issues a JWT — it never stor
 | Admin State | TanStack Query v5 | https://tanstack.com/query |
 | WYSIWYG | TipTap + tiptap-markdown | https://tiptap.dev |
 | Markdown | Markdig | https://github.com/xoofx/markdig |
-| Public Site | Next.js 14 (App Router) | https://nextjs.org/docs |
+| Public Site | Next.js 16 (App Router, Turbopack) | https://nextjs.org/docs |
 | Database | SQL Server 2019+ | |
 | Auth | Microsoft.Identity.Web (AD → JWT) | |
 
@@ -458,6 +458,18 @@ DELETE /api/v1/webhooks/{id}                     Remove webhook
 ```
 
 Full OpenAPI spec: `/swagger` when running in Development, or exported to `docs/openapi.json`.
+
+## Dependencies and advisories
+
+- NuGet versions are pinned once in `src/api/Directory.Packages.props` (central package management);
+  `src/api/Directory.Build.props` turns on `NuGetAudit` (all packages, transitive included) and makes
+  NU1901–NU1904 build errors, so `dotnet restore` fails on a new advisory. Check by hand with
+  `dotnet list package --vulnerable --include-transitive`.
+- npm roots: `src/admin`, `src/public`, `tests/accessibility`. Gate with `npm audit --audit-level=high`
+  (dev tooling included — vitest 5 / vite 8 cleared the last dev-only advisories).
+- `.github/dependabot.yml` opens weekly grouped PRs for nuget, the three npm roots and GitHub Actions.
+- Public site: Next.js 16 on Turbopack (`turbopack.root` is `src/` so the shared USWDS theme resolves);
+  `params` / `searchParams` are Promises; `revalidateTag(tag, 'max')`; lint is plain `eslint .`.
 
 ## GraphQL
 
