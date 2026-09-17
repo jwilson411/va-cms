@@ -67,13 +67,17 @@ public class WindowsAuthController : ControllerBase
     // middleware validates the ticket and populates User.Identity with the
     // Windows identity (Domain\Username or UPN).
     //
-    // Returns the same {accessToken, expiresIn, tokenType} shape as the
-    // AzureAd /api/auth/callback endpoint so the SPA needs no mode-awareness.
+    // Two callers:
+    //   - API clients / tests call it directly and get {accessToken, expiresIn, tokenType}.
+    //   - The browser arrives via GET /api/auth/login?returnUrl=… (on-prem flow); with
+    //     returnUrl present the cms_rt cookie is set and the response is a 302 to that
+    //     local path, and the SPA bootstraps through its silent refresh — no token in
+    //     a URL, body or history entry, exactly like the OIDC callback (#154).
     // ──────────────────────────────────────────────────────────────────────
     [HttpGet("windows-login")]
     [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme,
                Policy = CmsRoles.Policies.AuthenticatedOnly)]
-    public async Task<IActionResult> WindowsLogin()
+    public async Task<IActionResult> WindowsLogin([FromQuery] string? returnUrl = null)
     {
         // Guard: only active when Auth:Mode=WindowsAuth
         if (_authOptions.Mode != AuthMode.WindowsAuth)
@@ -131,6 +135,9 @@ public class WindowsAuthController : ControllerBase
         Response.Cookies.Append(AuthCookieHelper.RefreshTokenCookieName, refreshToken, cookieOpts);
 
         _logger.LogInformation("WindowsAuth login: issued JWT for {Upn} (userId={UserId})", upn, userId);
+
+        if (!string.IsNullOrEmpty(returnUrl))
+            return LocalRedirect(Url.IsLocalUrl(returnUrl) ? returnUrl : "/");
 
         return Ok(new
         {

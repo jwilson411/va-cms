@@ -261,6 +261,33 @@ public class Issue155AcceptanceTests
     }
 
     [Fact]
+    public async Task WindowsAuth_Browser_Flow_Login_Sets_Cookie_And_Redirects_Without_Token()
+    {
+        // On-prem IIS/Kerberos: /api/auth/login → /api/auth/windows-login?returnUrl → 302 into the SPA.
+        await using var factory = new Issue155TestFactory(mode: AuthMode.WindowsAuth, autoProvision: false);
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
+        client.DefaultRequestHeaders.Add(FakeNegotiateHandler.TestUpnHeader, Issue155TestFactory.KnownUpn);
+
+        var login = await client.GetAsync("/api/auth/login?returnUrl=%2Fadmin%2Fcontent");
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+        Assert.StartsWith("/api/auth/windows-login?returnUrl=", login.Headers.Location!.ToString());
+
+        var win = await client.GetAsync(login.Headers.Location);
+        Assert.Equal(HttpStatusCode.Redirect, win.StatusCode);
+        Assert.Equal("/admin/content", win.Headers.Location!.ToString());
+        Assert.Contains(win.Headers.GetValues("Set-Cookie"), c => c.StartsWith($"{AuthCookieHelper.RefreshTokenCookieName}="));
+        Assert.DoesNotContain("accessToken", await win.Content.ReadAsStringAsync());
+
+        // The cookie jar now carries cms_rt: the SPA's silent refresh yields the JWT.
+        var refresh = await client.GetAsync("/api/auth/refresh");
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
+
+        // A hostile returnUrl falls back to the SPA root.
+        var evil = await client.GetAsync("/api/auth/windows-login?returnUrl=//evil.example/x");
+        Assert.Equal("/", evil.Headers.Location!.ToString());
+    }
+
+    [Fact]
     public async Task WindowsAuth_Known_User_Allowed_When_AutoProvision_Off()
     {
         await using var factory = new Issue155TestFactory(mode: AuthMode.WindowsAuth, autoProvision: false);

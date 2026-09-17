@@ -12,7 +12,7 @@ public interface IStorageBackend
 {
     /// <summary>
     /// Backend identifier stored in MediaAsset.StorageBackend.
-    /// One of: "local", "unc", "azure_blob".
+    /// One of: "local", "unc".
     /// </summary>
     string BackendName { get; }
 

@@ -1,6 +1,11 @@
 # CI (#161): build, test and package every deployable on pull requests and on
 # pushes to main. Security scanning lives in security.yml. Both are required
 # status checks on main (see docs/DEVELOPER_GUIDE.md → Branch protection).
+#
+# On-prem: every job runs on the runner label in the CI_RUNNER repository/org
+# variable (e.g. "self-hosted,linux,docker"), falling back to GitHub-hosted only
+# where that variable is unset. Runners need Docker (Testcontainers / SQL Server
+# service), .NET 8, Node 22 and access to a NuGet/npm/container mirror.
 name: CI
 
 on:
@@ -23,7 +28,7 @@ env:
 jobs:
   api:
     name: API — build, test, coverage, OpenAPI drift
-    runs-on: ubuntu-latest   # Docker is available for Testcontainers (SQL Server 2022)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}   # needs Docker for Testcontainers (SQL Server 2022)
     defaults:
       run:
         working-directory: src/api
@@ -71,7 +76,7 @@ jobs:
 
   admin:
     name: Admin SPA — typecheck, test, build
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: src/admin
@@ -93,7 +98,7 @@ jobs:
 
   public:
     name: Public site — typecheck, test, build
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: src/public
@@ -117,7 +122,7 @@ jobs:
 
   accessibility:
     name: Accessibility — axe against the admin SPA (API in DevBypass)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     needs: [api, admin]
     services:
       sqlserver:

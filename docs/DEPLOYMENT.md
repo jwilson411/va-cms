@@ -160,13 +160,14 @@ Set on the IIS application pool or via Windows environment:
 # API (VA.CMS.API)
 ASPNETCORE_ENVIRONMENT=Production
 ConnectionStrings__DefaultConnection=Server=SQLSERVER;Database=VACMS;User Id=vacms_app;Password=<pw>;TrustServerCertificate=False;
-Auth__Mode=AzureAd
-AzureAd__Instance=https://login.microsoftonline.com/
-AzureAd__TenantId=<aad_tenant_id>
-AzureAd__ClientId=<app_registration_client_id>
-AzureAd__ClientSecret=<client_secret>            # see "Azure AD app registration" below for alternatives
-Storage__Backend=local
-Storage__LocalPath=D:\vacms-uploads
+Auth__Mode=WindowsAuth                           # on-prem default: IIS Windows Authentication (Kerberos)
+# Alternative — AD FS OpenID Connect (Auth__Mode=AzureAd; see "Identity provider" below):
+# AzureAd__Instance=https://adfs.va.gov/
+# AzureAd__TenantId=adfs
+# AzureAd__ClientId=<adfs_application_group_client_id>
+# AzureAd__ClientCredentials__0__SourceType=StoreWithThumbprint …  (certificate in the Windows store)
+Storage__Backend=local                           # or unc (Storage__UncRootPath=\\files\va-cms); no cloud backends
+Storage__LocalRootPath=D:\vacms-uploads
 Media__Scanner__Mode=Icap                        # or ClamAv; Disabled is refused in Production
 Media__Scanner__Host=avscan.va.gov
 Media__Scanner__Port=1344
@@ -181,40 +182,53 @@ Jwt__SigningKey=<256-bit-random-key>
 NEXT_PUBLIC_API_URL=https://cms.youragency.va.gov/api/v1
 ```
 
-#### Azure AD app registration
+#### Identity provider (on-prem only)
 
-The `AzureAd` section binds from the **top-level** `AzureAd__*` variables shown above
-(not `Auth__AzureAd__*`, which does not bind). Configure the app registration as follows:
+This deployment has no cloud identity service. Two on-prem options:
+
+**Windows Integrated Authentication (recommended)** — `Auth__Mode=WindowsAuth`. Enable *Windows
+Authentication* (Negotiate/Kerberos, NTLM fallback) on the IIS site and register an SPN for the
+app-pool identity (`setspn -S HTTP/cms.va.gov VA\svc-vacms`). Login flow: `GET /api/auth/login` →
+302 `/api/auth/windows-login?returnUrl=…` (the browser completes the Kerberos exchange there) → the
+`cms_rt` refresh cookie is set → 302 back into the SPA, which obtains the JWT through `GET /api/auth/refresh`.
+No token ever appears in a URL or response body. Group-mapped roles come from the identity's group
+SIDs (mappings may be keyed by SID or `DOMAIN\Group`; see Admin → Settings → AD Group Mappings).
+
+**AD FS OpenID Connect** — `Auth__Mode=AzureAd` (the mode name is historical; it is the
+Microsoft.Identity.Web OIDC handler, which supports AD FS 2016+). Set `AzureAd__Instance=https://<adfs-host>/`
+and `AzureAd__TenantId=adfs`; create an AD FS *Application Group* (Server application + Web API) with:
 
 | Setting | Value |
 |---|---|
-| Platform | Web |
 | Redirect URI | `https://<host>/signin-oidc` — the OIDC handler's `AzureAd:CallbackPath` (leave unset to use this default; a value under `/api/` is rejected at startup) |
-| Front-channel logout / post-logout redirect URI | `https://<host>/login` — where `GET /api/auth/signout` returns the browser after the AAD end-session round trip |
-| ID token claims | `preferred_username`, `name`, `oid`; add the `groups` claim if AD-group → role mappings are used |
+| Post-logout redirect URI | `https://<host>/login` — where `GET /api/auth/signout` returns the browser after the end-session round trip |
+| Issued claims | `upn` (or `preferred_username`), `name`, and a stable id claim (`oid`/`sub`); add group claims if AD-group → role mappings are used |
 
-Login flow: `GET /api/auth/login` → AAD → `/signin-oidc` (OIDC handler, sets the `cms_aad` session cookie) →
-`GET /api/auth/callback` (issues the `cms_rt` refresh cookie, then 302 into the SPA). The access token is
-never placed in a URL or response body; the SPA obtains it through `GET /api/auth/refresh`.
+Login flow: `GET /api/auth/login` → AD FS → `/signin-oidc` (OIDC handler, sets the `cms_aad` session cookie) →
+`GET /api/auth/callback` (issues the `cms_rt` refresh cookie, then 302 into the SPA).
 Logout: `POST /api/auth/logout` revokes the refresh session and, when the `auth.azureAdSignOut` site setting is
 on (default), returns `{ "signOutUrl": "/api/auth/signout" }`, which the SPA navigates to.
 
-**First sign-in.** `auth.autoProvisionUsers` defaults to off, so a fresh deployment rejects every tenant
-identity until a user row exists. Bootstrap the first administrator with SQL before go-live
-(`INSERT INTO [User] (ExternalId, Email, DisplayName, IsActive)` using the account's Entra object ID — or its UPN
-in WindowsAuth mode — then `INSERT INTO UserRole` for SystemAdmin), or temporarily set the site setting to `true`,
-sign in, assign the role, and switch it back. Signed-in users with no CMS role get 403 from every `/api/v1`
-endpoint and a "no access" page in the admin SPA.
+The `AzureAd` section binds from the **top-level** `AzureAd__*` variables (not `Auth__AzureAd__*`, which
+does not bind).
 
-**Client credential.** Prefer a certificate or a Key Vault reference over a plaintext `AzureAd__ClientSecret`:
+**First sign-in.** `auth.autoProvisionUsers` defaults to off, so a fresh deployment rejects every identity
+until a user row exists. Bootstrap the first administrator with SQL before go-live
+(`INSERT INTO [User] (ExternalId, Email, DisplayName, IsActive)` — ExternalId is the UPN in WindowsAuth mode
+or the issued id claim for OIDC — then `INSERT INTO UserRole` for SystemAdmin), or temporarily set the site
+setting to `true`, sign in, assign the role, and switch it back. Signed-in users with no CMS role get 403
+from every `/api/v1` endpoint and a "no access" page in the admin SPA.
 
-- Certificate — set `AzureAd__ClientCredentials__0__SourceType=StoreWithThumbprint`,
-  `AzureAd__ClientCredentials__0__CertificateStorePath=LocalMachine/My` and
-  `AzureAd__ClientCredentials__0__CertificateThumbprint=<thumbprint>` (the app pool identity needs read access to the private key).
-- Key Vault — `AzureAd__ClientCredentials__0__SourceType=KeyVault`,
-  `AzureAd__ClientCredentials__0__KeyVaultUrl=https://<vault>.vault.azure.net` and
-  `AzureAd__ClientCredentials__0__KeyVaultCertificateName=<name>`, with the host's managed identity granted *get* on certificates.
-- If a secret must be used, inject it from the deployment platform's secret store at start-up; never commit it to `appsettings*.json`.
+**Client credential (OIDC only).** Use a certificate from the Windows certificate store rather than a
+plaintext `AzureAd__ClientSecret`: `AzureAd__ClientCredentials__0__SourceType=StoreWithThumbprint`,
+`AzureAd__ClientCredentials__0__CertificateStorePath=LocalMachine/My`,
+`AzureAd__ClientCredentials__0__CertificateThumbprint=<thumbprint>` (the app-pool identity needs read
+access to the private key). If a secret must be used, inject it from the deployment tool's secret store
+at start-up; never commit it to `appsettings*.json`.
+
+**Secrets on the host.** All other secrets (`Jwt__SigningKey`, `ConnectionStrings__DefaultConnection`,
+SMTP credentials, `REVALIDATE_SECRET`) are environment variables set on the IIS application pool by the
+deployment tool, or `dotnet user-secrets`-style files protected with DPAPI — no cloud vault is involved.
 
 # Migrations are NOT applied by the API. Run them as the deployment account before starting the app pool:
 vacms db migrate --connection "<deployment-account connection string>"

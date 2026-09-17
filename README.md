@@ -22,7 +22,7 @@ SharePoint 2016 on-prem is aging out. Drupal 11 (the only cleanly TRM-authorized
 | Database | Microsoft SQL Server 2019+ |
 | Auth | Azure AD / Windows Auth (SAML/OIDC) |
 | Search | SQL Full-Text Search (+ optional Elasticsearch) |
-| File Storage | Network share / Azure Blob (configurable) |
+| File Storage | Local disk / network share (UNC) — on-prem only |
 | Hosting | IIS / Windows Server or containerized |
 
 ## Quick Links

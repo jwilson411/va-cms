@@ -296,13 +296,16 @@ builder.Services.AddSingleton<IRbacService, RbacService>();
 var storageOptions = builder.Configuration
     .GetSection(StorageOptions.SectionName)
     .Get<StorageOptions>() ?? new StorageOptions();
+// On-prem only: local disk or a UNC share. Anything else (the former azure_blob stub)
+// is refused here rather than failing on the first upload (#170).
+if (storageOptions.Validate(builder.Environment.IsDevelopment() ? null : builder.Environment.ContentRootPath) is { } storageError)
+    throw new InvalidOperationException(storageError);
 builder.Services.AddSingleton(storageOptions);
 
-IStorageBackend storageBackend = storageOptions.Backend?.ToLowerInvariant() switch
+IStorageBackend storageBackend = storageOptions.Backend.Trim().ToLowerInvariant() switch
 {
-    "unc"        => new UncStorageBackend(storageOptions),
-    "azure_blob" => new AzureBlobStorageBackend(storageOptions),
-    _            => new LocalStorageBackend(storageOptions),   // default: local
+    "unc" => new UncStorageBackend(storageOptions),
+    _     => new LocalStorageBackend(storageOptions),   // default: local
 };
 builder.Services.AddSingleton<IStorageBackend>(storageBackend);
 builder.Services.AddSingleton<IImageProcessingService, ImageProcessingService>();

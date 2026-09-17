@@ -1,7 +1,12 @@
-# Security scanning (#161, BRD NFR-SEC-01/02): CodeQL SAST, dependency
-# advisories, secret scanning and CycloneDX SBOMs. Runs on pull requests, on
-# pushes to main and weekly; SBOMs are the artifacts handed to the security
-# assessor for the ATO package.
+# Security scanning (#161, BRD NFR-SEC-01/02): SAST, dependency advisories,
+# secret scanning and CycloneDX SBOMs. Runs on pull requests, on pushes to main
+# and weekly; SBOMs are the artifacts handed to the security assessor.
+#
+# On-prem: jobs run on the CI_RUNNER label (see ci.yml). gitleaks, CycloneDX and
+# the NuGet/npm audits are plain CLIs and run anywhere the runner can reach a
+# package mirror. CodeQL needs GitHub Advanced Security (available on GitHub
+# Enterprise Server); set the SAST_ENGINE variable to "semgrep" to run Semgrep
+# OSS instead when GHAS is not licensed.
 name: Security
 
 on:
@@ -26,7 +31,8 @@ env:
 jobs:
   codeql:
     name: CodeQL (${{ matrix.language }})
-    runs-on: ubuntu-latest
+    if: ${{ vars.SAST_ENGINE != 'semgrep' }}
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -52,9 +58,25 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
 
+  semgrep:
+    name: Semgrep OSS SAST (when SAST_ENGINE=semgrep)
+    if: ${{ vars.SAST_ENGINE == 'semgrep' }}
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep (C#, TypeScript, secrets rulesets; SARIF artifact)
+        run: semgrep scan --config p/csharp --config p/typescript --config p/secrets --error --sarif --output semgrep.sarif .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+
   dependencies:
     name: Dependency advisories (NuGet + npm)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -83,7 +105,7 @@ jobs:
 
   secrets:
     name: Secret scan (gitleaks)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -94,7 +116,7 @@ jobs:
 
   sbom:
     name: SBOM (CycloneDX) — .NET and each npm root
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

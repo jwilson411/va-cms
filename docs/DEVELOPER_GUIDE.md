@@ -473,6 +473,13 @@ Full OpenAPI spec: `/swagger` when running in Development, or exported to `docs/
 
 ## CI, security scanning and branch protection
 
+**On-prem.** The workflows are written for GitHub Actions syntax (GitHub Enterprise Server runs them
+unchanged). Set the repository variable `CI_RUNNER` to your self-hosted runner label (for example
+`self-hosted,linux,docker`) — every job uses it and falls back to `ubuntu-latest` only when it is unset. Runners
+need Docker (Testcontainers and the SQL Server service container), .NET 8, Node 22 and a mirror for NuGet, npm
+and `mcr.microsoft.com` images. CodeQL requires GitHub Advanced Security; set `SAST_ENGINE=semgrep` to run
+Semgrep OSS instead. gitleaks, CycloneDX, `dotnet list package --vulnerable` and `npm audit` are plain CLIs.
+
 `ci.yml` (build/test/package + accessibility) and `security.yml` (CodeQL, advisories, gitleaks,
 SBOM) run on pull requests and pushes to `main`; `security.yml` also runs weekly. Both must be
 required status checks on `main`, with code-owner review (`.github/CODEOWNERS`). Repository

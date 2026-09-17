@@ -90,6 +90,16 @@ public class AuthController : ControllerBase
                 : $"/login?returnUrl={Uri.EscapeDataString(safeReturn)}");
         }
 
+        // WindowsAuth (on-prem IIS / Kerberos): hand the navigation to the Negotiate-
+        // protected endpoint. The browser completes the ticket exchange there, the
+        // cms_rt cookie is set, and the user is sent back into the SPA — the same
+        // shape as the OIDC callback, so the SPA needs no mode awareness.
+        if (_authOptions.Mode == AuthMode.WindowsAuth)
+        {
+            return LocalRedirect(Url.Action(nameof(WindowsAuthController.WindowsLogin), "WindowsAuth",
+                new { returnUrl = safeReturn.Length == 0 ? "/" : safeReturn })!);
+        }
+
         if (!AzureAdActive)
             return NotFound();
 

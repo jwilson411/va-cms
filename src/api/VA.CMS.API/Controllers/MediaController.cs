@@ -128,7 +128,7 @@ public class MediaController : ControllerBase
     /// Upload a media file (multipart/form-data).
     ///
     /// AC: POST /api/v1/media/upload accepts multipart file.
-    /// AC: Storage backend selected by config (local, unc, azure_blob).
+    /// AC: Storage backend selected by config (local, unc).
     /// AC: File stored outside web root.
     /// AC: File extension validated against MIME allow-list (BRD FR-SECURITY-06).
     /// AC: MediaAsset row created with path, MIME, size, dimensions.

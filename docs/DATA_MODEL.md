@@ -69,7 +69,7 @@ Uploaded file metadata. The file itself is stored externally; this table stores 
 | Id | BIGINT IDENTITY | PK |
 | FileName | NVARCHAR(500) | Original uploaded filename |
 | StoragePath | NVARCHAR(2000) | Relative path in storage backend |
-| StorageBackend | NVARCHAR(50) | "local", "unc", "azure_blob" |
+| StorageBackend | NVARCHAR(50) | "local", "unc" (on-prem only) |
 | MimeType | NVARCHAR(200) | e.g. "image/jpeg" |
 | FileSizeBytes | BIGINT | |
 | AltText | NVARCHAR(500) | Required for images before asset can be published |
