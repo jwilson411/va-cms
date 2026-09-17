@@ -95,8 +95,10 @@ public class Issue56AcceptanceTests(DatabaseFixture fixture)
     [Fact]
     public async Task AC1_ListUsers_ReturnsActiveUsers()
     {
-        // Seed a user
-        var userId = await SeedUserAsync("_list");
+        // Seed a user whose DisplayName sorts first: usp_User_List orders by DisplayName and the
+        // shared test DB holds more than one page of seeded users.
+        var userId = await TestSeeder.UpsertUserAsync(fixture.ConnectionString,
+            displayName: $"000 list user {Guid.NewGuid():N}");
 
         var result = await UserRoleRepo().ListAsync(searchTerm: null, isActive: true, page: 1, pageSize: 100);
         var list   = result.ToList();

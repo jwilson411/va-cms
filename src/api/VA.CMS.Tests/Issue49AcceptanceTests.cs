@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Controllers;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Tests;
 
@@ -34,7 +35,7 @@ public class Issue49AcceptanceTests(DatabaseFixture fixture)
 
     private ISearchRepository Repo() => new SearchRepository(fixture.CreateDb());
 
-    private SearchController Controller() => new SearchController(Repo());
+    private SearchController Controller() => new SearchController(Repo(), StaticSiteSettings.Defaults);
 
     // ── AC1: V002 / V024 migrations ran without error ─────────────────────────
 
