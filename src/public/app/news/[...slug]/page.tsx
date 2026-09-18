@@ -15,11 +15,13 @@
  * ISR: cache is tagged per-slug; revalidated via revalidateTag() when
  * the admin publishes or unpublishes the article.
  *
- * 404: notFound() is called when the CMS returns null for the slug.
+ * 404: notFound() is called when the CMS returns null for the slug — after the
+ * redirect table has been checked (#169), so a renamed slug lands on its new URL.
  */
 
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { redirectIfMoved } from '@/lib/cms/redirect-if-moved';
 import type { Metadata } from 'next';
 import { fetchNewsArticle } from '@/lib/cms/content';
 import { fetchPrimaryNav } from '@/lib/cms/navigation';
@@ -85,14 +87,16 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function NewsArticlePage({
   params,
 }: PageProps): Promise<React.ReactElement> {
+  const slug = await slugFromParams(params);
   const [article, navigation, site, requestHeaders] = await Promise.all([
-    fetchNewsArticle(await slugFromParams(params)),
+    fetchNewsArticle(slug),
     fetchPrimaryNav(),
     fetchSiteSettings(),
     headers(),
   ]);
 
   if (!article) {
+    await redirectIfMoved(`/news/${slug}`);
     notFound();
   }
 

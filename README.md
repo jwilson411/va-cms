@@ -141,12 +141,12 @@ cd src/api
 VACMS_CONNECTION_STRING="Server=localhost,14333;Database=VACMS_Dev;User Id=sa;Password=VaCms_Dev!2026;TrustServerCertificate=True" \
   dotnet run --project VA.CMS.CLI -- db seed --demo
 
-# Let publishes/unpublishes/nav changes invalidate the Next.js page cache (issue #54 webhooks).
+# Let publishes/unpublishes/nav/redirect changes invalidate the Next.js page cache (issue #54 webhooks).
 # Use the same secret as REVALIDATE_SECRET in src/public/.env.local (unset = unsigned, dev only).
 curl -s -X POST http://localhost:5100/api/v1/webhooks -H "X-Dev-User: alice@va.gov" \
   -H "Content-Type: application/json" \
   -d '{"name":"public-site","url":"http://localhost:3000/api/revalidate","secret":"dev-secret",
-       "events":["content.published","content.unpublished","content.archived","navigation.updated","settings.updated"]}'
+       "events":["content.published","content.unpublished","content.archived","navigation.updated","settings.updated","redirects.updated"]}'
 ```
 
 Runtime configuration — feature flags, upload limits, token lifetimes, the public site's agency

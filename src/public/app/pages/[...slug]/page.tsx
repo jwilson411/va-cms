@@ -14,10 +14,12 @@
  * ISR: cache is tagged per-slug; revalidated via revalidateTag() when
  * the admin publishes or unpublishes the page.
  *
- * 404: notFound() is called when the CMS returns null for the slug.
+ * 404: notFound() is called when the CMS returns null for the slug — after the
+ * redirect table has been checked (#169), so a renamed slug lands on its new URL.
  */
 
 import { notFound } from 'next/navigation';
+import { redirectIfMoved } from '@/lib/cms/redirect-if-moved';
 import type { Metadata } from 'next';
 import { fetchStandardPage, extractH2Sections, injectH2Ids } from '@/lib/cms/content';
 import { fetchPrimaryNav } from '@/lib/cms/navigation';
@@ -57,13 +59,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  * 5. Renders StandardPageTemplate with all required USWDS chrome
  */
 export default async function StandardPage({ params }: PageProps): Promise<React.ReactElement> {
-  const [page, navigation, site] = await Promise.all([
-    fetchStandardPage(await slugFromParams(params)),
-    fetchPrimaryNav(),
-    fetchSiteSettings(),
-  ]);
+  const slug = await slugFromParams(params);
+  const [page, navigation, site] = await Promise.all([fetchStandardPage(slug), fetchPrimaryNav(), fetchSiteSettings()]);
 
   if (!page) {
+    await redirectIfMoved(`/pages/${slug}`);
     notFound();
   }
 

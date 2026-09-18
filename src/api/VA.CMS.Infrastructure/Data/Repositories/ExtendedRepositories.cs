@@ -208,9 +208,11 @@ public class NavigationRepository : INavigationRepository
         cmd.Parameters.AddWithValue("@FromPath", fromPath);
         await using var reader = await cmd.ExecuteReaderAsync();
         if (!await reader.ReadAsync()) return null;
+        // V047: the SP also matches the trailing-slash twin, so report the rule's own FromPath.
+        var fromOrdinal = reader.GetOrdinal("FromPath");
         return new Redirect
         {
-            FromPath = fromPath,
+            FromPath = reader.IsDBNull(fromOrdinal) ? fromPath : reader.GetString(fromOrdinal),
             ToPath = reader.GetString(reader.GetOrdinal("ToPath")),
             StatusCode = reader.GetInt32(reader.GetOrdinal("StatusCode")),
         };

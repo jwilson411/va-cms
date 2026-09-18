@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using VA.CMS.API.Auth;
 using VA.CMS.API.Controllers;
+using VA.CMS.API.Navigation;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Settings;
@@ -32,7 +34,8 @@ public class Issue48AcceptanceTests(DatabaseFixture fixture)
     private RedirectAdminController Controller()
     {
         var controller = new RedirectAdminController(
-            NavRepo(), new ContentEntryRepository(fixture.CreateDb()), StaticSiteSettings.Defaults);
+            NavRepo(), new ContentEntryRepository(fixture.CreateDb()), StaticSiteSettings.Defaults,
+            new RedirectResolver(NavRepo(), new RedirectResolveCache(), StaticSiteSettings.Defaults), new RbacService());
         // Simulate no authenticated user claim — CreatedById will be 0 for tests
         return controller;
     }

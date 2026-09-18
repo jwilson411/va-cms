@@ -842,16 +842,21 @@ BEGIN
 END;
 GO
 
--- usp_Redirect_GetByPath
+-- usp_Redirect_GetByPath (V047: exact match first, then the trailing-slash twin;
+-- the API's resolver caches the answer for redirects.cacheSeconds)
 CREATE OR ALTER PROCEDURE [dbo].[usp_Redirect_GetByPath]
     @FromPath NVARCHAR(2000)
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT TOP 1 [ToPath], [StatusCode]
+    DECLARE @Twin NVARCHAR(2000) =
+        CASE WHEN LEN(@FromPath) > 1 AND RIGHT(@FromPath, 1) = '/' THEN LEFT(@FromPath, LEN(@FromPath) - 1)
+             ELSE @FromPath + '/' END;
+    SELECT TOP 1 [FromPath], [ToPath], [StatusCode]
     FROM   [Redirect]
-    WHERE  [FromPath]  = @FromPath
-      AND  [IsActive]  = 1;
+    WHERE  [FromPath] IN (@FromPath, @Twin)
+      AND  [IsActive] = 1
+    ORDER  BY CASE WHEN [FromPath] = @FromPath THEN 0 ELSE 1 END, [CreatedAt] DESC;
 END;
 GO
 
@@ -871,9 +876,18 @@ BEGIN
     INSERT INTO [Redirect] ([FromPath], [ToPath], [StatusCode], [IsActive], [CreatedById], [CreatedAt])
     VALUES (@FromPath, @ToPath, @StatusCode, 1, @CreatedById, SYSUTCDATETIME());
     SET @NewId = SCOPE_IDENTITY();
+
+    -- V047: flatten — any active rule that pointed at the new FromPath now points at ToPath
+    UPDATE [Redirect] SET [ToPath] = @ToPath
+    WHERE  [IsActive] = 1 AND [ToPath] = @FromPath AND [Id] <> @NewId AND [FromPath] <> @ToPath;
+    -- (V045: audit row inside the same transaction)
 END;
 GO
 ```
+
+Rows are public-site paths (`/pages/{slug}`, `/news/{slug}` or an admin's site-relative path);
+`usp_ContentEntry_UpdateSlug` writes them for a published entry's slug change and deactivates any
+rule *from* the new path, since that path is live again (#169).
 
 ### 4.7 Search
 
@@ -1424,6 +1438,8 @@ GO
 | `V043__audit_log_columns.sql` | `AuditLog.CorrelationId` / `Outcome` (+ archive), `usp_AuditLog_Write` with SESSION_CONTEXT fallback, viewer filters (#165) |
 | `V044__refresh_tokens.sql` | `RefreshToken` table, `User.SessionVersion`, `usp_RefreshToken_*`, `usp_Maint_PurgeRefreshTokens` (#163) |
 | `V045__audit_coverage.sql` | every mutating SP audits inside its transaction; role changes end sessions (#165) |
+| `V046__webhook_hardening.sql` | `Webhook.Secret` protected at rest, `vw_Webhook`, delivery log / redelivery / re-key SPs (#168) |
+| `V047__redirect_resolution.sql` | redirect rows are public paths (`/pages/…`, `/news/…`); slug-change rows normalised; `usp_Redirect_GetByPath` matches the trailing-slash twin; `usp_Redirect_Create/_Update` flatten chains; `usp_ContentEntry_UpdateSlug` un-shadows the new path (#169) |
 
 ---
 

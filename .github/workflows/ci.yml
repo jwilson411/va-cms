@@ -117,7 +117,7 @@ jobs:
         run: npm run build
         env:
           # Prerender runs without an API; pages fall back to their empty states (as locally).
-          NEXT_PUBLIC_API_URL: http://localhost:5100/api/v1
+          NEXT_PUBLIC_API_URL: http://localhost:5100
           CMS_API_URL: http://localhost:5100
 
   accessibility:
@@ -199,3 +199,86 @@ jobs:
             src/api/api.log
             src/admin/vite.log
           if-no-files-found: warn
+
+  e2e:
+    name: E2E — redirects served through API + public site (#169)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    needs: [api, public]
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "VaCms_Ci!2026x"
+          MSSQL_PID: Developer
+        ports:
+          - 14333:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'VaCms_Ci!2026x' -Q 'SELECT 1' -C"
+          --health-interval 10s --health-timeout 5s --health-retries 15 --health-start-period 30s
+    env:
+      CONNECTION_STRING: "Server=localhost,14333;Database=VACMS_E2E;User Id=sa;Password=VaCms_Ci!2026x;TrustServerCertificate=True;Connection Timeout=15;"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Provision logins and migrate
+        working-directory: src/api
+        run: |
+          dotnet run --project VA.CMS.CLI -c Release -- db provision-logins \
+            --connection "$CONNECTION_STRING" --app-password 'Ci!Exec#2026aZ' --readonly-password 'Ci!Read#2026bY'
+          dotnet run --project VA.CMS.CLI -c Release -- db migrate --connection "$CONNECTION_STRING"
+
+      - name: Start API (DevBypass)
+        working-directory: src/api
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:5100
+          ConnectionStrings__DefaultConnection: ${{ env.CONNECTION_STRING }}
+          Database__MigrateOnStartup: "false"
+          Auth__Mode: DevBypass
+          Auth__DevBypassAllowedUsers__0: alice@va.gov
+          Jwt__SigningKey: ci-only-signing-key-not-a-secret-32+
+          Media__Scanner__Mode: Disabled
+        run: |
+          nohup dotnet run --project VA.CMS.API -c Release --no-launch-profile > api.log 2>&1 &
+          for i in $(seq 1 60); do curl -fs http://localhost:5100/health && break; sleep 2; done
+          curl -fs http://localhost:5100/health
+
+      - name: Build and start public site against the API
+        working-directory: src/public
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5100
+          CMS_API_URL: http://localhost:5100
+        run: |
+          npm ci
+          npm run build
+          nohup npx next start -p 3000 > next.log 2>&1 &
+          for i in $(seq 1 60); do curl -fs http://localhost:3000/ >/dev/null && break; sleep 2; done
+          curl -fs -o /dev/null http://localhost:3000/
+
+      - name: Run redirect e2e suite
+        working-directory: tests/accessibility
+        env:
+          API_URL: http://localhost:5100
+          PUBLIC_URL: http://localhost:3000
+          CI: "true"
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test tests/redirects.e2e.spec.ts
+
+      - name: Upload e2e report and server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            tests/accessibility/results
+            src/api/api.log
+            src/public/next.log

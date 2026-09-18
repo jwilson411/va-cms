@@ -179,8 +179,8 @@ A single item within a navigation menu (recursive for nested menus).
 | Column | Type | Notes |
 |---|---|---|
 | Id | BIGINT IDENTITY | PK |
-| FromPath | NVARCHAR(2000) | Source URL path |
-| ToPath | NVARCHAR(2000) | Destination URL |
+| FromPath | NVARCHAR(2000) | Public-site path the rule matches (`/pages/old-slug`, `/legacy/x`); one active row per path |
+| ToPath | NVARCHAR(2000) | Site-relative path or an https URL on an allow-listed host; always the final target — chains are flattened on write (#169) |
 | StatusCode | INT | 301 or 302 |
 | IsActive | BIT | |
 | CreatedById | BIGINT | FK → User |

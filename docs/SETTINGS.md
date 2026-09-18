@@ -139,6 +139,7 @@ Defaults are the values that were previously hard-coded.
 | Key | Default |
 |---|---|
 | `redirects.allowedExternalHosts` | `[]` — host names (exact, or `*.example.gov`) a redirect `ToPath` may point at over https; empty means site-relative targets only |
+| `redirects.cacheSeconds` | `60` — how long the API and the public site's proxy may cache a resolved redirect or a miss (`Cache-Control: max-age` on `GET /api/v1/redirects/resolve`, #169); the upper bound on how long a new or edited rule takes to be served. `0` disables caching |
 
 ### Workflow
 | Key | Default | Scope |

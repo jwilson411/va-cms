@@ -49,17 +49,24 @@ public class Issue33AcceptanceTests(DatabaseFixture fixture)
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private async Task<(string? ToPath, int? StatusCode)> GetActiveRedirectAsync(string fromPath)
+    /// <summary>
+    /// The active redirect for a slug's public URL. Since #169 (V047) a slug change stores
+    /// the public path (/pages/{slug} for anything but news_article) rather than the bare
+    /// slug, so the lookup and the expected target are both prefixed here.
+    /// </summary>
+    private async Task<(string? ToPath, int? StatusCode)> GetActiveRedirectAsync(string fromSlug)
     {
         await using var conn = new SqlConnection(fixture.ConnectionString);
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "EXEC usp_Redirect_GetByPath @FromPath";
-        cmd.Parameters.AddWithValue("@FromPath", fromPath);
+        cmd.Parameters.AddWithValue("@FromPath", PublicPath(fromSlug));
         await using var reader = await cmd.ExecuteReaderAsync();
         if (!await reader.ReadAsync()) return (null, null);
-        return (reader.GetString(0), reader.GetInt32(1));
+        return (reader.GetString(reader.GetOrdinal("ToPath")), reader.GetInt32(reader.GetOrdinal("StatusCode")));
     }
+
+    private static string PublicPath(string slug) => "/pages/" + slug;
 
     // ── AC: UpdateSlugAsync returns success for a valid new slug ───────────────
 
@@ -140,7 +147,7 @@ public class Issue33AcceptanceTests(DatabaseFixture fixture)
 
         // A 301 redirect must exist from old → new
         var (toPath, statusCode) = await GetActiveRedirectAsync(oldSlug);
-        Assert.Equal(newSlug, toPath);
+        Assert.Equal(PublicPath(newSlug), toPath);
         Assert.Equal(301, statusCode);
     }
 
@@ -157,7 +164,7 @@ public class Issue33AcceptanceTests(DatabaseFixture fixture)
         await repo.UpdateSlugAsync(entryId, newSlug, userId);
 
         var (toPath, _) = await GetActiveRedirectAsync(oldSlug);
-        Assert.Equal(newSlug, toPath);
+        Assert.Equal(PublicPath(newSlug), toPath);
     }
 
     // ── AC: No-op when slug is unchanged ──────────────────────────────────────
@@ -193,10 +200,10 @@ public class Issue33AcceptanceTests(DatabaseFixture fixture)
         Assert.NotNull(error);
     }
 
-    // ── AC: Subsequent slug changes on Published entry chain redirects ─────────
+    // ── AC: Subsequent slug changes on Published entry flatten the chain (#169) ──
 
     [Fact]
-    public async Task UpdateSlug_SecondChange_Deactivates_OldRedirect_Creates_NewOne()
+    public async Task UpdateSlug_SecondChange_Creates_NewRedirect_And_Flattens_OldOne()
     {
         var slug1 = $"chain-slug1-{Guid.NewGuid():N}";
         var slug2 = $"chain-slug2-{Guid.NewGuid():N}";
@@ -212,12 +219,12 @@ public class Issue33AcceptanceTests(DatabaseFixture fixture)
 
         // slug2 should now redirect to slug3
         var (toPath, statusCode) = await GetActiveRedirectAsync(slug2);
-        Assert.Equal(slug3, toPath);
+        Assert.Equal(PublicPath(slug3), toPath);
         Assert.Equal(301, statusCode);
 
-        // slug1 redirect to slug2 is still active (was created first)
+        // slug1 is still redirected, and straight to slug3 — no second hop (#169)
         var (toPath1, statusCode1) = await GetActiveRedirectAsync(slug1);
-        Assert.Equal(slug2, toPath1);
+        Assert.Equal(PublicPath(slug3), toPath1);
         Assert.Equal(301, statusCode1);
     }
 }

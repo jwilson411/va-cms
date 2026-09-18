@@ -47,6 +47,21 @@ describe('POST /api/revalidate', () => {
     expect(revalidateTag).toHaveBeenCalledWith('cms-site-settings');
   });
 
+  it('drops the redirect tag for redirects.updated from the admin API (#169)', async () => {
+    const res = await POST(req({ id: 7 }, { 'x-cms-event': 'redirects.updated' }));
+    expect(res.status).toBe(200);
+    expect(revalidateTag.mock.calls.map((c: unknown[]) => c[0])).toEqual(['cms-redirects']);
+  });
+
+  it('also drops both slugs\' pages for a slug-change redirects.updated (#169)', async () => {
+    const body = { id: 1, slug: 'new', previousSlug: 'old', contentTypeName: 'standard_page', fromPath: '/pages/old', toPath: '/pages/new' };
+    const res = await POST(req(body, { 'x-cms-event': 'redirects.updated' }));
+    expect(res.status).toBe(200);
+    expect(revalidateTag.mock.calls.map((c: unknown[]) => c[0]).sort()).toEqual(
+      ['cms-redirects', 'cms-page-new', 'cms-article-new', 'cms-page-old', 'cms-article-old', 'cms-standard-page'].sort(),
+    );
+  });
+
   it('rejects a bad signature when REVALIDATE_SECRET is set', async () => {
     process.env.REVALIDATE_SECRET = 's3cret';
     const body = { slug: 'x' };
