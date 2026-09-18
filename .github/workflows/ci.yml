@@ -33,9 +33,9 @@ jobs:
       run:
         working-directory: src/api
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
@@ -56,7 +56,7 @@ jobs:
 
       - name: Upload test results and coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: api-test-results
           path: src/api/TestResults
@@ -66,7 +66,7 @@ jobs:
         run: dotnet publish VA.CMS.API/VA.CMS.API.csproj -c Release --no-build -o ../../artifacts/api
 
       - name: Upload API package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: api-publish
           path: |
@@ -81,8 +81,8 @@ jobs:
       run:
         working-directory: src/admin
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -91,7 +91,7 @@ jobs:
       - run: npx tsc --noEmit
       - run: npx vitest run
       - run: npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: admin-dist
           path: src/admin/dist
@@ -103,8 +103,8 @@ jobs:
       run:
         working-directory: src/public
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -139,11 +139,11 @@ jobs:
     env:
       CONNECTION_STRING: "Server=localhost,14333;Database=VACMS_CI;User Id=sa;Password=VaCms_Ci!2026x;TrustServerCertificate=True;Connection Timeout=15;"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -191,7 +191,7 @@ jobs:
 
       - name: Upload a11y report and server logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: accessibility-report
           path: |
@@ -219,11 +219,11 @@ jobs:
     env:
       CONNECTION_STRING: "Server=localhost,14333;Database=VACMS_E2E;User Id=sa;Password=VaCms_Ci!2026x;TrustServerCertificate=True;Connection Timeout=15;"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -275,7 +275,7 @@ jobs:
 
       - name: Upload e2e report and server logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-report
           path: |
