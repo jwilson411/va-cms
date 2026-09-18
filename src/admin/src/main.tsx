@@ -25,6 +25,7 @@ import { AuditLogPage } from './features/audit';
 import { NavigationEditorPage } from './features/navigation';
 import { RedirectsPage } from './features/redirects';
 import { WebhooksPage } from './features/webhooks';
+import { DbHealthPage } from './features/dbHealth';
 
 const queryClient = new QueryClient();
 
@@ -57,6 +58,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="/admin/search/pins" element={<SearchPinsPage />} />
                     {/* Issue #67: AD group → role mappings */}
                     <Route path="/admin/settings" element={<AdminSettingsPage />} />
+                    {/* #172: DB health dashboard (was a stray page in the public site) */}
+                    <Route path="/admin/settings/health" element={<DbHealthPage />} />
                     {/* Issue #51: Search analytics full page (FR-SEARCH-06) */}
                     <Route path="/admin/search/analytics" element={<SearchAnalyticsPage />} />
                     {/* Issue #56: User directory and role assignment admin UI (FR-USERS-03/04) */}

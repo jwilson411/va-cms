@@ -26,6 +26,7 @@ import { UswdsFooter } from '@/components/uswds/UswdsFooter';
 import { UswdsIdentifier } from '@/components/uswds/UswdsIdentifier';
 import { UswdsBreadcrumb, BreadcrumbItem } from '@/components/uswds/UswdsBreadcrumb';
 import { DEFAULT_SITE_SETTINGS, type SiteChrome } from '@/lib/cms/settings';
+import { serializeJsonForHtml } from '@/lib/security/inline-json';
 
 /** A media asset reference returned by the API for featuredImage fields */
 export interface FeaturedImage {
@@ -98,6 +99,10 @@ function formatPublishDate(isoDate: string): string {
 /**
  * Builds a JSON-LD Article structured data object for a news article.
  * Injected into <head> via <script type="application/ld+json">.
+ *
+ * Serialised with serializeJsonForHtml (#172): title, author and the other
+ * fields are editor-controlled, so `<`, `>` and `&` are escaped as `\uXXXX` to
+ * keep a `</script>` inside a title from breaking out of the element.
  */
 function buildArticleJsonLd(props: NewsArticleTemplateProps): string {
   const { title, author, publishedAt, featuredImage, canonicalUrl } = props;
@@ -125,7 +130,7 @@ function buildArticleJsonLd(props: NewsArticleTemplateProps): string {
     },
   };
 
-  return JSON.stringify(jsonLd);
+  return serializeJsonForHtml(jsonLd);
 }
 
 /**
@@ -148,8 +153,9 @@ function buildArticleJsonLd(props: NewsArticleTemplateProps): string {
  *   <UswdsIdentifier />    — identifier (mandatory)
  *
  * JSON-LD Article structured data is injected via dangerouslySetInnerHTML on a
- * <script> tag in the article header. The JSON is built from trusted CMS fields
- * (no user-controlled HTML) so this is safe.
+ * <script> tag in the article header. The fields come from CMS editors, who are
+ * not admins, so the JSON is serialised with `<`/`>`/`&` escaped (#172) and the
+ * script carries the per-request CSP nonce (#162).
  */
 export function NewsArticleTemplate({
   title,

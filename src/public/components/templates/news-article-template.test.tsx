@@ -356,6 +356,29 @@ describe('NewsArticleTemplate — JSON-LD structured data', () => {
     const json = JSON.parse(script.innerHTML);
     expect(json.author).toBeUndefined();
   });
+
+  // #172: title/author/tags are editor-controlled — a </script> in them must not
+  // break out of the JSON-LD element (stored XSS on the public page).
+  it('JSON-LD escapes a </script> payload in the title and author', () => {
+    const payload = '</script><script>alert(1)</script>';
+    const { container } = render(
+      <NewsArticleTemplate {...fullProps} title={`VA News ${payload}`} author={`Eve & ${payload}`} />,
+    );
+    const script = container.querySelector('script[type="application/ld+json"]')!;
+    expect(script.innerHTML).not.toContain('<');
+    expect(script.innerHTML).not.toContain('>');
+    expect(script.innerHTML).toContain('\\u003c/script\\u003e');
+    // Still valid JSON that reads back as the original text.
+    const json = JSON.parse(script.innerHTML);
+    expect(json.headline).toBe(`VA News ${payload}`);
+    expect(json.author?.name).toBe(`Eve & ${payload}`);
+  });
+
+  it('JSON-LD script carries the per-request CSP nonce', () => {
+    const { container } = render(<NewsArticleTemplate {...baseProps} nonce="n0nce" />);
+    const script = container.querySelector('script[type="application/ld+json"]')!;
+    expect(script.getAttribute('nonce')).toBe('n0nce');
+  });
 });
 
 // ---------------------------------------------------------------------------
