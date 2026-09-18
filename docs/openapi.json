@@ -4463,7 +4463,7 @@
         "tags": [
           "SearchAnalytics"
         ],
-        "summary": "GET /api/v1/admin/search/analytics/summary\nReturns top 10 queries and top 10 zero-result queries over the last 30 days.\nRequires any CMS role (admin users only).",
+        "summary": "GET /api/v1/admin/search/analytics/summary\nReturns top 10 queries and top 10 zero-result queries over the last 30 days.\nRequires SiteAdmin or SystemAdmin (#175).",
         "responses": {
           "200": {
             "description": "OK",
@@ -4493,7 +4493,7 @@
         "tags": [
           "SearchAnalytics"
         ],
-        "summary": "GET /api/v1/admin/search/analytics\nFull paginated analytics table with CTR, used by /admin/search/analytics page.\nRequires any CMS role.",
+        "summary": "GET /api/v1/admin/search/analytics\nFull paginated analytics table with CTR, used by /admin/search/analytics page.\nRequires SiteAdmin or SystemAdmin (#175).",
         "parameters": [
           {
             "name": "daysBack",

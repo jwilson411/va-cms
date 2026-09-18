@@ -23,6 +23,10 @@ namespace VA.CMS.API.Controllers.Admin;
 ///       Full paginated analytics table (query, count, zero-result, CTR).
 ///       Used by /admin/search/analytics admin page.
 ///
+///   Both read endpoints need CanManageSite (SiteAdmin / SystemAdmin), not CanRead (#175):
+///   even after redaction the query text is what anonymous visitors typed, so it is not a
+///   dataset every content role gets to browse or export.
+///
 ///   POST /api/v1/search/click
 ///       Records a user click on a search result for CTR tracking.
 ///       Public (no JWT) — called by the public-site search component. Bounded (#167):
@@ -56,10 +60,10 @@ public class SearchAnalyticsController : ControllerBase
     /// <summary>
     /// GET /api/v1/admin/search/analytics/summary
     /// Returns top 10 queries and top 10 zero-result queries over the last 30 days.
-    /// Requires any CMS role (admin users only).
+    /// Requires SiteAdmin or SystemAdmin (#175).
     /// </summary>
     [HttpGet("api/v1/admin/search/analytics/summary")]
-    [Authorize(Policy = CmsRoles.Policies.CanRead)]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(typeof(SearchAnalyticsSummaryDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetSummary()
     {
@@ -90,10 +94,10 @@ public class SearchAnalyticsController : ControllerBase
     /// <summary>
     /// GET /api/v1/admin/search/analytics
     /// Full paginated analytics table with CTR, used by /admin/search/analytics page.
-    /// Requires any CMS role.
+    /// Requires SiteAdmin or SystemAdmin (#175).
     /// </summary>
     [HttpGet("api/v1/admin/search/analytics")]
-    [Authorize(Policy = CmsRoles.Policies.CanRead)]
+    [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(typeof(SearchAnalyticsPageDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetFull(
         [FromQuery] int daysBack  = 30,

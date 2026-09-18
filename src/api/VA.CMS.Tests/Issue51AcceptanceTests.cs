@@ -146,7 +146,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
     [Fact]
     public async Task GetSummary_SeededQuery_AppearsInTopQueries()
     {
-        var uniqueQuery = $"ac1-top-{Guid.NewGuid():N}";
+        var uniqueQuery = SearchTestText.Unique("ac1-top");
         await InsertQueryLogAsync(uniqueQuery, resultCount: 5);
         await InsertQueryLogAsync(uniqueQuery, resultCount: 3);
 
@@ -161,7 +161,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
     [Fact]
     public async Task GetSummary_SeededZeroResultQuery_AppearsInZeroResultList()
     {
-        var uniqueQuery = $"ac1-zero-{Guid.NewGuid():N}";
+        var uniqueQuery = SearchTestText.Unique("ac1-zero");
         await InsertQueryLogAsync(uniqueQuery, resultCount: 0);
         await InsertQueryLogAsync(uniqueQuery, resultCount: 0);
 
@@ -206,7 +206,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
     [Fact]
     public async Task GetFull_SeededQuery_AppearsInFullTable()
     {
-        var uniqueQuery = $"ac2-full-{Guid.NewGuid():N}";
+        var uniqueQuery = SearchTestText.Unique("ac2-full");
         await InsertQueryLogAsync(uniqueQuery, resultCount: 7);
 
         var repo   = Repo();
@@ -243,7 +243,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
     [Fact]
     public async Task LogClick_InsertsRowInSearchResultClick()
     {
-        var uniqueQuery = $"ac3-click-{Guid.NewGuid():N}";
+        var uniqueQuery = SearchTestText.Unique("ac3-click");
         var uniqueSlug  = $"slug-{Guid.NewGuid():N}";
 
         await Controller().LogClick(new LogClickRequest
@@ -300,7 +300,7 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
     [Fact]
     public async Task GetFull_AfterClick_CtrIsNonZero()
     {
-        var uniqueQuery = $"ac3-ctr-{Guid.NewGuid():N}";
+        var uniqueQuery = SearchTestText.Unique("ac3-ctr");
         var uniqueSlug  = $"slug-{Guid.NewGuid():N}";
 
         // 2 searches, 1 click → CTR = 50%

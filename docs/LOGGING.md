@@ -89,7 +89,7 @@ VA Handbook 6500 data-minimization applies to logs as to any other store. The AP
 | `Authorization` header / bearer tokens / refresh cookies | `AuthHeaderRedactionMiddleware` replaces the value; request logging never logs headers |
 | Passwords, connection strings, SMTP/Splunk/HEC tokens | startup validation reports the *name* of a bad setting, not its value |
 | Content bodies, field values, uploaded file contents | ids and byte counts only |
-| Search query text | goes to `SearchQueryLog` (analytics), not the application log — see #175 for its own retention |
+| Search query text | goes to `SearchQueryLog` (analytics), not the application log — redacted first and kept `search.analytics.retentionDays` (#175, `docs/SECURITY_CONTROLS.md` § 6.1) |
 | Full request URLs with query strings containing tokens | the preview-token endpoint logs the entry id, not the token |
 
 Failed logons log the *reason* and the client IP at Warning; the identifier that failed is in the audit

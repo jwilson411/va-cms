@@ -81,7 +81,7 @@ va-cms/
 │   ├── public/                       # Next.js public site (App Router; proxy.ts = nonce CSP + redirect resolver)
 │   └── theme/uswds/                  # VA USWDS theme tokens shared by both front ends
 │
-├── migrations/                       # Plain SQL scripts V001…V048, forward-only, run by DbUp (vacms db migrate)
+├── migrations/                       # Plain SQL scripts V001…V049, forward-only, run by DbUp (vacms db migrate)
 ├── infra/
 │   ├── sql/provision-logins.sql      # vacms_app / vacms_readonly logins from pipeline secrets
 │   └── sql-agent-jobs/               # Archive audit log, purge refresh tokens/deliveries, roll up search logs, index maintenance

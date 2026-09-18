@@ -17,6 +17,7 @@ using VA.CMS.API.RateLimiting;
 using VA.CMS.API.Search;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Search;
 using VA.CMS.Infrastructure.Settings;
 using VA.CMS.Infrastructure.Storage;
 
@@ -278,7 +279,7 @@ public class Issue167AcceptanceTests
     public void Queue_Drops_The_Oldest_When_Full_And_Counts_It()
     {
         var settings = StaticSiteSettings.Defaults.With(SiteSettingKeys.SearchLogQueueCapacity, 100);
-        var queue = new SearchLogQueue(settings, NullLogger<SearchLogQueue>.Instance);
+        var queue = new SearchLogQueue(settings, new SearchQueryRedactor(settings), NullLogger<SearchLogQueue>.Instance);
 
         for (var i = 0; i < 150; i++)
             Assert.True(queue.TryEnqueue(new SearchQueryLogItem($"q{i}", 0, null)));
@@ -299,7 +300,7 @@ public class Issue167AcceptanceTests
             .AddScoped<ISearchRepository>(_ => search)
             .AddScoped<ISearchAnalyticsRepository>(_ => new RecordingAnalyticsRepo())
             .BuildServiceProvider();
-        var queue  = new SearchLogQueue(StaticSiteSettings.Defaults, NullLogger<SearchLogQueue>.Instance);
+        var queue  = new SearchLogQueue(StaticSiteSettings.Defaults, new SearchQueryRedactor(StaticSiteSettings.Defaults), NullLogger<SearchLogQueue>.Instance);
         var writer = new SearchLogWriter(queue, services.GetRequiredService<IServiceScopeFactory>(), NullLogger<SearchLogWriter>.Instance);
 
         await writer.StartAsync(CancellationToken.None);

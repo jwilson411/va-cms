@@ -262,7 +262,7 @@ epic #152 (enterprise readiness). CI (`ci.yml`) and security scanning (`security
 | Webhooks and notifications | ✅ Production-ready | Encrypted secrets, egress allow-list and SSRF guard, transactional outbox, SMTP email (#168/#171) |
 | CI / supply chain | ✅ In place | Build + 790+ API tests on SQL Server 2022, 400+ SPA tests, CodeQL, dependency advisories, gitleaks, CycloneDX SBOMs, OpenAPI drift check (#160/#161) |
 | ATO documentation | ✅ In place | `docs/SECURITY_CONTROLS.md`, `SECURITY.md`, `docs/DEPLOYMENT.md` hardening sections (#174) |
-| Search-analytics PII (redaction, retention, restricted readers) | ⚠️ Open — #175 | Raw anonymous query text is kept 90 days and readable by system admins; listed as a POA&M item in `docs/SECURITY_CONTROLS.md` § 8 |
+| Search-analytics PII (redaction, retention, restricted readers) | ✅ Production-ready | Query text redacted before storage (SSN, 9-digit, VA file no., phone, e-mail — operator-extendable), raw rows purged after `search.analytics.retentionDays`, no IP stored, readers limited to SiteAdmin/SystemAdmin, reporting login denied the raw tables (#175) |
 | SharePoint 2016 migration tooling | ⏳ Later — epic #13 | Not started; no stories filed |
 | Pre-production security assessment (pen test, NFR-SEC-01) | ⏳ VA OIS activity | Inputs (SBOM, SARIF, control mapping) are produced by this repo |
 
