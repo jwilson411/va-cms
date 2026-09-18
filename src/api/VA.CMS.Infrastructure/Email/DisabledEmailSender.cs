@@ -19,7 +19,7 @@ public sealed class DisabledEmailSender : IEmailSender
     {
         foreach (var message in messages)
             _logger.LogInformation("Email not sent (Email:Smtp:Host is not configured) to {To}: {Subject}",
-                PiiMask.Email(message.ToAddress), message.Subject);
+                PiiMask.Redact(message.ToAddress), message.Subject);
         return Task.CompletedTask;
     }
 }

@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Mvc.ApplicationModels;
 using Microsoft.AspNetCore.RateLimiting;
 using VA.CMS.API.Middleware;
+using VA.CMS.Infrastructure.Logging;
 using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.RateLimiting;
@@ -106,7 +107,8 @@ public static class RateLimitPolicies
         var policy = http.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName ?? "(global)";
         http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("VA.CMS.API.RateLimiting")
             .LogWarning("Rate limit {Policy} exceeded by {Client} on {Method} {Path}; retry after {RetryAfterSeconds}s.",
-                policy, ClientKey(http), http.Request.Method, http.Request.Path, seconds);
+                policy, LogSanitizer.Scrub(ClientKey(http)), LogSanitizer.Scrub(http.Request.Method),
+                LogSanitizer.Scrub(http.Request.Path.Value), seconds);
 
         var problems = http.RequestServices.GetRequiredService<IProblemDetailsService>();
         await problems.WriteAsync(new ProblemDetailsContext

@@ -276,10 +276,24 @@ public class Issue166AcceptanceTests
     [Fact]
     public void Email_Addresses_Are_Masked_In_Log_Lines()
     {
-        Assert.Equal("a***@va.gov", PiiMask.Email("alice.smith@va.gov"));
-        Assert.Equal("***", PiiMask.Email("not-an-address"));
-        Assert.Equal("***", PiiMask.Email(null));
-        Assert.Equal("***", PiiMask.Email("@va.gov"));
+        Assert.Equal("a***@va.gov", PiiMask.Redact("alice.smith@va.gov"));
+        Assert.Equal("***", PiiMask.Redact("not-an-address"));
+        Assert.Equal("***", PiiMask.Redact(null));
+        Assert.Equal("***", PiiMask.Redact("@va.gov"));
+    }
+
+    [Fact]
+    public void Wire_Values_Are_Scrubbed_Before_They_Become_Log_Properties()
+    {
+        // CR/LF (log forging) and other control characters are neutralised, ordinary text is untouched
+        Assert.Equal("/api/search?q=x__[INFO] fake line", LogSanitizer.Scrub("/api/search?q=x\r\n[INFO] fake line"));
+        Assert.Equal("ip:10.0.0.1", LogSanitizer.Scrub("ip:10.0.0.1"));
+        Assert.Equal("a_b", LogSanitizer.Scrub("a\u001bb"));
+        Assert.Equal(string.Empty, LogSanitizer.Scrub(null));
+
+        var scrubbed = LogSanitizer.Scrub(new string('x', LogSanitizer.MaxLength + 50));
+        Assert.Equal(LogSanitizer.MaxLength + 1, scrubbed.Length);
+        Assert.EndsWith("…", scrubbed);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

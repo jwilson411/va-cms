@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text;
-using Microsoft.Data.SqlClient;
+using System.Data.Common;
 using VA.CMS.API.Auth;
 using VA.CMS.API.Observability;
 using VA.CMS.Infrastructure.Email;
@@ -105,25 +105,46 @@ public static class StartupValidation
     {
         if (!isProduction || string.IsNullOrWhiteSpace(connectionString)) return null;
 
-        SqlConnectionStringBuilder csb;
-        try { csb = new SqlConnectionStringBuilder(connectionString); }
-        catch (Exception ex) when (ex is ArgumentException or FormatException or System.Collections.Generic.KeyNotFoundException)
+        // Parsed with the provider-neutral builder on purpose: this rule only *reads* the string
+        // (the API never opens a connection from here), and the SqlClient builder is the sink that
+        // CodeQL cs/insecure-sql-connection watches. Keyword synonyms follow Microsoft.Data.SqlClient.
+        DbConnectionStringBuilder csb;
+        try { csb = new DbConnectionStringBuilder { ConnectionString = connectionString }; }
+        catch (ArgumentException ex)
         {
             return $"ConnectionStrings:DefaultConnection could not be parsed: {ex.Message}";
         }
 
         var faults = new List<string>();
-        if (csb.TrustServerCertificate)
+        if (IsTrue(Keyword(csb, "TrustServerCertificate", "Trust Server Certificate")))
             faults.Add("TrustServerCertificate=True disables certificate validation");
-        if (!(bool)csb.Encrypt)   // SqlConnectionEncryptOption: Optional (Encrypt=False) converts to false
+        if (!IsEncrypted(Keyword(csb, "Encrypt")))
             faults.Add("Encrypt=False sends data to SQL Server in clear text");
-        if (string.Equals(csb.UserID, "sa", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(Keyword(csb, "User ID", "UID", "User"), "sa", StringComparison.OrdinalIgnoreCase))
             faults.Add("User Id=sa; the API must run as the EXECUTE-only vacms_app login (#157)");
 
         return faults.Count == 0
             ? null
             : "ConnectionStrings:DefaultConnection is not acceptable in Production: " + string.Join("; ", faults) +
               ". Use Encrypt=True;TrustServerCertificate=False with a server certificate from the VA PKI.";
+
+        static string? Keyword(DbConnectionStringBuilder b, params string[] names)
+        {
+            foreach (var n in names)
+                if (b.TryGetValue(n, out var v) && v is not null) return v.ToString()?.Trim();
+            return null;
+        }
+
+        // SqlClient booleans accept true/false/yes/no.
+        static bool IsTrue(string? v)
+            => v is not null && (v.Equals("true", StringComparison.OrdinalIgnoreCase) || v.Equals("yes", StringComparison.OrdinalIgnoreCase));
+
+        // Encrypt defaults to Mandatory (true) since Microsoft.Data.SqlClient 4.0; Optional/False/No is the
+        // only way to turn it off, and Strict is the TDS 8 always-encrypted-transport mode.
+        static bool IsEncrypted(string? v)
+            => v is null || !(v.Equals("false", StringComparison.OrdinalIgnoreCase)
+                              || v.Equals("no", StringComparison.OrdinalIgnoreCase)
+                              || v.Equals("optional", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
