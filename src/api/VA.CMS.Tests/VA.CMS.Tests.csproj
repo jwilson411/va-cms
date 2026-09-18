@@ -29,6 +29,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Sample SharePoint 2016 export package (#191); copied beside the test binaries. -->
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\VA.CMS.Infrastructure\VA.CMS.Infrastructure.csproj" />
     <ProjectReference Include="..\VA.CMS.API\VA.CMS.API.csproj" />
   </ItemGroup>

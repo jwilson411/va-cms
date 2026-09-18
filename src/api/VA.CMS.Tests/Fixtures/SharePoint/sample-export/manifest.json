@@ -1,0 +1,184 @@
+{
+  "format": "vacms-sharepoint-export/1",
+  "exportedAt": "2026-09-18T13:05:00Z",
+  "exporterVersion": "Export-VacmsSharePoint.ps1/1.0",
+  "sourceWeb": {
+    "url": "https://intranet.example.va.gov/sites/vba-example",
+    "title": "VBA Example Regional Office",
+    "id": "9c1f4a58-1b2e-4d1e-9d2a-3c9f4b7e2a10"
+  },
+  "pages": [
+    {
+      "id": "0a1b2c3d-0001-4000-8000-000000000001",
+      "url": "/sites/vba-example/Pages/default.aspx",
+      "title": "Welcome to the VBA Example Regional Office",
+      "layout": "publishing",
+      "contentFile": "pages/0a1b2c3d-0001-4000-8000-000000000001.html",
+      "status": "published",
+      "description": "Home page for the regional office intranet.",
+      "author": "i:0#.w|VA\\jsmith",
+      "editor": "i:0#.w|VA\\mjones",
+      "created": "2019-03-04T14:22:10Z",
+      "modified": "2026-06-12T09:41:03Z"
+    },
+    {
+      "id": "0a1b2c3d-0001-4000-8000-000000000002",
+      "url": "/sites/vba-example/Pages/About-Us.aspx",
+      "title": "About Us",
+      "layout": "publishing",
+      "contentFile": "pages/0a1b2c3d-0001-4000-8000-000000000002.html",
+      "status": "published",
+      "description": null,
+      "author": "i:0#.w|VA\\jsmith",
+      "editor": "i:0#.w|VA\\jsmith",
+      "created": "2019-03-04T15:02:44Z",
+      "modified": "2025-11-30T18:15:00Z"
+    },
+    {
+      "id": "0a1b2c3d-0001-4000-8000-000000000003",
+      "url": "/sites/vba-example/Pages/Claims-Process.aspx",
+      "title": "How a Disability Claim Is Processed",
+      "layout": "publishing",
+      "contentFile": "pages/0a1b2c3d-0001-4000-8000-000000000003.html",
+      "status": "published",
+      "description": "Step-by-step overview of the claims process.",
+      "author": "i:0#.w|VA\\mjones",
+      "editor": "i:0#.w|VA\\mjones",
+      "created": "2020-08-19T11:00:00Z",
+      "modified": "2026-02-02T16:48:21Z"
+    },
+    {
+      "id": "0a1b2c3d-0001-4000-8000-000000000004",
+      "url": "/sites/vba-example/Pages/Contact.aspx",
+      "title": "Contact the Office",
+      "layout": "publishing",
+      "contentFile": "pages/0a1b2c3d-0001-4000-8000-000000000004.html",
+      "status": "published",
+      "description": null,
+      "author": "i:0#.w|VA\\rgarcia",
+      "editor": "i:0#.w|VA\\rgarcia",
+      "created": "2021-01-11T13:30:00Z",
+      "modified": "2024-07-08T10:05:19Z"
+    },
+    {
+      "id": "0a1b2c3d-0001-4000-8000-000000000005",
+      "url": "/sites/vba-example/Pages/Holiday-Schedule-2027.aspx",
+      "title": "Holiday Schedule 2027",
+      "layout": "publishing",
+      "contentFile": "pages/0a1b2c3d-0001-4000-8000-000000000005.html",
+      "status": "draft",
+      "description": "Draft — not yet approved.",
+      "author": "i:0#.w|VA\\mjones",
+      "editor": "i:0#.w|VA\\mjones",
+      "created": "2026-09-01T08:00:00Z",
+      "modified": "2026-09-15T12:12:12Z"
+    },
+    {
+      "id": "0a1b2c3d-0002-4000-8000-000000000001",
+      "url": "/sites/vba-example/SitePages/Team-Roster.aspx",
+      "title": "Team Roster",
+      "layout": "wiki",
+      "contentFile": "pages/0a1b2c3d-0002-4000-8000-000000000001.html",
+      "status": "published",
+      "description": null,
+      "author": "i:0#.w|VA\\rgarcia",
+      "editor": "i:0#.w|VA\\legacyuser",
+      "created": "2018-05-22T09:09:09Z",
+      "modified": "2023-03-14T15:00:00Z"
+    },
+    {
+      "id": "0a1b2c3d-0002-4000-8000-000000000002",
+      "url": "/sites/vba-example/SitePages/Meeting-Notes.aspx",
+      "title": "Meeting Notes",
+      "layout": "wiki",
+      "contentFile": "pages/0a1b2c3d-0002-4000-8000-000000000002.html",
+      "status": "checkedout",
+      "description": null,
+      "author": "i:0#.w|VA\\legacyuser",
+      "editor": "i:0#.w|VA\\legacyuser",
+      "created": "2018-06-01T10:10:10Z",
+      "modified": "2022-12-20T17:45:00Z"
+    },
+    {
+      "id": "0a1b2c3d-0003-4000-8000-000000000001",
+      "url": "/sites/vba-example/SitePages/Dashboard.aspx",
+      "title": "Dashboard",
+      "layout": "webpartpage",
+      "contentFile": "pages/0a1b2c3d-0003-4000-8000-000000000001.html",
+      "status": "published",
+      "description": null,
+      "author": "i:0#.w|VA\\jsmith",
+      "editor": "i:0#.w|VA\\jsmith",
+      "created": "2019-09-09T09:00:00Z",
+      "modified": "2019-09-09T09:00:00Z"
+    }
+  ],
+  "documents": [
+    {
+      "id": "5d6e7f80-0001-4000-8000-000000000001",
+      "library": "Documents",
+      "url": "/sites/vba-example/Documents/Claims-Checklist.pdf",
+      "file": "documents/Documents/Claims-Checklist.pdf",
+      "sizeBytes": 342,
+      "contentType": "application/pdf",
+      "title": "Disability Claims Checklist",
+      "altText": null,
+      "author": "i:0#.w|VA\\mjones",
+      "modified": "2025-05-05T05:05:05Z"
+    },
+    {
+      "id": "5d6e7f80-0001-4000-8000-000000000002",
+      "library": "Documents",
+      "url": "/sites/vba-example/Documents/Forms/VA-Form-21-526EZ-Instructions.pdf",
+      "file": "documents/Documents/Forms/VA-Form-21-526EZ-Instructions.pdf",
+      "sizeBytes": 359,
+      "contentType": "application/pdf",
+      "title": "VA Form 21-526EZ instructions",
+      "altText": null,
+      "author": "i:0#.w|VA\\mjones",
+      "modified": "2024-10-10T10:10:10Z"
+    },
+    {
+      "id": "5d6e7f80-0001-4000-8000-000000000003",
+      "library": "Documents",
+      "url": "/sites/vba-example/Documents/Office-Directory.csv",
+      "file": "documents/Documents/Office-Directory.csv",
+      "sizeBytes": 194,
+      "contentType": "text/csv",
+      "title": "Office directory",
+      "altText": null,
+      "author": "i:0#.w|VA\\rgarcia",
+      "modified": "2026-01-15T15:15:15Z"
+    },
+    {
+      "id": "5d6e7f80-0002-4000-8000-000000000001",
+      "library": "Site Assets",
+      "url": "/sites/vba-example/SiteAssets/office-front.png",
+      "file": "documents/SiteAssets/office-front.png",
+      "sizeBytes": 70,
+      "contentType": "image/png",
+      "title": "Office front entrance",
+      "altText": "Front entrance of the regional office building",
+      "author": "i:0#.w|VA\\jsmith",
+      "modified": "2019-03-04T14:00:00Z"
+    },
+    {
+      "id": "5d6e7f80-0002-4000-8000-000000000002",
+      "library": "Site Assets",
+      "url": "/sites/vba-example/SiteAssets/process-diagram.png",
+      "file": "documents/SiteAssets/process-diagram.png",
+      "sizeBytes": 70,
+      "contentType": "image/png",
+      "title": "Claims process diagram",
+      "altText": null,
+      "author": "i:0#.w|VA\\mjones",
+      "modified": "2020-08-19T11:30:00Z"
+    }
+  ],
+  "users": [
+    { "login": "i:0#.w|VA\\jsmith",     "upn": "jane.smith@va.gov",    "email": "jane.smith@va.gov",    "displayName": "Smith, Jane" },
+    { "login": "i:0#.w|VA\\mjones",     "upn": "marcus.jones@va.gov",  "email": "marcus.jones@va.gov",  "displayName": "Jones, Marcus" },
+    { "login": "i:0#.w|VA\\rgarcia",    "upn": null,                   "email": "rosa.garcia@va.gov",   "displayName": "Garcia, Rosa" },
+    { "login": "i:0#.w|VA\\legacyuser", "upn": null,                   "email": null,                   "displayName": "Legacy User (disabled)" }
+  ]
+}

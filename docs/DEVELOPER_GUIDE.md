@@ -643,7 +643,7 @@ vacms db migrate              # Apply pending migrations (deployment account; --
 vacms db provision-logins     # Create or rotate vacms_app / vacms_readonly (--app-password, --readonly-password)
 vacms db seed --demo          # Seed demo content
 vacms content-type scaffold NewsArticle  # Scaffold new type definition
-vacms migrate sharepoint --export ./sharepoint-export.zip  # Import from SharePoint
+vacms migrate sharepoint --package ./vba-example --dry-run  # Validate + inventory a SharePoint export package (docs/MIGRATION.md)
 vacms health --url https://cms.va.gov/api  # Check deployment health
 ```
 

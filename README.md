@@ -35,6 +35,7 @@ SharePoint 2016 on-prem is aging out. Drupal 11 (the only cleanly TRM-authorized
 - [API Reference](docs/openapi.json) — OpenAPI 3.0, snapshot-tested against the built API on every PR; browse it at `/swagger` on a running API
 - [Runtime Settings & Feature Flags](docs/SETTINGS.md)
 - [Deployment Guide](docs/DEPLOYMENT.md) — IIS STIG checklist, TLS/TDE, secrets, key rotation, retention, blue-green updates
+- [SharePoint 2016 Migration](docs/MIGRATION.md) — export package format, farm exporter script, `vacms migrate sharepoint`
 - [Security Controls (NIST 800-53 mapping)](docs/SECURITY_CONTROLS.md) and [Security Policy](SECURITY.md)
 - [Logging & Observability](docs/LOGGING.md)
 - [Accessibility Audit](docs/ACCESSIBILITY_AUDIT.md)
@@ -263,7 +264,7 @@ epic #152 (enterprise readiness). CI (`ci.yml`) and security scanning (`security
 | CI / supply chain | ✅ In place | Build + 790+ API tests on SQL Server 2022, 400+ SPA tests, CodeQL, dependency advisories, gitleaks, CycloneDX SBOMs, OpenAPI drift check (#160/#161) |
 | ATO documentation | ✅ In place | `docs/SECURITY_CONTROLS.md`, `SECURITY.md`, `docs/DEPLOYMENT.md` hardening sections (#174) |
 | Search-analytics PII (redaction, retention, restricted readers) | ✅ Production-ready | Query text redacted before storage (SSN, 9-digit, VA file no., phone, e-mail — operator-extendable), raw rows purged after `search.analytics.retentionDays`, no IP stored, readers limited to SiteAdmin/SystemAdmin, reporting login denied the raw tables (#175) |
-| SharePoint 2016 migration tooling | ⏳ Later — epic #13 | Not started; no stories filed |
+| SharePoint 2016 migration tooling | 🔧 In progress — epic #13 | Export package format, farm exporter (`infra/sharepoint/`) and `vacms migrate sharepoint --dry-run` validation/inventory in place (#191); HTML normaliser, page/document import, user mapping and report are #192–#196 — see `docs/MIGRATION.md` |
 | Pre-production security assessment (pen test, NFR-SEC-01) | ⏳ VA OIS activity | Inputs (SBOM, SARIF, control mapping) are produced by this repo |
 
 Not built, by decision: Azure Blob storage, Elasticsearch, API keys for headless consumers (anonymous callers

@@ -72,8 +72,9 @@ va-cms/
 │   │   │   ├── Data/                 # CmsDatabase (SP-only), repositories, session-context audit plumbing
 │   │   │   ├── Settings/             # SiteSettingDefinitions — every runtime toggle/limit (#141)
 │   │   │   ├── Storage/              # Local/UNC backends, MIME sniffer, SVG sanitiser, ICAP/ClamAV scanners
+│   │   │   ├── Migration/SharePoint/ # Export package reader + validation + inventory (epic #13, docs/MIGRATION.md)
 │   │   │   └── Search/ Email/ Notifications/ Outbox/ Markdown/ ContentTypes/ Services/
-│   │   ├── VA.CMS.CLI/               # `vacms` — db migrate / provision-logins / seed (#157)
+│   │   ├── VA.CMS.CLI/               # `vacms` — db migrate / provision-logins / seed (#157), migrate sharepoint (#191)
 │   │   └── VA.CMS.Tests/             # xUnit; IssueNNNAcceptanceTests per story, SQL Server 2022 via Testcontainers
 │   │
 │   ├── admin/                        # React 18 + TypeScript + Vite admin SPA (dist/web.config carries the CSP)
@@ -84,7 +85,8 @@ va-cms/
 ├── migrations/                       # Plain SQL scripts V001…V049, forward-only, run by DbUp (vacms db migrate)
 ├── infra/
 │   ├── sql/provision-logins.sql      # vacms_app / vacms_readonly logins from pipeline secrets
-│   └── sql-agent-jobs/               # Archive audit log, purge refresh tokens/deliveries, roll up search logs, index maintenance
+│   ├── sql-agent-jobs/               # Archive audit log, purge refresh tokens/deliveries, roll up search logs, index maintenance
+│   └── sharepoint/                   # Export-VacmsSharePoint.ps1 — runs on the SP2016 farm, writes the migration package (#191)
 ├── tests/accessibility/              # Playwright + axe suite (CI job)
 ├── docs/                             # This folder — see README "Quick Links"
 ├── docker-compose.yml                # SQL Server 2022 (14333), optional Mailpit and ClamAV profiles
