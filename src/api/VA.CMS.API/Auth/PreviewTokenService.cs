@@ -14,8 +14,8 @@ namespace VA.CMS.API.Auth;
 /// No database table is required — the token is self-validating.
 ///
 /// Token format (URL-safe base64):  base64url(payload_json).base64url(hmac)
-/// Payload: { "entryId": long, "exp": unix_seconds }
-/// TTL: 60 minutes
+/// Payload: { "EntryId": long, "Exp": unix_seconds, "Nonce": base64url }
+/// TTL: the auth.previewTokenMinutes site setting (default 60, issue #146).
 /// </summary>
 public interface IPreviewTokenService
 {

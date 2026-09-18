@@ -1,12 +1,13 @@
 # Business Requirements Document (BRD)
 ## VA CMS — USWDS-Compliant Content Management System
 
-**Version:** 1.2  
-**Status:** Draft  
+**Version:** 1.3  
+**Status:** Built — annotated  
 **Owner:** Justin Wilson  
-**Last Updated:** 2026-09-14  
+**Last Updated:** 2026-09-18  
 **Changelog:** v1.1 — Switched rich text storage from HTML to Markdown (DB-safe, portable, renderer-agnostic). Clarified auth chain: AD authentication issues JWT; no separate CMS user database or password.  
-**Changelog:** v1.2 — Replaced Entity Framework Core with PetaPoco micro-ORM. Database schema managed via plain SQL migration scripts (DbUp). Full SQL control, no ORM magic, no migration drama.
+**Changelog:** v1.2 — Replaced Entity Framework Core with PetaPoco micro-ORM. Database schema managed via plain SQL migration scripts (DbUp). Full SQL control, no ORM magic, no migration drama.  
+**Changelog:** v1.3 — Requirements are not rewritten; where the build diverged (on-prem-only constraint, settings rule, security hardening under epic #152) a *Build note* follows the requirement. The consolidated list is `docs/ARCHITECTURE.md` § "Requirements that were dropped or narrowed"; the control implementation is `docs/SECURITY_CONTROLS.md`.
 
 ---
 
@@ -135,17 +136,25 @@ Build a self-hosted CMS on a modern, VA-familiar stack. File for VA TRM inclusio
 
 **FR-MEDIA-04** — Uploaded files shall be virus-scanned before storage (integration point with VA endpoint security tools).
 
+> **Build note (2026-09-18, #174):** Implemented, not a hook: every upload is streamed to an ICAP RESPMOD engine or ClamAV before it is recorded; the engine being disabled is refused in Production and an unreachable engine fails closed (#159, `docs/DEPLOYMENT.md` § 5).
+
 **FR-MEDIA-05** — Alt text shall be stored as a property of the media asset and shall be required before the asset can be used in published content.
 
 **FR-MEDIA-06** — The system shall track which content entries use each media asset (usage tracking) so administrators can safely delete unused assets.
 
 **FR-MEDIA-07** — Storage backend shall be configurable: local filesystem (on-prem), network share (UNC path), or Azure Blob Storage.
 
+> **Build note (2026-09-18, #174):** Azure Blob was **not built** — the deployment is on-prem only. `Storage:Backend` accepts `local` or `unc`; anything else refuses to start (#170).
+
 ### 5.5 User Management and Access Control (FR-USERS)
+
+> **Build note (2026-09-18, #174):** Identity is on-prem Active Directory: Windows Integrated Authentication (IIS Kerberos) or **AD FS** OpenID Connect. No Azure AD tenant is used; the `AzureAd` configuration section name is the Microsoft.Identity.Web library's (`docs/DEPLOYMENT.md` § Identity provider).
 
 **FR-USERS-01** — The system shall integrate with Active Directory via Azure AD (OIDC) for authentication. AD authenticates the user; the CMS API issues a JWT access token on successful AD validation. No separate CMS password is created or stored. The user's AD account is the single credential.
 
 **FR-USERS-01a** — The JWT access token shall be short-lived (15 minutes). A refresh token stored in a secure httpOnly cookie shall allow silent renewal up to the session limit (8 hours) without re-authentication. On AD account deactivation, the next refresh attempt returns 401 and forces re-login.
+
+> **Build note (2026-09-18, #174):** 15 minutes and 8 hours are the defaults of the `auth.accessTokenMinutes`, `auth.idleTimeoutMinutes` and `auth.absoluteSessionHours` site settings, not constants (#146/#164). Refresh tokens are database-backed, rotate on every use and detect replay (#163); deactivation and role changes end sessions within `auth.revocationCheckSeconds`, not only at the next refresh.
 
 **FR-USERS-01b** — AD group membership may be mapped to CMS roles. Administrators configure the AD group → CMS role mapping in the settings UI. This eliminates per-user role assignment for organizations where AD groups already represent job functions (e.g., "VA-CMS-Editors" AD group → Editor role).
 
@@ -186,6 +195,8 @@ Build a self-hosted CMS on a modern, VA-familiar stack. File for VA TRM inclusio
 **FR-SEARCH-04** — Search results shall be ranked by relevance. Administrators shall be able to pin specific results to the top for key queries.
 
 **FR-SEARCH-05** — Search shall be powered by SQL Server Full-Text Search by default. The architecture shall support swapping in Elasticsearch for larger deployments.
+
+> **Build note (2026-09-18, #174):** Elasticsearch was **not built**; there is no search-provider abstraction. SQL Server FTS is the only engine (with a `LIKE` fallback when FTS is not installed, V038).
 
 **FR-SEARCH-06** — The admin interface shall surface search analytics: top queries, zero-result queries, and click-through rates.
 
@@ -377,14 +388,14 @@ See [DATA_MODEL.md](DATA_MODEL.md) for full schema.
 
 | Integration | Requirement |
 |---|---|
-| Azure Active Directory | OIDC/SAML SSO. Groups can map to CMS roles. |
+| Active Directory (on-prem) | Windows Integrated Authentication or AD FS OIDC. Groups map to CMS roles by SID or `DOMAIN\Group`. *Build note:* no Azure AD, no SAML. |
 | Digital Analytics Program (DAP) | Standard government analytics script injected into public page `<head>` |
-| VA Endpoint Security / AV | File upload scan hook — configurable plugin point |
+| VA Endpoint Security / AV | ICAP RESPMOD (enterprise scanners) or ClamAV `INSTREAM`; fail-closed (#159). *Build note:* built in, not a plugin point. |
 | Email (SMTP) | Workflow notification emails. Supports Exchange on-prem and Exchange Online |
-| Elasticsearch (optional) | Drop-in replacement for SQL Server Full-Text Search at scale |
-| Azure Blob Storage (optional) | Media storage backend for cloud-hybrid deployments |
+| ~~Elasticsearch (optional)~~ | *Build note:* not built (see FR-SEARCH-05). |
+| ~~Azure Blob Storage (optional)~~ | *Build note:* not built — on-prem only (see FR-MEDIA-07). |
 | Splunk (optional) | Structured log forwarding via HTTP Event Collector |
-| CI/CD | GitHub Actions or Azure DevOps pipelines. SBOM generated on each build. |
+| CI/CD | GitHub Actions (`.github/workflows/ci.yml`, `security.yml`): build, tests, CodeQL, dependency advisories, gitleaks, CycloneDX SBOM on each build (#161). Deployment itself is the documented manual procedure in `docs/DEPLOYMENT.md`. |
 
 ---
 
@@ -408,19 +419,19 @@ The system shall include a migration toolset:
 
 The MVP is shippable when all of the following are true:
 
-- [ ] A content owner with no technical training can create, edit, preview, and publish a USWDS-compliant page using only the admin UI
-- [ ] The review workflow (Draft → In Review → Approved → Published) functions end-to-end
-- [ ] Azure AD SSO is working for all user roles
-- [ ] RBAC correctly prevents content owners from publishing without review (when workflow is enabled)
-- [ ] All admin UI pages pass axe-core automated accessibility scan with zero critical violations
-- [ ] REST API returns content in < 200ms at p95 under 50 concurrent users
-- [ ] Public pages rendered by Next.js score ≥ 90 on Lighthouse Performance
-- [ ] Media upload, virus scan hook, and alt text enforcement work end-to-end
-- [ ] Full-text search returns relevant results within 500ms
-- [ ] Version history and rollback work for all content types
-- [ ] Audit log captures all mutations
-- [ ] IIS deployment guide successfully deploys the system on a fresh Windows Server 2022 VM
-- [ ] Section 508 self-assessment completed with no critical failures
+- [x] A content owner with no technical training can create, edit, preview, and publish a USWDS-compliant page using only the admin UI
+- [x] The review workflow (Draft → In Review → Approved → Published) functions end-to-end
+- [x] AD SSO (Windows Integrated Authentication / AD FS OIDC) is working for all user roles — *Azure AD replaced by on-prem AD, see FR-USERS-01*
+- [x] RBAC correctly prevents content owners from publishing without review (when workflow is enabled)
+- [x] All admin UI pages pass axe-core automated accessibility scan with zero critical violations (`tests/accessibility`, CI job)
+- [ ] REST API returns content in < 200ms at p95 under 50 concurrent users — *not yet measured; k6 suite is not in the repo*
+- [ ] Public pages rendered by Next.js score ≥ 90 on Lighthouse Performance — *not yet measured*
+- [x] Media upload, virus scanning (ICAP/ClamAV, EICAR test) and alt text enforcement work end-to-end
+- [ ] Full-text search returns relevant results within 500ms — *not yet measured under load*
+- [x] Version history and rollback work for all content types
+- [x] Audit log captures all mutations (every mutating stored procedure, plus logon/logoff/403 events — #165)
+- [ ] IIS deployment guide successfully deploys the system on a fresh Windows Server 2022 VM — *guide complete (`docs/DEPLOYMENT.md`); the dry run on a VA-imaged host is pending*
+- [ ] Section 508 self-assessment completed with no critical failures — *automated audit in `docs/ACCESSIBILITY_AUDIT.md`; the manual assessment is pending*
 
 ---
 

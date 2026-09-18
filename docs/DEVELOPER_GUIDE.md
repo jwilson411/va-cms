@@ -66,12 +66,13 @@ The CMS uses AD as the identity provider. The API issues a JWT — it never stor
 
 ```
 1. Admin SPA loads → no JWT in memory → redirect to /api/auth/login
-2. /api/auth/login → redirect to Azure AD (OIDC)
-3. AD validates user + MFA → callback to /api/auth/callback
+2. /api/auth/login?ack=1 (after the system-use notice) → Auth:Mode=WindowsAuth: /api/auth/windows-login (IIS Kerberos)
+                                                       Auth:Mode=AzureAd: redirect to AD FS (OIDC)
+3. AD validates user (+ MFA/PIV per AD policy) → /api/auth/windows-login or /api/auth/callback
 4. API validates the AD token, upserts User row, resolves AD group → role mapping
 5. API issues:
-     - JWT access token (15 min, HS256, stored in-memory in SPA — not localStorage)
-     - Refresh token (httpOnly cookie, 8 hr)
+     - JWT access token (auth.accessTokenMinutes, default 15; HS256; stored in-memory in SPA — not localStorage)
+     - Refresh token (httpOnly cookie; idle limit auth.idleTimeoutMinutes, absolute cap auth.absoluteSessionHours, default 8 h)
 6. All API requests: Authorization: Bearer {jwt}
 7. Before JWT expires, SPA silently POSTs to /api/auth/refresh
      - API validates the httpOnly cookie against [RefreshToken] and rotates it (#163)
