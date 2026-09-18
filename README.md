@@ -55,7 +55,8 @@ Both front ends compile USWDS 3.x from Sass with the VA theme tokens (VA Blue `#
 VA Gold `#f9c642`, Public Sans) defined once in `src/theme/uswds/_va-settings.scss`.
 `npm run dev` / `npm run build` first copy the USWDS fonts and images into each app's
 gitignored `public/uswds/` (`npm run uswds:assets`). Smoke-test pages that render themed
-USWDS components live at http://localhost:5173/admin/theme and http://localhost:3000/theme.
+USWDS components live at http://localhost:5173/admin/theme and http://localhost:3000/theme
+(the public one is `next dev` only — production builds answer 404 there, #172).
 
 ### Prerequisites
 

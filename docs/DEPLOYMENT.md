@@ -393,6 +393,11 @@ checks (name, duration, failure text) for a caller with the Developer role. Conf
 poll `/health/ready` every 60 seconds and alert on 503. Logging, correlation ids and the full health-check
 description are in `docs/LOGGING.md`.
 
+Database health (index fragmentation, table sizes, queries running longer than 5 s) is a separate, authenticated
+view: `GET /api/v1/admin/health/db` (Developer or SystemAdmin), rendered in the admin SPA at
+`/admin/settings/health` (#172). The public Next.js site serves no `/admin/*` routes; its `/theme` component
+gallery is `next dev` only and answers 404 in a production build.
+
 ### 8. Topologies and multi-node behaviour (NFR-OPS-04, #171)
 
 The API has no in-process state that a second node would contradict: sessions are bearer tokens with
