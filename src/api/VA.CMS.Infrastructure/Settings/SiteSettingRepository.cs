@@ -41,7 +41,16 @@ public interface ISiteSettingRepository
 
     /// <summary>Value := NULL so the default applies again. Returns false when the key is not declared.</summary>
     Task<bool> ResetAsync(string key, long updatedById, CancellationToken ct = default);
+
+    /// <summary>
+    /// Cheap change token for the whole table (#171): newest UpdatedAt plus row count. Moves on
+    /// every SetValue/Reset/EnsureDefinition on any node.
+    /// </summary>
+    Task<SiteSettingChangeStamp> GetChangeStampAsync(CancellationToken ct = default);
 }
+
+/// <summary>Result of usp_SiteSetting_GetChangeStamp. Equal stamps mean nothing changed.</summary>
+public readonly record struct SiteSettingChangeStamp(DateTime? UpdatedAt, long RowCount);
 
 public sealed class SiteSettingRepository : ISiteSettingRepository
 {
@@ -127,5 +136,18 @@ public sealed class SiteSettingRepository : ISiteSettingRepository
         success.Direction = ParameterDirection.Output;
         await cmd.ExecuteNonQueryAsync(ct);
         return success.Value is bool b && b;
+    }
+
+    public async Task<SiteSettingChangeStamp> GetChangeStampAsync(CancellationToken ct = default)
+    {
+        await using var conn = new SqlConnection(_connectionString);
+        await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_SiteSetting_GetChangeStamp";
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct)) return default;
+        return new SiteSettingChangeStamp(
+            reader.IsDBNull(0) ? null : reader.GetDateTime(0),
+            reader.IsDBNull(1) ? 0 : reader.GetInt64(1));
     }
 }

@@ -23,6 +23,7 @@ using VA.CMS.Infrastructure.ContentTypes.BuiltIn;
 using VA.CMS.Infrastructure.ContentTypes.CustomFields;
 using VA.CMS.Infrastructure.Email;
 using VA.CMS.Infrastructure.Notifications;
+using VA.CMS.Infrastructure.Outbox;
 using VA.CMS.Infrastructure.Services;
 using VA.CMS.Infrastructure.Settings;
 using VA.CMS.Infrastructure.Storage;
@@ -477,7 +478,9 @@ builder.Services.AddHttpClient(WebhookHttpHandler.ClientName)
     .ConfigurePrimaryHttpMessageHandler(sp => WebhookHttpHandler.Create(
         sp.GetRequiredService<WebhookDestinationPolicy>(), sp.GetRequiredService<IWebhookDnsResolver>()));
 builder.Services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();
-builder.Services.AddSingleton<IWebhookBackgroundDispatcher, WebhookBackgroundDispatcher>();
+// #171: events are queued to the transactional outbox and delivered by OutboxDispatcherWorker.
+builder.Services.AddScoped<IWebhookBackgroundDispatcher, OutboxWebhookDispatcher>();
+builder.Services.AddScoped<IOutboxConsumer, OutboxWebhookConsumer>();
 
 // Issue #38: In-app notification center for workflow events (BRD FR-WORKFLOW-02/03)
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
@@ -497,9 +500,20 @@ else
     builder.Services.AddSingleton<IEmailSender, DisabledEmailSender>();
     Log.Information("Email:Smtp:Host not configured; workflow emails will be logged, not sent.");
 }
-builder.Services.AddSingleton<IEmailDispatcher, BackgroundEmailDispatcher>();
+builder.Services.AddScoped<IEmailDispatcher, OutboxEmailDispatcher>();
+builder.Services.AddScoped<IOutboxConsumer, OutboxEmailConsumer>();
 
-// Issue #35: Scheduled publish / expiry background worker (BRD FR-AUTH-04)
+// -----------------------------------------------------------------------
+// Issue #171 (NFR-OPS-04): transactional outbox. Webhook deliveries and workflow emails are
+// [OutboundEvent] rows written on the caller's connection; OutboxDispatcherWorker runs on
+// every node and claims batches with UPDLOCK/READPAST, so N nodes share the work and a
+// recycle loses nothing. Knobs are the outbox.* site settings.
+// -----------------------------------------------------------------------
+builder.Services.AddSingleton<IOutboxRepository>(_ => new OutboxRepository(connectionString));
+builder.Services.AddHostedService<OutboxDispatcherWorker>();
+
+// Issue #35: Scheduled publish / expiry background worker (BRD FR-AUTH-04). Safe to run on
+// every node since #171: the claim SPs hand each due entry to exactly one sweep.
 builder.Services.AddHostedService<VA.CMS.Infrastructure.Services.ScheduledPublishWorker>();
 
 // -----------------------------------------------------------------------

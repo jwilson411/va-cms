@@ -565,6 +565,12 @@ internal class Issue23ContentEntryStub : IContentEntryRepository
     public Task ExpireScheduledAsync(long id, long systemActorId)
         => Task.CompletedTask;
 
+    public Task<IList<ContentEntry>> ClaimScheduledForPublishAsync()
+        => Task.FromResult<IList<ContentEntry>>(new List<ContentEntry>());
+
+    public Task<IList<ContentEntry>> ClaimScheduledForExpiryAsync()
+        => Task.FromResult<IList<ContentEntry>>(new List<ContentEntry>());
+
     // Issue #36 stub implementation
     public Task<(bool Success, long? NewEntryId, string? ErrorMessage)> DuplicateAsync(
         long sourceEntryId, long actorId)

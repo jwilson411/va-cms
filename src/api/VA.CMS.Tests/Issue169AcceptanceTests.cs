@@ -427,7 +427,11 @@ public class Issue169HttpTests
     {
         public List<string> Events { get; } = new();
         public List<object> Payloads { get; } = new();
-        public void Enqueue(string eventName, object payload) { Events.Add(eventName); Payloads.Add(payload); }
+        public Task EnqueueAsync(string eventName, object payload, CancellationToken ct = default)
+        {
+            Events.Add(eventName); Payloads.Add(payload);
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class ResolverFactory(int cacheSeconds = 60) : WebApplicationFactory<Program>

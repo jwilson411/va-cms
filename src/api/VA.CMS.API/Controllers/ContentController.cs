@@ -317,7 +317,7 @@ public class ContentController : ControllerBase
 
         await _entries.ArchiveAsync(id, _rbac.GetUserId(User) ?? 0);
         entry.Status = "Archived";
-        _webhooks.Enqueue(WebhookEvents.ContentArchived, ContentEventPayload(entry));
+        await _webhooks.EnqueueAsync(WebhookEvents.ContentArchived, ContentEventPayload(entry));
         return NoContent();
     }
 
@@ -429,7 +429,7 @@ public class ContentController : ControllerBase
         {
             entry.PublishedVersionId = latestVersion.Id;
             await _entries.UpdateAsync(entry);
-            _webhooks.Enqueue(WebhookEvents.ContentPublished, ContentEventPayload(entry));
+            await _webhooks.EnqueueAsync(WebhookEvents.ContentPublished, ContentEventPayload(entry));
             await _notifier.NotifyAsync(entry.Id, NotificationEventTypes.ContentPublished, _rbac.GetUserId(User) ?? 0);
             return NoContent();
         }
@@ -442,7 +442,7 @@ public class ContentController : ControllerBase
         entry.Status             = "Published";
         entry.PublishedVersionId = latestVersion.Id;
         await _entries.UpdateAsync(entry);
-        _webhooks.Enqueue(WebhookEvents.ContentPublished, ContentEventPayload(entry));
+        await _webhooks.EnqueueAsync(WebhookEvents.ContentPublished, ContentEventPayload(entry));
         await _notifier.NotifyAsync(entry.Id, NotificationEventTypes.ContentPublished, _rbac.GetUserId(User) ?? 0);
         return NoContent();
     }
@@ -463,7 +463,7 @@ public class ContentController : ControllerBase
         if (result is NoContentResult)
         {
             entry.Status = "Approved";
-            _webhooks.Enqueue(WebhookEvents.ContentUnpublished, ContentEventPayload(entry));
+            await _webhooks.EnqueueAsync(WebhookEvents.ContentUnpublished, ContentEventPayload(entry));
         }
         return result;
     }
@@ -487,7 +487,7 @@ public class ContentController : ControllerBase
         if (result is NoContentResult)
         {
             entry.Status = "Archived";
-            _webhooks.Enqueue(WebhookEvents.ContentArchived, ContentEventPayload(entry));
+            await _webhooks.EnqueueAsync(WebhookEvents.ContentArchived, ContentEventPayload(entry));
         }
         return result;
     }
@@ -551,7 +551,7 @@ public class ContentController : ControllerBase
         {
             _redirects.Invalidate();
             var prefix = RedirectPathValidator.PublicPathPrefix(entry.ContentTypeName);
-            _webhooks.Enqueue(WebhookEvents.RedirectsUpdated, new
+            await _webhooks.EnqueueAsync(WebhookEvents.RedirectsUpdated, new
             {
                 id              = entry.Id,
                 slug            = newSlug,

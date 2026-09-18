@@ -1440,6 +1440,7 @@ GO
 | `V045__audit_coverage.sql` | every mutating SP audits inside its transaction; role changes end sessions (#165) |
 | `V046__webhook_hardening.sql` | `Webhook.Secret` protected at rest, `vw_Webhook`, delivery log / redelivery / re-key SPs (#168) |
 | `V047__redirect_resolution.sql` | redirect rows are public paths (`/pages/…`, `/news/…`); slug-change rows normalised; `usp_Redirect_GetByPath` matches the trailing-slash twin; `usp_Redirect_Create/_Update` flatten chains; `usp_ContentEntry_UpdateSlug` un-shadows the new path (#169) |
+| `V048__outbox_and_scheduler_lease.sql` | `[OutboundEvent]` transactional outbox + `usp_OutboundEvent_Enqueue/_Claim/_Complete/_Reschedule/_Fail/_Purge/_Stats` (claim is one `UPDATE … OUTPUT` over `UPDLOCK, READPAST` rows with a lease); `usp_ContentEntry_ClaimScheduledForPublish/_ClaimScheduledForExpiry` transition, audit and queue the webhook rows in one transaction so N scheduler nodes never double-publish; `usp_SiteSetting_GetChangeStamp` for the settings cache bust (#171) |
 
 ---
 

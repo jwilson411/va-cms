@@ -90,6 +90,17 @@ public interface IContentEntryRepository
     Task ExpireScheduledAsync(long id, long systemActorId);
 
     /// <summary>
+    /// Scheduler sweep (#171): in one transaction, transition every Approved entry whose
+    /// ScheduledPublishAt has passed to Published, audit it, and queue its content.published
+    /// webhook rows. Candidate rows are read WITH (UPDLOCK, READPAST), so two nodes sweeping
+    /// at once each get a disjoint set and every due entry is returned by exactly one call.
+    /// </summary>
+    Task<IList<ContentEntry>> ClaimScheduledForPublishAsync();
+
+    /// <summary>Scheduler sweep (#171): the expiry counterpart of <see cref="ClaimScheduledForPublishAsync"/> (Published → Approved, content.unpublished).</summary>
+    Task<IList<ContentEntry>> ClaimScheduledForExpiryAsync();
+
+    /// <summary>
     /// Duplicate a content entry: creates a new Draft with '(Copy)' appended to title,
     /// slug cleared (must be set before publish), all field values copied,
     /// and media references shared (not re-uploaded).

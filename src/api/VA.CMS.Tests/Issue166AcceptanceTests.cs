@@ -18,6 +18,7 @@ using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Email;
 using VA.CMS.Infrastructure.Logging;
+using VA.CMS.Infrastructure.Outbox;
 using VA.CMS.Infrastructure.Settings;
 using VA.CMS.Infrastructure.Storage;
 
@@ -145,7 +146,8 @@ public class Issue166AcceptanceTests
         using var detail = JsonDocument.Parse(await dev.Content.ReadAsStringAsync());
         Assert.Equal("Healthy", detail.RootElement.GetProperty("status").GetString());
         var checks = detail.RootElement.GetProperty("checks").EnumerateArray().ToDictionary(c => c.GetProperty("name").GetString()!, c => c);
-        Assert.Equal(["settings", "smtp", "sql", "storage"], checks.Keys.Order().ToArray());
+        Assert.Equal(["outbox", "settings", "smtp", "sql", "storage"], checks.Keys.Order().ToArray());
+        Assert.Equal("Healthy", checks["outbox"].GetProperty("status").GetString());
         Assert.Equal("Healthy", checks["storage"].GetProperty("status").GetString());
         Assert.Equal("Healthy", checks["settings"].GetProperty("status").GetString());
         Assert.Contains("not configured", checks["smtp"].GetProperty("description").GetString());
@@ -379,6 +381,10 @@ public class Issue166AcceptanceTests
                 Replace<IMediaExtendedRepository>(services, _ => new Issue158AcceptanceTests.UsageRepoStub());
                 Replace<IStorageBackend>(services,          _ => new Issue158AcceptanceTests.StorageStub());
                 Replace<IDbMonitorRepository>(services,     _ => new AuthTestStubs.StubDbMonitorRepository());
+                // #171: the outbox check and dispatcher read the singleton repository; keep them off SQL.
+                foreach (var d in services.Where(d => d.ServiceType == typeof(IOutboxRepository)).ToList())
+                    services.Remove(d);
+                services.AddSingleton<IOutboxRepository>(new InMemoryOutboxRepository());
                 AuthTestStubs.UseInMemoryAuth(services);
                 services.AddSingleton<ISiteSettingsService>(StaticSiteSettings.Defaults);
 

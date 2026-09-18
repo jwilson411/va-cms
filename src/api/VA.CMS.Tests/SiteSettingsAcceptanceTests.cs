@@ -160,7 +160,7 @@ public class SiteSettingsAcceptanceTests(DatabaseFixture fixture)
     public async Task Service_WithUnreachableDatabase_AnswersWithCodeDefaults_WithoutThrowing()
     {
         var svc = new SiteSettingsService(new SiteSettingRepository(
-            "Server=localhost,1;Database=nope;User Id=sa;Password=x;Connection Timeout=1;TrustServerCertificate=True;"));
+            "Server=localhost,1;Database=nope;User Id=sa;Password=x;Connection Timeout=1;Encrypt=True;TrustServerCertificate=True;"));
 
         Assert.Equal(15, svc.GetInt(SiteSettingKeys.AuthAccessTokenMinutes));
         Assert.False(svc.GetBool(SiteSettingKeys.FeatureGraphQl));   // off by default since #156

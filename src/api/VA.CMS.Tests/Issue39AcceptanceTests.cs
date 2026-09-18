@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Email;
+using VA.CMS.Infrastructure.Outbox;
 using VA.CMS.Infrastructure.Notifications;
 using VA.CMS.Infrastructure.Settings;
 
@@ -489,20 +490,35 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
     }
 
     [Fact]
-    public async Task BackgroundDispatcher_SendsOffTheCallingThread_AndSwallowsFailures()
+    public async Task OutboxDispatcher_QueuesToOutbox_AndConsumerDelivers_OrRetries()
     {
-        var sent = new TaskCompletionSource<IReadOnlyList<EmailMessage>>();
-        var dispatcher = new BackgroundEmailDispatcher(new DelegateSender(m => { sent.TrySetResult(m); return Task.CompletedTask; }),
-            NullLogger<BackgroundEmailDispatcher>.Instance);
+        // #171: Enqueue writes an outbox row; the consumer sends it later on whichever node claims it.
+        var outbox     = new InMemoryOutboxRepository();
+        var dispatcher = new OutboxEmailDispatcher(outbox, NullLogger<OutboxEmailDispatcher>.Instance);
+        await dispatcher.EnqueueAsync([new EmailMessage("a@va.gov", null, "s", "b")]);
+        var row = Assert.Single(outbox.Rows);
+        Assert.Equal(OutboundEventTypes.Smtp, row.Type);
 
-        dispatcher.Enqueue([new EmailMessage("a@va.gov", null, "s", "b")]);
-        var batch = await sent.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal("a@va.gov", Assert.Single(batch).ToAddress);
+        IReadOnlyList<EmailMessage>? sent = null;
+        var consumer = new OutboxEmailConsumer(new DelegateSender(m => { sent = m; return Task.CompletedTask; }),
+            StaticSiteSettings.Defaults, NullLogger<OutboxEmailConsumer>.Instance);
+        row.Attempts = 1;
+        Assert.IsType<OutboxOutcome.SucceededOutcome>(await consumer.HandleAsync(row, CancellationToken.None));
+        Assert.Equal("a@va.gov", Assert.Single(sent!).ToAddress);
 
-        var failing = new BackgroundEmailDispatcher(new DelegateSender(_ => throw new IOException("relay down")),
-            NullLogger<BackgroundEmailDispatcher>.Instance);
-        failing.Enqueue([new EmailMessage("a@va.gov", null, "s", "b")]);   // must not throw, must not crash the process
-        await Task.Delay(50);
+        // A dead relay is a retry, not a lost message; the schedule follows notifications.emailRetryDelaysSeconds.
+        var failing = new OutboxEmailConsumer(new DelegateSender(_ => throw new IOException("relay down")),
+            StaticSiteSettings.Defaults, NullLogger<OutboxEmailConsumer>.Instance);
+        var retry = Assert.IsType<OutboxOutcome.RetryOutcome>(await failing.HandleAsync(row, CancellationToken.None));
+        Assert.Equal(TimeSpan.FromSeconds(30), retry.Delay);
+        Assert.Contains("relay down", retry.Error);
+
+        row.Attempts = 5;   // notifications.emailMaxAttempts default
+        Assert.IsType<OutboxOutcome.FailedOutcome>(await failing.HandleAsync(row, CancellationToken.None));
+
+        // An unavailable outbox must not surface to the workflow transition that already committed.
+        var broken = new OutboxEmailDispatcher(new InMemoryOutboxRepository { ThrowOnEnqueue = true }, NullLogger<OutboxEmailDispatcher>.Instance);
+        await broken.EnqueueAsync([new EmailMessage("a@va.gov", null, "s", "b")]);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -585,10 +601,11 @@ internal sealed class CapturingEmailDispatcher : IEmailDispatcher
     public List<IReadOnlyList<EmailMessage>> Batches { get; } = [];
     public bool ThrowOnEnqueue { get; init; }
 
-    public void Enqueue(IReadOnlyList<EmailMessage> messages)
+    public Task EnqueueAsync(IReadOnlyList<EmailMessage> messages, CancellationToken ct = default)
     {
         if (ThrowOnEnqueue) throw new InvalidOperationException("mail queue unavailable");
         Batches.Add(messages);
+        return Task.CompletedTask;
     }
 }
 

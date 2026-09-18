@@ -6,6 +6,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using VA.CMS.API.Auth;
 using VA.CMS.Infrastructure.Email;
+using VA.CMS.Infrastructure.Outbox;
 using VA.CMS.Infrastructure.Settings;
 using VA.CMS.Infrastructure.Storage;
 
@@ -18,7 +19,8 @@ namespace VA.CMS.API.Observability;
 ///                                 host serves requests. Load balancers and IIS use this.
 ///   GET /health/ready           — readiness: SQL Server reachable as the app login, storage
 ///                                 root writable, settings snapshot loaded, SMTP relay
-///                                 reachable when email is on. 503 when Unhealthy.
+///                                 reachable when email is on, outbox backlog not stale
+///                                 (#171). 503 when Unhealthy.
 ///
 /// Both are anonymous (monitoring tools have no bearer token) but the readiness body is only
 /// <c>{"status":…}</c> unless the caller holds the Developer role — dependency names, timings
@@ -36,7 +38,8 @@ public static class HealthEndpoints
             .AddCheck<SqlHealthCheck>("sql",           tags: [ReadyTag])
             .AddCheck<StorageHealthCheck>("storage",   tags: [ReadyTag])
             .AddCheck<SettingsHealthCheck>("settings", tags: [ReadyTag])
-            .AddCheck<SmtpHealthCheck>("smtp",         tags: [ReadyTag]);
+            .AddCheck<SmtpHealthCheck>("smtp",         tags: [ReadyTag])
+            .AddCheck<OutboxHealthCheck>("outbox",     tags: [ReadyTag]);
         return services;
     }
 
@@ -235,5 +238,59 @@ public sealed class SmtpHealthCheck : IHealthCheck
         {
             return HealthCheckResult.Degraded($"SMTP relay {_email.Smtp.Host}:{_email.Smtp.Port} unreachable.", ex);
         }
+    }
+}
+
+/// <summary>
+/// The transactional outbox (#171) is drained by every node, so a due row that has waited
+/// longer than outbox.staleAfterSeconds means no node is delivering (all recycled, or the
+/// dispatcher is failing on every poll). Degraded, not Unhealthy: the CMS still serves and
+/// edits content; only webhooks and emails are late.
+/// </summary>
+public sealed class OutboxHealthCheck : IHealthCheck
+{
+    private readonly IOutboxRepository    _outbox;
+    private readonly ISiteSettingsService _settings;
+
+    public OutboxHealthCheck(IOutboxRepository outbox, ISiteSettingsService settings)
+    {
+        _outbox   = outbox;
+        _settings = settings;
+    }
+
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default)
+    {
+        OutboxStats stats;
+        try
+        {
+            stats = await _outbox.GetStatsAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The SQL check already reports an unreachable database; do not double-count it.
+            return HealthCheckResult.Degraded("Outbox backlog could not be read.", ex);
+        }
+
+        var data = new Dictionary<string, object>
+        {
+            ["pending"]   = stats.Pending,
+            ["succeeded"] = stats.Succeeded,
+            ["failed"]    = stats.Failed,
+        };
+        if (stats.OldestPendingAt is { } oldest) data["oldestPendingAt"] = oldest;
+
+        var staleAfter = _settings.GetInt(SiteSettingKeys.OutboxStaleAfterSeconds);
+        if (staleAfter > 0 && stats.OldestPendingAt is { } due)
+        {
+            var waited = DateTime.UtcNow - due;
+            if (waited > TimeSpan.FromSeconds(staleAfter))
+            {
+                return HealthCheckResult.Degraded(
+                    $"Oldest due outbox row has waited {waited.TotalSeconds:0}s (limit {staleAfter}s); no node is delivering webhooks/emails.",
+                    data: data);
+            }
+        }
+
+        return HealthCheckResult.Healthy($"Outbox: {stats.Pending} pending, {stats.Failed} failed.", data);
     }
 }

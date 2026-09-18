@@ -147,15 +147,26 @@ public abstract class SiteSettingsBase : ISiteSettingsService
 /// <summary>
 /// Production implementation: singleton + hosted service. Registered once and resolved as
 /// <see cref="ISiteSettingsService"/> and <see cref="IHostedService"/>.
+///
+/// Multi-node cache bust (#171): the node that handles an admin write calls
+/// <see cref="RefreshAsync"/> itself; every other node polls usp_SiteSetting_GetChangeStamp
+/// (one row: newest UpdatedAt + row count) every <see cref="DefaultChangePollInterval"/> and
+/// reloads the snapshot as soon as the stamp moves, so a change made on node A is live on
+/// node B within a few seconds instead of the full refresh interval. The full reload still
+/// runs every <see cref="DefaultRefreshInterval"/> as the backstop.
 /// </summary>
 public sealed class SiteSettingsService : SiteSettingsBase, IHostedService, IDisposable
 {
-    /// <summary>Bootstrap TTL for the timer refresh. Not itself a database setting (chicken and egg).</summary>
+    /// <summary>Bootstrap TTL for the full timer refresh. Not itself a database setting (chicken and egg).</summary>
     public static readonly TimeSpan DefaultRefreshInterval = TimeSpan.FromSeconds(60);
+
+    /// <summary>How often a node checks the change stamp for a write made elsewhere (#171).</summary>
+    public static readonly TimeSpan DefaultChangePollInterval = TimeSpan.FromSeconds(5);
 
     private readonly ISiteSettingRepository _repo;
     private readonly ILogger<SiteSettingsService> _logger;
     private readonly TimeSpan _refreshInterval;
+    private readonly TimeSpan _changePollInterval;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private readonly CancellationTokenSource _stopping = new();
 
@@ -164,16 +175,23 @@ public sealed class SiteSettingsService : SiteSettingsBase, IHostedService, IDis
     private volatile IReadOnlyList<SiteSettingRow> _snapshot = Array.Empty<SiteSettingRow>();
     private bool _definitionsSynced;
     private Task? _loop;
+    private SiteSettingChangeStamp _stamp;
 
     public SiteSettingsService(
         ISiteSettingRepository repo,
         ILogger<SiteSettingsService>? logger = null,
-        TimeSpan? refreshInterval = null)
+        TimeSpan? refreshInterval = null,
+        TimeSpan? changePollInterval = null)
     {
-        _repo            = repo;
-        _logger          = logger ?? NullLogger<SiteSettingsService>.Instance;
-        _refreshInterval = refreshInterval ?? DefaultRefreshInterval;
+        _repo               = repo;
+        _logger             = logger ?? NullLogger<SiteSettingsService>.Instance;
+        _refreshInterval    = refreshInterval ?? DefaultRefreshInterval;
+        _changePollInterval = changePollInterval ?? DefaultChangePollInterval;
+        if (_changePollInterval > _refreshInterval) _changePollInterval = _refreshInterval;
     }
+
+    /// <summary>The change stamp the current snapshot was loaded against (tests).</summary>
+    public SiteSettingChangeStamp ChangeStamp => _stamp;
 
     public override IReadOnlyList<SiteSettingRow> Snapshot => _snapshot;
     private DateTime? _loadedAt;
@@ -194,15 +212,33 @@ public sealed class SiteSettingsService : SiteSettingsBase, IHostedService, IDis
                 _definitionsSynced = true;
             }
 
-            var rows = await _repo.ListAsync(ct);
+            // Stamp first, rows second: a write that lands between the two moves the stamp
+            // again and is picked up on the next poll rather than missed.
+            var stamp = await _repo.GetChangeStampAsync(ct);
+            var rows  = await _repo.ListAsync(ct);
             _byKey      = rows.ToDictionary(r => r.Key, StringComparer.OrdinalIgnoreCase);
             _snapshot   = rows;
+            _stamp      = stamp;
             _loadedAt   = DateTime.UtcNow;
         }
         finally
         {
             _refreshLock.Release();
         }
+    }
+
+    /// <summary>
+    /// Reload only if another node changed a setting since this snapshot was taken. Returns
+    /// true when a reload happened.
+    /// </summary>
+    public async Task<bool> RefreshIfChangedAsync(CancellationToken ct = default)
+    {
+        if (LoadedAtUtc is null) { await RefreshAsync(ct); return true; }
+        var current = await _repo.GetChangeStampAsync(ct);
+        if (current == _stamp) return false;
+        await RefreshAsync(ct);
+        _logger.LogInformation("SiteSettings snapshot reloaded: a setting changed on another node.");
+        return true;
     }
 
     // ── IHostedService ─────────────────────────────────────────────────────
@@ -233,12 +269,21 @@ public sealed class SiteSettingsService : SiteSettingsBase, IHostedService, IDis
 
     private async Task RunLoopAsync(CancellationToken ct)
     {
+        var lastFull = DateTime.MinValue;
         while (!ct.IsCancellationRequested)
         {
             try
             {
-                await RefreshAsync(ct);
-                _logger.LogDebug("SiteSettings snapshot refreshed ({Count} keys).", _snapshot.Count);
+                if (LoadedAtUtc is null || DateTime.UtcNow - lastFull >= _refreshInterval)
+                {
+                    await RefreshAsync(ct);
+                    lastFull = DateTime.UtcNow;
+                    _logger.LogDebug("SiteSettings snapshot refreshed ({Count} keys).", _snapshot.Count);
+                }
+                else
+                {
+                    await RefreshIfChangedAsync(ct);
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -251,7 +296,7 @@ public sealed class SiteSettingsService : SiteSettingsBase, IHostedService, IDis
                     LoadedAtUtc is null ? "code defaults" : "the previous snapshot");
             }
 
-            try { await Task.Delay(_refreshInterval, ct); }
+            try { await Task.Delay(_changePollInterval, ct); }
             catch (OperationCanceledException) { break; }
         }
     }

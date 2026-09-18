@@ -229,3 +229,10 @@ HTML streamed to browser (SSR) or served from ISR cache
                     │   UNC share, on-prem) │
                     └───────────────────────┘
 ```
+
+The web tier scales out to N nodes behind IIS ARR or a load balancer without sticky sessions
+(NFR-OPS-04, #171): every node runs the same hosted services and coordinates through SQL Server —
+the publish/expire scheduler claims due rows `WITH (UPDLOCK, READPAST)` in one transaction, webhook
+deliveries and workflow emails are `[OutboundEvent]` outbox rows that any node claims under a lease,
+and the settings snapshot on each node reloads when the table's change stamp moves. Supported
+topologies and app-pool recycle behaviour are in `docs/DEPLOYMENT.md` § 8.

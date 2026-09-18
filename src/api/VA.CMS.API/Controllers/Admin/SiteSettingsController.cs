@@ -149,7 +149,7 @@ public class SiteSettingsController : ControllerBase
             diffJson:   JsonSerializer.Serialize(new { key = definition.Key, from, to }));
 
         // Lets the public site drop its cached settings (and anything else listening).
-        _webhooks.Enqueue(WebhookEvents.SettingsUpdated, new { key = definition.Key, scope = definition.Scope.ToString() });
+        await _webhooks.EnqueueAsync(WebhookEvents.SettingsUpdated, new { key = definition.Key, scope = definition.Scope.ToString() });
     }
 }
 

@@ -39,8 +39,8 @@ public sealed class NotifyWebhookAttribute : Attribute, IAsyncActionFilter
             .Where(kv => kv.Key is not ("controller" or "action"))
             .ToDictionary(kv => kv.Key, kv => kv.Value?.ToString());
 
-        context.HttpContext.RequestServices
+        await context.HttpContext.RequestServices
             .GetRequiredService<IWebhookBackgroundDispatcher>()
-            .Enqueue(_eventName, payload);
+            .EnqueueAsync(_eventName, payload, context.HttpContext.RequestAborted);
     }
 }
