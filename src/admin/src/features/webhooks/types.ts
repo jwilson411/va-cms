@@ -10,6 +10,7 @@ export const WEBHOOK_EVENTS = [
   'media.uploaded',
   'navigation.updated',
   'settings.updated',
+  'redirects.updated',
 ] as const;
 
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];

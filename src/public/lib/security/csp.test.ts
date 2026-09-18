@@ -2,9 +2,16 @@
  * #162: public-site CSP is nonce-based with no 'unsafe-inline' for scripts, and
  * proxy.ts sets it (plus the companion headers) on every page response.
  */
+import { vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { buildPublicCsp, buildPublicCspDirectives, originOf, PUBLIC_SECURITY_HEADERS } from './csp';
 import { generateNonce, proxy } from '../../proxy';
+
+// The proxy consults the CMS redirect table first (#169); no rule here.
+vi.mock('@/lib/cms/redirects', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/cms/redirects')>()),
+  lookupRedirect: async () => null,
+}));
 
 describe('public CSP', () => {
   it('uses a nonce and strict-dynamic, never unsafe-inline, for scripts', () => {
@@ -38,8 +45,8 @@ describe('proxy', () => {
     expect(a).toMatch(/^[A-Za-z0-9+/]+=*$/);
   });
 
-  it('sets CSP with the request nonce and the companion headers', () => {
-    const response = proxy(new NextRequest('http://localhost:3000/news/hello'));
+  it('sets CSP with the request nonce and the companion headers', async () => {
+    const response = await proxy(new NextRequest('http://localhost:3000/news/hello'));
     const csp = response.headers.get('Content-Security-Policy') ?? response.headers.get('Content-Security-Policy-Report-Only');
     expect(csp).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
     for (const [name, value] of Object.entries(PUBLIC_SECURITY_HEADERS)) expect(response.headers.get(name)).toBe(value);

@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using VA.CMS.API.Observability;
+using VA.CMS.API.Navigation;
 using VA.CMS.API.RateLimiting;
 using VA.CMS.API.Search;
 using VA.CMS.API;
@@ -370,6 +371,8 @@ builder.Services.AddScoped<IUserRoleRepository, UserRoleRepository>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<INavigationMenuRepository, NavigationMenuRepository>();
 builder.Services.AddScoped<INavigationRepository, NavigationRepository>();
+builder.Services.AddSingleton<RedirectResolveCache>();                      // #169: process-wide resolve cache
+builder.Services.AddScoped<IRedirectResolver, RedirectResolver>();
 builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
 builder.Services.AddScoped<IDbMonitorRepository, DbMonitorRepository>();
 builder.Services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();

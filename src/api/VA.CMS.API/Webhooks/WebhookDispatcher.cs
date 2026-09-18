@@ -20,10 +20,17 @@ public static class WebhookEvents
     public const string NavigationUpdated  = "navigation.updated";
     /// <summary>A site setting was changed or reset (epic #141). Payload: { key, scope }.</summary>
     public const string SettingsUpdated    = "settings.updated";
+    /// <summary>
+    /// A redirect rule was created, edited or deactivated, or a published entry's slug
+    /// changed (#169). Payload: { id } from the admin API, or
+    /// { id, slug, previousSlug, contentTypeName, fromPath, toPath } from a slug change.
+    /// </summary>
+    public const string RedirectsUpdated   = "redirects.updated";
 
     public static readonly IReadOnlyList<string> All = new[]
     {
         ContentPublished, ContentUnpublished, ContentArchived, MediaUploaded, NavigationUpdated, SettingsUpdated,
+        RedirectsUpdated,
     };
 }
 

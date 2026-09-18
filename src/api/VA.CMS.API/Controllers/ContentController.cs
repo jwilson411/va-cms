@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VA.CMS.API.Auth;
+using VA.CMS.API.Navigation;
 using VA.CMS.API.Services;
 using VA.CMS.API.Webhooks;
 using VA.CMS.Infrastructure.ContentTypes;
@@ -44,6 +45,7 @@ public class ContentController : ControllerBase
     private readonly IWebhookBackgroundDispatcher _webhooks;
     private readonly IWorkflowNotifier _notifier;
     private readonly IMediaUsageSyncService _mediaUsageSync;
+    private readonly IRedirectResolver _redirects;
 
     public ContentController(
         IContentEntryRepository entries,
@@ -56,7 +58,8 @@ public class ContentController : ControllerBase
         IFieldTypeRegistry registry,
         IWebhookBackgroundDispatcher webhooks,
         IWorkflowNotifier notifier,
-        IMediaUsageSyncService mediaUsageSync)
+        IMediaUsageSyncService mediaUsageSync,
+        IRedirectResolver redirects)
     {
         _entries      = entries;
         _rbac         = rbac;
@@ -69,6 +72,7 @@ public class ContentController : ControllerBase
         _webhooks     = webhooks;
         _notifier     = notifier;
         _mediaUsageSync = mediaUsageSync;
+        _redirects    = redirects;
     }
 
     /// <summary>Payload for content.* webhook events (issue #54).</summary>
@@ -534,10 +538,29 @@ public class ContentController : ControllerBase
             return BadRequest(new { error = "Slug must not be empty." });
 
         var actorId = _rbac.GetUserId(User) ?? 0;
-        var (success, errorMsg) = await _entries.UpdateSlugAsync(id, request.Slug.Trim(), actorId);
+        var newSlug = request.Slug.Trim();
+        var (success, errorMsg) = await _entries.UpdateSlugAsync(id, newSlug, actorId);
 
         if (!success)
             return BadRequest(new { error = errorMsg ?? "Slug update failed." });
+
+        // #169: a published entry's slug change wrote a 301 from the old public path
+        // (usp_ContentEntry_UpdateSlug). Tell the site so it drops the redirect cache and
+        // the pages cached under both slugs, and start serving the rule here at once.
+        if (entry.Status == "Published" && !string.Equals(entry.Slug, newSlug, StringComparison.Ordinal))
+        {
+            _redirects.Invalidate();
+            var prefix = RedirectPathValidator.PublicPathPrefix(entry.ContentTypeName);
+            _webhooks.Enqueue(WebhookEvents.RedirectsUpdated, new
+            {
+                id              = entry.Id,
+                slug            = newSlug,
+                previousSlug    = entry.Slug,
+                contentTypeName = entry.ContentTypeName,
+                fromPath        = prefix + entry.Slug,
+                toPath          = prefix + newSlug,
+            });
+        }
 
         return NoContent();
     }

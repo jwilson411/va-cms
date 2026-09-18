@@ -190,7 +190,7 @@ DataProtection__KeysPath=\\files\va-cms\dp-keys          # key ring that encrypt
 # DataProtection__DpapiNgDescriptor=SID=S-1-5-21-…        # optional: lock the key files to the app-pool gMSA (Windows CNG DPAPI-NG)
 
 # Public site (Next.js)
-NEXT_PUBLIC_API_URL=https://cms.youragency.va.gov/api/v1
+NEXT_PUBLIC_API_URL=https://cms.youragency.va.gov   # API origin only — the site appends /api/v1/… itself
 CSP_REPORT_ONLY=true                             # report-only phase; set false to enforce once the report log is quiet
 ```
 

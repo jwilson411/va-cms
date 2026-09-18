@@ -557,13 +557,43 @@ query RecentNews {
 
 ## Webhook Events
 
+Names are `WebhookEvents` in `WebhookDispatcher.cs`; the payload is the JSON body, sent with
+`X-CMS-Event: <name>`.
+
 | Event | Payload |
 |---|---|
-| `content.published` | `{ entryId, contentType, slug, publishedAt, actorId }` |
-| `content.unpublished` | `{ entryId, contentType, slug, actorId }` |
-| `content.archived` | `{ entryId, contentType, slug, actorId }` |
-| `content.submitted_review` | `{ entryId, contentType, slug, actorId }` |
+| `content.published` | `{ id, slug, locale, contentTypeName, status }` |
+| `content.unpublished` | `{ id, slug, locale, contentTypeName, status }` |
+| `content.archived` | `{ id, slug, locale, contentTypeName, status }` |
 | `media.uploaded` | `{ assetId, fileName, mimeType, uploadedById }` |
+| `navigation.updated` | route values of the admin call, e.g. `{ handle }` |
+| `settings.updated` | `{ key, scope }` |
+| `redirects.updated` | `{ id }` from Admin → Redirects; `{ id, slug, previousSlug, contentTypeName, fromPath, toPath }` when a published entry's slug changed (#169) |
+
+The public site's `/api/revalidate` receiver maps each event to the ISR tags it drops
+(`src/public/lib/cms/revalidation.ts`); register it for all of them (README step 5).
+
+### Redirects on the public site (#169)
+
+A redirect rule is served in two places, both backed by the anonymous
+`GET /api/v1/redirects/resolve?path=/pages/old-slug` (`{ fromPath, toPath, statusCode }` or 404,
+`Cache-Control: max-age=redirects.cacheSeconds`):
+
+1. `src/public/proxy.ts` asks on every GET/HEAD and answers the configured **301/302** itself,
+   query string preserved, through a process-local TTL cache sized by that `max-age`. The lookup
+   fails open: a slow or unreachable API never blocks a page.
+2. `app/pages/[...slug]` and `app/news/[...slug]` ask again — through the Next data cache, tag
+   `cms-redirects`, dropped by `redirects.updated` — when the CMS has no entry for a slug, so a rule
+   younger than the proxy's cached miss still lands on the new page (as 308/307).
+
+Rules are stored as public paths: a slug change on a published entry writes `/pages/{old}` →
+`/pages/{new}` (`/news/…` for `news_article`) in `usp_ContentEntry_UpdateSlug`, and
+`RedirectPathValidator.PublicPathPrefix` is the same mapping on the API side. Chains are
+flattened on write (a rule whose target is itself redirected is stored against the final target;
+rules that pointed at the new FromPath are re-pointed by `usp_Redirect_Create/_Update`), and a rule
+that would lead back to its own FromPath is rejected with 400, so a visitor never bounces twice.
+`tests/accessibility/tests/redirects.e2e.spec.ts` exercises publish → rename → 301 against a
+running API and site (CI job `e2e`; skips itself locally unless `PUBLIC_URL` is reachable).
 
 Webhooks are signed with HMAC-SHA256. Verify the `X-CMS-Signature` header:
 

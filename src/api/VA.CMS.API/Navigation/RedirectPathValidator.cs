@@ -49,6 +49,13 @@ public static class RedirectPathValidator
     }
 
     /// <summary>
+    /// Where the public site serves a content type (src/public/app/**/[...slug]) — the same
+    /// mapping usp_ContentEntry_UpdateSlug uses to store a slug-change redirect (#169).
+    /// </summary>
+    public static string PublicPathPrefix(string? contentTypeName)
+        => string.Equals(contentTypeName, "news_article", StringComparison.OrdinalIgnoreCase) ? "/news/" : "/pages/";
+
+    /// <summary>
     /// Slugs a site-relative FromPath could shadow. The public site serves standard
     /// pages at /pages/{slug}, so "/pages/a/b" competes with the slug "a/b" as well
     /// as with a literal "pages/a/b".

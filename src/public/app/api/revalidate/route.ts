@@ -12,6 +12,9 @@
  *     → drop the primary nav (same as /api/revalidate-nav)
  *   settings.updated
  *     → drop the cached site settings (cms-site-settings) — issue #149 / epic #141
+ *   redirects.updated
+ *     → drop the redirect lookups (cms-redirects) and, for a slug change, the pages
+ *       cached under the old and new slugs — issue #169
  *
  * Register it once against the API (same secret in both places):
  *   POST /api/v1/webhooks { name, url: "<site>/api/revalidate", secret, events: [...] }
@@ -24,7 +27,12 @@ import { revalidateTag } from 'next/cache';
 import { NextRequest, NextResponse } from 'next/server';
 import { NAV_CACHE_TAG } from '@/lib/cms/navigation';
 import { SITE_SETTINGS_CACHE_TAG } from '@/lib/cms/settings';
-import { tagsForContentEvent, type ContentEventPayload } from '@/lib/cms/revalidation';
+import {
+  tagsForContentEvent,
+  tagsForRedirectsEvent,
+  type ContentEventPayload,
+  type RedirectsEventPayload,
+} from '@/lib/cms/revalidation';
 
 function signatureMatches(secret: string, rawBody: string, header: string | null): boolean {
   if (!header) return false;
@@ -50,10 +58,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const event = request.headers.get('x-cms-event') ?? '';
-  let payload: ContentEventPayload = {};
+  let payload: ContentEventPayload & RedirectsEventPayload = {};
   if (rawBody) {
     try {
-      payload = JSON.parse(rawBody) as ContentEventPayload;
+      payload = JSON.parse(rawBody) as ContentEventPayload & RedirectsEventPayload;
     } catch {
       return NextResponse.json({ error: 'Body is not JSON' }, { status: 400 });
     }
@@ -64,6 +72,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     tags = [NAV_CACHE_TAG];
   } else if (event === 'settings.updated') {
     tags = [SITE_SETTINGS_CACHE_TAG];
+  } else if (event === 'redirects.updated') {
+    tags = tagsForRedirectsEvent(payload);
   } else if (event.startsWith('content.')) {
     tags = tagsForContentEvent(payload);
   } else {

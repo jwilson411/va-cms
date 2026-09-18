@@ -81,6 +81,7 @@ public static class SiteSettingKeys
 
     // Navigation / redirects (Server)
     public const string RedirectsAllowedExternalHosts = "redirects.allowedExternalHosts";
+    public const string RedirectsCacheSeconds         = "redirects.cacheSeconds";
 
     // Security headers (Server) — #162
     public const string SecurityCspReportOnly = "security.cspReportOnly";
@@ -295,6 +296,9 @@ public static class SiteSettingDefinitions
         J(SiteSettingKeys.RedirectsAllowedExternalHosts, Array.Empty<string>(), SiteSettingCategories.Navigation, SiteSettingScope.Server,
           "JSON array of host names a redirect ToPath may point at (e.g. [\"www.va.gov\", \"*.va.gov\"]). " +
           "Empty means redirects may only target site-relative paths.", 10),
+        I(SiteSettingKeys.RedirectsCacheSeconds, 60, SiteSettingCategories.Navigation, SiteSettingScope.Server,
+          "How long a resolved redirect (or a miss) may be cached by the API and the public site, in seconds " +
+          "(Cache-Control max-age on GET /api/v1/redirects/resolve). 0 disables caching.", 20),
 
         // ── Workflow ────────────────────────────────────────────────────────
         I(SiteSettingKeys.WorkflowScheduledPublishPollSeconds, 60, SiteSettingCategories.Workflow, SiteSettingScope.Server,
