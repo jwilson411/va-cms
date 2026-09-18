@@ -24,6 +24,7 @@ import { UserListPage, UserDetailPage } from './features/users';
 import { AuditLogPage } from './features/audit';
 import { NavigationEditorPage } from './features/navigation';
 import { RedirectsPage } from './features/redirects';
+import { WebhooksPage } from './features/webhooks';
 
 const queryClient = new QueryClient();
 
@@ -67,6 +68,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="/admin/navigation" element={<NavigationEditorPage />} />
                     {/* Issue #48: Redirect management table (FR-NAV-06) */}
                     <Route path="/admin/redirects" element={<RedirectsPage />} />
+
+                    {/* Issue #54/#168: Webhook registration and delivery log (FR-DEV-07) */}
+                    <Route path="/admin/webhooks" element={<WebhooksPage />} />
                     {/* Issue #17: USWDS / VA theme smoke-test page */}
                     <Route path="/admin/theme" element={<ThemePage />} />
                     <Route path="*" element={<DashboardPage />} />
