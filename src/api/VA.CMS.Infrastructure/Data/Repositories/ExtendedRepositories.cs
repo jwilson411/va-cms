@@ -509,7 +509,7 @@ public class WebhookRepository : IWebhookRepository
         cmd.CommandText =
             "EXEC usp_WebhookDelivery_Create " +
             "@WebhookId, @EventName, @PayloadJson, @ResponseStatusCode, " +
-            "@AttemptNumber, @ErrorMessage, @NewId OUTPUT";
+            "@AttemptNumber, @ErrorMessage, @RedeliveryOfId, @NewId OUTPUT";
         cmd.Parameters.AddWithValue("@WebhookId", delivery.WebhookId);
         cmd.Parameters.AddWithValue("@EventName", delivery.EventName);
         cmd.Parameters.AddWithValue("@PayloadJson", delivery.PayloadJson);
@@ -518,6 +518,8 @@ public class WebhookRepository : IWebhookRepository
         cmd.Parameters.AddWithValue("@AttemptNumber", delivery.AttemptNumber);
         cmd.Parameters.AddWithValue("@ErrorMessage",
             (object?)delivery.ErrorMessage ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("@RedeliveryOfId",
+            (object?)delivery.RedeliveryOfId ?? DBNull.Value);
 
         var outParam = cmd.Parameters.Add("@NewId", System.Data.SqlDbType.BigInt);
         outParam.Direction = System.Data.ParameterDirection.Output;
@@ -605,6 +607,82 @@ public class WebhookRepository : IWebhookRepository
         await using var cmd = conn.CreateCommand();
         cmd.CommandText = "EXEC usp_Webhook_Delete @Id";
         cmd.Parameters.AddWithValue("@Id", id);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    // ── Issue #168: delivery log and secret re-keying ─────────────────────────
+
+    /// <inheritdoc />
+    public async Task<(IReadOnlyList<WebhookDelivery> Items, int TotalRows)> ListDeliveriesAsync(long webhookId, int page, int pageSize)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_WebhookDelivery_ListByWebhook @WebhookId, @Page, @PageSize, @TotalRows OUTPUT";
+        cmd.Parameters.AddWithValue("@WebhookId", webhookId);
+        cmd.Parameters.AddWithValue("@Page", page);
+        cmd.Parameters.AddWithValue("@PageSize", pageSize);
+        var total = cmd.Parameters.Add("@TotalRows", System.Data.SqlDbType.Int);
+        total.Direction = System.Data.ParameterDirection.Output;
+
+        var items = new List<WebhookDelivery>();
+        await using (var reader = await cmd.ExecuteReaderAsync())
+        {
+            while (await reader.ReadAsync())
+                items.Add(ReadDelivery(reader));
+        }
+        // Output parameters are populated only after the reader is closed.
+        return (items, total.Value is int n ? n : items.Count);
+    }
+
+    /// <inheritdoc />
+    public async Task<WebhookDelivery?> GetDeliveryAsync(long deliveryId)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_WebhookDelivery_GetById @Id";
+        cmd.Parameters.AddWithValue("@Id", deliveryId);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        return await reader.ReadAsync() ? ReadDelivery(reader) : null;
+    }
+
+    private static WebhookDelivery ReadDelivery(SqlDataReader reader) => new()
+    {
+        Id                 = reader.GetInt64(reader.GetOrdinal("Id")),
+        WebhookId          = reader.GetInt64(reader.GetOrdinal("WebhookId")),
+        EventName          = reader.GetString(reader.GetOrdinal("EventName")),
+        PayloadJson        = reader.GetString(reader.GetOrdinal("PayloadJson")),
+        ResponseStatusCode = reader.IsDBNull(reader.GetOrdinal("ResponseStatusCode")) ? null : reader.GetInt32(reader.GetOrdinal("ResponseStatusCode")),
+        AttemptNumber      = reader.GetInt32(reader.GetOrdinal("AttemptNumber")),
+        DeliveredAt        = reader.GetDateTime(reader.GetOrdinal("DeliveredAt")),
+        ErrorMessage       = reader.IsDBNull(reader.GetOrdinal("ErrorMessage")) ? null : reader.GetString(reader.GetOrdinal("ErrorMessage")),
+        RedeliveryOfId     = reader.IsDBNull(reader.GetOrdinal("RedeliveryOfId")) ? null : reader.GetInt64(reader.GetOrdinal("RedeliveryOfId")),
+    };
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<(long Id, string Secret)>> ListSecretsForRekeyAsync()
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Webhook_ListSecretsForRekey";
+        var rows = new List<(long, string)>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            rows.Add((reader.GetInt64(0), reader.GetString(1)));
+        return rows;
+    }
+
+    /// <inheritdoc />
+    public async Task UpdateSecretAsync(long id, string protectedSecret)
+    {
+        await using var conn = new SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "EXEC usp_Webhook_UpdateSecret @Id, @Secret";
+        cmd.Parameters.AddWithValue("@Id", id);
+        cmd.Parameters.AddWithValue("@Secret", protectedSecret);
         await cmd.ExecuteNonQueryAsync();
     }
 }

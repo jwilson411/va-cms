@@ -94,6 +94,8 @@ public static class SiteSettingKeys
     public const string WebhooksMaxAttempts        = "webhooks.maxAttempts";
     public const string WebhooksRetryDelaysSeconds = "webhooks.retryDelaysSeconds";
     public const string WebhooksTimeoutSeconds     = "webhooks.timeoutSeconds";
+    public const string WebhooksAllowedHosts       = "webhooks.allowedHosts";
+    public const string WebhooksAllowPrivateNetworks = "webhooks.allowPrivateNetworks";
 
     // Search
     public const string SearchPublicPageSize  = "search.publicPageSize";
@@ -307,6 +309,12 @@ public static class SiteSettingDefinitions
           "JSON array of seconds to wait before each retry. The last value repeats if attempts exceed the list.", 20),
         I(SiteSettingKeys.WebhooksTimeoutSeconds, 15, SiteSettingCategories.Webhooks, SiteSettingScope.Server,
           "HTTP timeout for a single webhook delivery in seconds.", 30),
+        J(SiteSettingKeys.WebhooksAllowedHosts, Array.Empty<string>(), SiteSettingCategories.Webhooks, SiteSettingScope.Server,
+          "JSON array of host names webhooks may be registered for and delivered to (\"www.va.gov\" or \"*.va.gov\"). " +
+          "Empty means no deliveries outside Development. Checked at registration and again on every delivery.", 40),
+        B(SiteSettingKeys.WebhooksAllowPrivateNetworks, false, SiteSettingCategories.Webhooks, SiteSettingScope.Server,
+          "Allow allow-listed webhook hosts to resolve to RFC 1918 / CGNAT addresses (an on-prem subscriber inside the VA network). " +
+          "Loopback, link-local and multicast destinations are always refused outside Development.", 50),
 
         // ── Search ──────────────────────────────────────────────────────────
         I(SiteSettingKeys.SearchPublicPageSize, 10, SiteSettingCategories.Search, SiteSettingScope.Public,

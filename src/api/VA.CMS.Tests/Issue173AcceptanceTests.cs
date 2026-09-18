@@ -248,6 +248,7 @@ public class Issue173AcceptanceTests
             ["Storage:UncRootPath"]                 = @"\\files\va-cms",
             ["Media:Scanner:Mode"]                  = "Icap",
             ["Media:Scanner:Host"]                  = "avscan.va.gov",
+            ["DataProtection:KeysPath"]             = @"\\files\va-cms\dp-keys",   // #168
         });
 
         Assert.Empty(StartupValidation.Evaluate(config, "Production"));

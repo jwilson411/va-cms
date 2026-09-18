@@ -1,8 +1,10 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 using VA.CMS.API.Auth;
 using VA.CMS.API.Webhooks;
+using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
 
 namespace VA.CMS.API.Controllers;
@@ -10,9 +12,15 @@ namespace VA.CMS.API.Controllers;
 /// <summary>
 /// Webhook registration endpoints.
 ///
-///   POST   /api/v1/webhooks        — register a new webhook (CanDevelop)
-///   GET    /api/v1/webhooks        — list registered webhooks (CanDevelop)
-///   DELETE /api/v1/webhooks/{id}   — remove a webhook (CanDevelop)
+///   POST   /api/v1/webhooks                                   — register a new webhook (CanDevelop)
+///   GET    /api/v1/webhooks                                   — list registered webhooks (CanDevelop)
+///   DELETE /api/v1/webhooks/{id}                              — remove a webhook (CanDevelop)
+///   GET    /api/v1/webhooks/{id}/deliveries                   — delivery log, newest first (CanDevelop)
+///   POST   /api/v1/webhooks/{id}/deliveries/{deliveryId}/redeliver — resend a logged payload once (CanDevelop)
+///
+/// Registration runs the URL through <see cref="WebhookDestinationPolicy"/> (#168): https
+/// outside Development, host on webhooks.allowedHosts, no loopback/link-local/private
+/// literal addresses. The secret is returned once and stored protected.
 ///
 /// Issue #54 — BRD FR-DEV-07.
 /// </summary>
@@ -21,10 +29,20 @@ namespace VA.CMS.API.Controllers;
 public class WebhooksController : ControllerBase
 {
     private readonly IWebhookRepository _webhooks;
+    private readonly WebhookDestinationPolicy _policy;
+    private readonly IWebhookSecretProtector _secrets;
+    private readonly IWebhookDispatcher _dispatcher;
 
-    public WebhooksController(IWebhookRepository webhooks)
+    public WebhooksController(
+        IWebhookRepository webhooks,
+        WebhookDestinationPolicy policy,
+        IWebhookSecretProtector secrets,
+        IWebhookDispatcher dispatcher)
     {
-        _webhooks = webhooks;
+        _webhooks   = webhooks;
+        _policy     = policy;
+        _secrets    = secrets;
+        _dispatcher = dispatcher;
     }
 
     // ── POST /api/v1/webhooks ─────────────────────────────────────────────────
@@ -36,12 +54,8 @@ public class WebhooksController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Register([FromBody] WebhookRegistrationRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.Url))
-            return BadRequest(new { error = "Url is required." });
-
-        if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
-            return BadRequest(new { error = "Url must be a valid HTTP/HTTPS URL." });
+        if (_policy.ValidateUrl(request.Url, out _) is { } urlError)
+            return BadRequest(new { error = urlError });
 
         if (request.Events is null || request.Events.Length == 0)
             return BadRequest(new { error = "At least one event is required." });
@@ -65,7 +79,7 @@ public class WebhooksController : ControllerBase
         var id = await _webhooks.CreateAsync(
             name:        name,
             url:         request.Url,
-            secret:      secret,
+            secret:      _secrets.Protect(secret),
             eventsJson:  eventsJson,
             createdById: actorId);
 
@@ -120,7 +134,73 @@ public class WebhooksController : ControllerBase
         return NoContent();
     }
 
+    // ── GET /api/v1/webhooks/{id}/deliveries ──────────────────────────────────
+
+    /// <summary>Delivery log for one webhook, newest first (issue #168).</summary>
+    [HttpGet("{id:long}/deliveries")]
+    [Authorize(Policy = CmsRoles.Policies.CanDevelop)]
+    [ProducesResponseType(typeof(WebhookDeliveryListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ListDeliveries(long id, [FromQuery] int page = 1, [FromQuery] int pageSize = 25)
+    {
+        if (await _webhooks.GetByIdAsync(id) is null)
+            return NotFound();
+
+        page     = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        var (items, total) = await _webhooks.ListDeliveriesAsync(id, page, pageSize);
+
+        return Ok(new WebhookDeliveryListResponse
+        {
+            Items     = items.Select(ToDto).ToArray(),
+            Page      = page,
+            PageSize  = pageSize,
+            TotalRows = total,
+        });
+    }
+
+    // ── POST /api/v1/webhooks/{id}/deliveries/{deliveryId}/redeliver ─────────
+
+    /// <summary>
+    /// Resend the payload of a logged delivery once (issue #168). The destination is
+    /// re-validated; the outcome is recorded as a new delivery row and returned.
+    /// </summary>
+    [HttpPost("{id:long}/deliveries/{deliveryId:long}/redeliver")]
+    [Authorize(Policy = CmsRoles.Policies.CanDevelop)]
+    [ProducesResponseType(typeof(WebhookDeliveryDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Redeliver(long id, long deliveryId, CancellationToken ct)
+    {
+        var webhook = await _webhooks.GetByIdAsync(id);
+        if (webhook is null)
+            return NotFound();
+        if (!webhook.IsActive)
+            return Conflict(new { error = "Webhook is inactive." });
+
+        var original = await _webhooks.GetDeliveryAsync(deliveryId);
+        if (original is null || original.WebhookId != id)
+            return NotFound();
+
+        var delivery = await _dispatcher.RedeliverAsync(webhook, original, ct);
+        return Ok(ToDto(delivery));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private static WebhookDeliveryDto ToDto(WebhookDelivery d) => new()
+    {
+        Id                 = d.Id,
+        WebhookId          = d.WebhookId,
+        EventName          = d.EventName,
+        PayloadJson        = d.PayloadJson,
+        ResponseStatusCode = d.ResponseStatusCode,
+        AttemptNumber      = d.AttemptNumber,
+        DeliveredAt        = d.DeliveredAt ?? DateTime.UtcNow,
+        ErrorMessage       = d.ErrorMessage,
+        RedeliveryOfId     = d.RedeliveryOfId,
+        Succeeded          = d.ResponseStatusCode is >= 200 and <= 299,
+    };
 
     private long GetCurrentUserId()
     {
@@ -142,10 +222,14 @@ public class WebhooksController : ControllerBase
 
 public record WebhookRegistrationRequest
 {
+    [MaxLength(200)]
     public string? Name { get; init; }
+    [MaxLength(2000)]
     public string Url { get; init; } = string.Empty;
-    /// <summary>Optional — server generates one if omitted.</summary>
+    /// <summary>Optional — server generates one if omitted. Stored protected at rest (issue #168).</summary>
+    [MaxLength(200)]
     public string? Secret { get; init; }
+    [MaxLength(20)]
     public string[] Events { get; init; } = Array.Empty<string>();
 }
 
@@ -167,4 +251,28 @@ public record WebhookListItem
     public string[] Events { get; init; } = Array.Empty<string>();
     public bool IsActive { get; init; }
     public DateTime CreatedAt { get; init; }
+}
+
+/// <summary>One row of the delivery log (issue #168).</summary>
+public record WebhookDeliveryDto
+{
+    public long Id { get; init; }
+    public long WebhookId { get; init; }
+    public string EventName { get; init; } = string.Empty;
+    public string PayloadJson { get; init; } = "{}";
+    public int? ResponseStatusCode { get; init; }
+    public int AttemptNumber { get; init; }
+    public DateTime DeliveredAt { get; init; }
+    public string? ErrorMessage { get; init; }
+    /// <summary>Set when this row is an operator redelivery of an earlier one.</summary>
+    public long? RedeliveryOfId { get; init; }
+    public bool Succeeded { get; init; }
+}
+
+public record WebhookDeliveryListResponse
+{
+    public WebhookDeliveryDto[] Items { get; init; } = Array.Empty<WebhookDeliveryDto>();
+    public int Page { get; init; }
+    public int PageSize { get; init; }
+    public int TotalRows { get; init; }
 }

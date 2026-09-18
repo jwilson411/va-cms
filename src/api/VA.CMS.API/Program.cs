@@ -111,6 +111,18 @@ builder.Services.AddOptions<LoggingSinkOptions>()
     .ValidateDataAnnotations()
     .Validate(o => !o.Validate(builder.Environment.IsDevelopment()).Any(), "Logging:Sinks options are invalid (see LoggingSinkOptions.Validate).")
     .ValidateOnStart();
+builder.Services.AddOptions<KeyRingOptions>()
+    .Bind(builder.Configuration.GetSection(KeyRingOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(o => o.Validate(builder.Environment.IsDevelopment()) is null, "DataProtection options are invalid (see KeyRingOptions.Validate).")
+    .ValidateOnStart();
+
+// -----------------------------------------------------------------------
+// Data Protection key ring (#168): persisted where DataProtection:KeysPath points so
+// webhook secrets encrypted by one node/app-pool identity can be read by the next.
+// -----------------------------------------------------------------------
+(builder.Configuration.GetSection(KeyRingOptions.SectionName).Get<KeyRingOptions>() ?? new KeyRingOptions())
+    .Apply(builder.Services.AddDataProtection());
 
 // -----------------------------------------------------------------------
 // Host hardening (#162): explicit AllowedHosts outside Development; forwarded
@@ -451,9 +463,16 @@ builder.Services.AddScoped<ISeedService, DemoSeedService>();
 
 // Issue #54: Webhook registration and delivery (BRD FR-DEV-07)
 builder.Services.AddScoped<IWebhookRepository, WebhookRepository>();
-// Per-delivery timeout is webhooks.timeoutSeconds (applied in WebhookDispatcher); this is only a ceiling.
-builder.Services.AddHttpClient("WebhookClient")
-    .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromMinutes(5));
+// #168: destination policy (allow-list + address classes), DNS-checked connect, no redirects/proxy,
+// TLS 1.2+, capped response. Per-delivery timeout is webhooks.timeoutSeconds (WebhookDispatcher).
+builder.Services.AddSingleton<WebhookDestinationPolicy>();
+builder.Services.AddSingleton<IWebhookDnsResolver, DnsWebhookDnsResolver>();
+builder.Services.AddSingleton<IWebhookSecretProtector, WebhookSecretProtector>();
+builder.Services.AddHostedService<WebhookSecretRekeyService>();
+builder.Services.AddHttpClient(WebhookHttpHandler.ClientName)
+    .ConfigureHttpClient(WebhookHttpHandler.ConfigureClient)
+    .ConfigurePrimaryHttpMessageHandler(sp => WebhookHttpHandler.Create(
+        sp.GetRequiredService<WebhookDestinationPolicy>(), sp.GetRequiredService<IWebhookDnsResolver>()));
 builder.Services.AddScoped<IWebhookDispatcher, WebhookDispatcher>();
 builder.Services.AddSingleton<IWebhookBackgroundDispatcher, WebhookBackgroundDispatcher>();
 

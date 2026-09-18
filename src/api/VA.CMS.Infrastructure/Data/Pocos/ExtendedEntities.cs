@@ -130,6 +130,11 @@ public class WebhookDelivery
     public int AttemptNumber { get; set; } = 1;
     public DateTime? DeliveredAt { get; set; }
     public string? ErrorMessage { get; set; }
+    /// <summary>Set when an operator redelivered an earlier attempt from the admin delivery log (issue #168).</summary>
+    public long? RedeliveryOfId { get; set; }
+    /// <summary>Not a column: the attempt was refused by the destination policy, so the dispatcher must not retry (issue #168).</summary>
+    [Ignore]
+    public bool Refused { get; set; }
 }
 
 [TableName("MediaUsage")]
