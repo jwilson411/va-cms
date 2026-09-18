@@ -404,6 +404,7 @@ See [DATA_MODEL.md](DATA_MODEL.md) for full schema.
 The system shall include a migration toolset:
 
 **MIG-01** — A CLI command (`vacms migrate sharepoint`) that accepts a SharePoint 2016 content export and maps pages to CMS content entries.
+*Build note (#191, epic #13 in progress):* the "content export" is a folder package written on the farm by `infra/sharepoint/Export-VacmsSharePoint.ps1` (format `vacms-sharepoint-export/1`, `docs/MIGRATION.md`); `vacms migrate sharepoint --package <dir> --dry-run` validates and inventories it. Mapping pages to entries is #193.
 
 **MIG-02** — Page content (HTML body) shall be cleaned and normalized to USWDS-safe HTML during import.
 

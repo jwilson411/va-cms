@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using VA.CMS.Infrastructure.ContentTypes;
 using VA.CMS.Infrastructure.Data;
 using VA.CMS.Infrastructure.Data.Migrations;
+using VA.CMS.Infrastructure.Migration.SharePoint;
 using VA.CMS.Infrastructure.Services;
 
 // ---------------------------------------------------------------------------
@@ -14,6 +15,8 @@ using VA.CMS.Infrastructure.Services;
 //   vacms db migrate --check          Exit 2 when migrations are pending, 0 when current
 //   vacms db migrate --dry-run        List the scripts that would run, apply nothing
 //   vacms db provision-logins         Create/rotate the vacms_app + vacms_readonly logins
+//   vacms migrate sharepoint --package <dir> --dry-run
+//                                     Validate a SharePoint export package and print its inventory (#191)
 //   vacms health --url <url>          HTTP health check (stub)
 //   vacms content-type scaffold <Name>   Scaffold a new content type definition
 //   vacms content-type --help         Show content-type command help
@@ -139,6 +142,23 @@ static async Task<int> RunAsync(string[] args)
         return 1;
     }
 
+    // ── migrate commands ─────────────────────────────────────────────────────
+    if (args[0] == "migrate")
+    {
+        if (args.Length == 1 || args[1] is "--help" or "-h" or "help")
+        {
+            PrintMigrateHelp();
+            return 0;
+        }
+
+        if (args[1] == "sharepoint")
+            return MigrateSharePoint(args);
+
+        Console.Error.WriteLine($"Unknown migrate sub-command: {args[1]}");
+        PrintMigrateHelp();
+        return 1;
+    }
+
     if (args[0] == "health")
     {
         Console.WriteLine("Health check not yet implemented. Run the API and call /health.");
@@ -209,6 +229,48 @@ static async Task<int> MigrateAsync(string[] args)
     Console.WriteLine($"Applied {result.Scripts.Count()} script(s); database is current.");
     Console.ResetColor();
     return 0;
+}
+
+// ── vacms migrate sharepoint ─────────────────────────────────────────────────
+// Epic #13 (BRD §11). This build ships the validation half (#191): read the package
+// written by infra/sharepoint/Export-VacmsSharePoint.ps1, report everything wrong
+// with it, and print the inventory. The write path (pages → Draft entries #193,
+// documents → media #194, user mapping #195, report files #196) hangs off the same
+// command once those land; until then the command refuses to run without --dry-run
+// so nobody mistakes a validation pass for an import.
+//   --package <dir>   Package directory (required)
+//   --dry-run         Validate and inventory; write nothing
+static int MigrateSharePoint(string[] args)
+{
+    if (args.Contains("--help") || args.Contains("-h"))
+    {
+        PrintMigrateHelp();
+        return 0;
+    }
+
+    var packageDir = OptionValue(args, "--package");
+    if (string.IsNullOrWhiteSpace(packageDir))
+    {
+        Console.Error.WriteLine("Error: 'vacms migrate sharepoint' requires --package <dir>.");
+        Console.Error.WriteLine("Usage: vacms migrate sharepoint --package <dir> --dry-run");
+        return 1;
+    }
+
+    if (!args.Contains("--dry-run"))
+    {
+        Console.Error.WriteLine("Error: importing is not available in this build (page import is #193); run with --dry-run to validate and inventory the package.");
+        return 1;
+    }
+
+    var result = SharePointExportReader.Read(packageDir);
+    Console.Write(MigrationInventory.Render(result));
+
+    if (result.IsImportable) return 0;
+
+    Console.ForegroundColor = ConsoleColor.Red;
+    Console.Error.WriteLine($"Package is not importable: {result.Errors.Count()} error(s).");
+    Console.ResetColor();
+    return 1;
 }
 
 // ── vacms db provision-logins ────────────────────────────────────────────────
@@ -303,6 +365,9 @@ static void PrintHelp()
     Console.WriteLine("  db provision-logins          Create/rotate vacms_app + vacms_readonly (--app-password, --readonly-password)");
     Console.WriteLine("  content-type scaffold <Name> Scaffold a new content type definition file");
     Console.WriteLine("  content-type --help          Show content-type command details");
+    Console.WriteLine("  migrate sharepoint --package <dir> --dry-run");
+    Console.WriteLine("                               Validate a SharePoint 2016 export package and print its inventory");
+    Console.WriteLine("  migrate --help               Show migration command details");
     Console.WriteLine("  health --url <url>           HTTP health probe");
     Console.WriteLine();
     Console.WriteLine("Connection string resolution order:");
@@ -335,4 +400,24 @@ static void PrintContentTypeHelp()
     Console.WriteLine("Examples:");
     Console.WriteLine("  vacms content-type scaffold NewsArticle");
     Console.WriteLine("  vacms content-type scaffold BenefitsPage --output ./src/api/MyProject");
+}
+
+static void PrintMigrateHelp()
+{
+    Console.WriteLine("vacms migrate — SharePoint 2016 migration commands (docs/MIGRATION.md)");
+    Console.WriteLine();
+    Console.WriteLine("Usage:");
+    Console.WriteLine("  vacms migrate sharepoint --package <dir> --dry-run   Validate the package and print its inventory");
+    Console.WriteLine("  vacms migrate --help                                  Show this help");
+    Console.WriteLine();
+    Console.WriteLine("Options:");
+    Console.WriteLine("  --package <dir>   Folder written by infra/sharepoint/Export-VacmsSharePoint.ps1 (contains manifest.json)");
+    Console.WriteLine("  --dry-run         Read-only: validate, count pages/documents/users, list problems. Writes nothing.");
+    Console.WriteLine();
+    Console.WriteLine("Exit codes:");
+    Console.WriteLine("  0   package is importable (warnings may be present)");
+    Console.WriteLine("  1   usage error, package not found, or package has validation errors");
+    Console.WriteLine();
+    Console.WriteLine("Importing (pages, documents, users, report) is delivered by the remaining stories of epic #13;");
+    Console.WriteLine("until then the command runs only with --dry-run.");
 }
