@@ -262,6 +262,7 @@ public sealed class Issue153TestFactory : WebApplicationFactory<Program>
 
         builder.UseEnvironment(_environment);
         builder.UseSetting("AllowedHosts", "localhost");   // #162: wildcard refused outside Development
+        builder.UseSetting("DataProtection:KeysPath", TestKeyRing.Path);   // #168: key ring required outside Development
         builder.UseSetting("SKIP_MIGRATIONS", "true");
         builder.UseSetting("Auth:Mode",       _mode.ToString());
         builder.UseSetting("Auth:DevBypassAllowedUsers:0", "alice@va.gov");   // #164: empty list refused
