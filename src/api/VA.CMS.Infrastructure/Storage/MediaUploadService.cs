@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Http;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
@@ -57,6 +58,7 @@ public interface IMediaUploadService
 
 public class MediaUploadService : IMediaUploadService
 {
+    private readonly ILogger<MediaUploadService>? _logger;
     private readonly IStorageBackend _storage;
     private readonly IMediaAssetRepository _assets;
     private readonly IImageProcessingService _imaging;
@@ -74,8 +76,10 @@ public class MediaUploadService : IMediaUploadService
         IMediaExtendedRepository mediaExtended,
         ISiteSettingsService? settings = null,
         bool failClosed = true,
-        IAuditLogRepository? audit = null)
+        IAuditLogRepository? audit = null,
+        ILogger<MediaUploadService>? logger = null)
     {
+        _logger        = logger;
         _storage       = storage;
         _assets        = assets;
         _imaging       = imaging;
@@ -165,7 +169,10 @@ public class MediaUploadService : IMediaUploadService
         }
         catch (Exception ex)
         {
-            return MediaUploadOutcome.Fail(MediaUploadFailure.Storage, $"Storage error: {ex.Message}");
+            // #166: the exception (path, share name, Win32 error) goes to the log under the
+            // request's correlation id; the client gets a fixed message.
+            _logger?.LogError(ex, "Storage backend failed to save upload {FileName} ({MimeType}, {Bytes} bytes).", safeFileName, mimeType, file.Length);
+            return MediaUploadOutcome.Fail(MediaUploadFailure.Storage, "The file could not be stored. The error has been logged; try again or contact the administrator.");
         }
 
         // 7. Virus scan (BRD FR-MEDIA-04 — Issue #45; fail-closed per #159 / NIST SI-3)

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace VA.CMS.Infrastructure.Email;
 
 /// <summary>
@@ -51,6 +53,7 @@ public sealed class SmtpOptions
     public string? Host { get; set; }
 
     /// <summary>587 for STARTTLS submission (Exchange Online and on-prem default); 25 for an internal relay.</summary>
+    [Range(1, 65535)]
     public int Port { get; set; } = 587;
 
     /// <summary>How TLS is negotiated. <see cref="SmtpSecurity.StartTls"/> is what Exchange expects on 587.</summary>
@@ -61,6 +64,7 @@ public sealed class SmtpOptions
     public string? Password { get; set; }
 
     /// <summary>Connect / command timeout.</summary>
+    [Range(1, 600)]
     public int TimeoutSeconds { get; set; } = 30;
 }
 

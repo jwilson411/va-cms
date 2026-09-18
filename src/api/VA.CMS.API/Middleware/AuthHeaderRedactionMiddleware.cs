@@ -18,12 +18,10 @@ public sealed class AuthHeaderRedactionMiddleware
 
     public Task InvokeAsync(HttpContext context)
     {
-        // Remove the Authorization header so the downstream logging middleware
-        // (e.g. UseHttpLogging, Serilog RequestLogging) never writes it.
-        // The request still works because authentication reads the header before
-        // any logging occurs if wired correctly — but the safest approach for
-        // defence-in-depth is to replace rather than remove (keeps the header
-        // for auth middleware, removes its value from log visibility).
+        // Replace the Authorization value so nothing downstream (a controller that
+        // dumps headers, a future UseHttpLogging) can write it. UseSerilogRequestLogging
+        // (#166) runs ahead of this middleware but never logs headers; this is
+        // defence-in-depth. Authentication has already read the header by now.
         if (context.Request.Headers.ContainsKey("Authorization"))
             context.Request.Headers["Authorization"] = "[REDACTED]";
 

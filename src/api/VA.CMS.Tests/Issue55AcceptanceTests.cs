@@ -41,7 +41,7 @@ public class Issue55AcceptanceTests
                 builder.UseSetting("Auth:Mode", "DevBypass");
 
                 builder.UseSetting("Auth:DevBypassAllowedUsers:0", "dev@va.gov");   // #164: empty list refused
-                builder.UseSetting("Jwt:SigningKey", Convert.ToBase64String(new byte[32]));
+                builder.UseSetting("Jwt:SigningKey", "issue-55-acceptance-key-32chars!!");   // #173: an all-zero key is refused (no entropy)
             });
 
     // ── AC1: Swagger UI accessible at /swagger ────────────────────────────────

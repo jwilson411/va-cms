@@ -159,7 +159,29 @@ Defaults are the values that were previously hard-coded.
 | `search.publicPageSize` | 10 | Public |
 | `search.defaultPageSize` | 25 | Server |
 | `search.maxPageSize` | 100 | Server |
+| `search.maxQueryLength` | 200 — longer `q` / click `query` is 400 (#167) | Public |
+| `search.logQueueCapacity` | 10000 — search/click analytics rows buffered before the oldest drop; read when the queue is first used after a restart (#167) | Server |
 | `api.maxPageSize` | 200 — clamp for admin list endpoints and GraphQL | Server |
+| `api.maxRequestBodyBytes` | 1048576 — body limit for every endpoint except media upload (413 beyond) (#167) | Server |
+
+### API rate limits (Server; #167)
+Per-minute allowances per client — the connection's remote address (after `ForwardedHeaders` trust) for
+anonymous surfaces, the user id for authenticated ones. Changing a value starts fresh buckets with the new
+allowance on the next request; `0` switches that one policy off. A refused request is `429` with
+`Retry-After` and a ProblemDetails body carrying `retryAfterSeconds` and the `correlationId`.
+
+| Key | Default | Applies to |
+|---|---|---|
+| `api.rateLimits.enabled` | true | master switch — off means no policy at all (diagnostics only) |
+| `api.rateLimits.publicReadPerMinute` | 300 | anonymous reads: public content, search, navigation, media serve, preview, GraphQL, health (sliding window) |
+| `api.rateLimits.authPerMinute` | 30 | `/api/auth/*` — login, callback, refresh, logout (fixed window per IP) |
+| `api.rateLimits.analyticsWritePerMinute` | 60 | anonymous writes: search click tracking, CSP reports (token bucket per IP) |
+| `api.rateLimits.adminPerMinute` | 600 | every authenticated call, per user (sliding window) |
+
+Every controller action carries one of these policies: `RateLimitPolicyConvention` assigns `auth` to
+`api/auth/*`, `public-read` to `[AllowAnonymous]` actions and `admin` to everything else unless the action
+declares `[EnableRateLimiting]`/`[DisableRateLimiting]` itself. A new endpoint is therefore limited by
+default.
 
 ### Notifications / Admin (Admin)
 | Key | Default |

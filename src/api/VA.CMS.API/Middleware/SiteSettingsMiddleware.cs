@@ -11,6 +11,9 @@ namespace VA.CMS.API.Middleware;
 ///   features.swaggerUi  — /swagger answers 404 while off (always on in Development)
 ///   media.maxUploadBytes — request body limit for POST /api/v1/media/upload, replacing the
 ///                          compile-time [RequestSizeLimit]; must run before the form is read
+///   api.maxRequestBodyBytes — request body limit for every other request (#167), well below
+///                          Kestrel's / IIS's 30 MB default; a bigger body is 413 before any
+///                          model binding reads it
 /// </summary>
 public static class SiteSettingsMiddleware
 {
@@ -33,15 +36,22 @@ public static class SiteSettingsMiddleware
                 return;
             }
 
-            if (HttpMethods.IsPost(context.Request.Method) && path.StartsWithSegments("/api/v1/media/upload"))
+            var bodyFeature = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
+            if (bodyFeature is not null && !bodyFeature.IsReadOnly)
             {
-                var feature  = context.Features.Get<IHttpMaxRequestBodySizeFeature>();
-                var maxBytes = settings.GetLong(SiteSettingKeys.MediaMaxUploadBytes);
-                if (feature is not null && !feature.IsReadOnly && maxBytes > 0)
+                if (HttpMethods.IsPost(context.Request.Method) && path.StartsWithSegments("/api/v1/media/upload"))
                 {
+                    var maxBytes = settings.GetLong(SiteSettingKeys.MediaMaxUploadBytes);
                     // Small headroom for multipart boundaries/headers so a file exactly at the
                     // limit is rejected by the service's clear message, not by a 413 from Kestrel.
-                    feature.MaxRequestBodySize = maxBytes + 64 * 1024;
+                    if (maxBytes > 0)
+                        bodyFeature.MaxRequestBodySize = maxBytes + 64 * 1024;
+                }
+                else
+                {
+                    var maxBytes = settings.GetLong(SiteSettingKeys.ApiMaxRequestBodyBytes);
+                    if (maxBytes > 0)
+                        bodyFeature.MaxRequestBodySize = maxBytes;
                 }
             }
 

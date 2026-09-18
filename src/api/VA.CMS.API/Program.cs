@@ -4,8 +4,14 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Identity.Web;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
+using VA.CMS.API.Observability;
+using VA.CMS.API.RateLimiting;
+using VA.CMS.API.Search;
+using VA.CMS.API;
 using VA.CMS.API.Auth;
 using VA.CMS.API.GraphQL;
 using VA.CMS.API.Middleware;
@@ -24,12 +30,34 @@ using VA.CMS.API.Webhooks;
 var builder = WebApplication.CreateBuilder(args);
 
 // -----------------------------------------------------------------------
+// Logging (#166, NFR-OPS-02): Serilog with compact JSON, sinks from Logging:Sinks
+// (console, rolling file, Windows Event Log, Splunk HEC), levels from Logging:LogLevel.
+// A bootstrap logger covers the lines emitted before the host exists.
+// -----------------------------------------------------------------------
+Log.Logger = SerilogSetup.CreateBootstrapLogger(builder.Environment.IsDevelopment());
+builder.Host.UseSerilog((context, services, configuration) =>
+    SerilogSetup.Configure(configuration, context.Configuration, context.HostingEnvironment));
+
+// -----------------------------------------------------------------------
+// Fail-fast configuration validation (#173)
+// Every environment/secret rule is evaluated here, before a single service is
+// registered, and reported as one numbered list. See StartupValidation for the
+// rules and docs/DEPLOYMENT.md "Startup validation" for the operator view.
+// -----------------------------------------------------------------------
+try
+{
+    StartupValidation.Run(builder.Configuration, builder.Environment);
+}
+catch (InvalidOperationException ex)
+{
+    Log.Fatal("{StartupProblems}", ex.Message);
+    throw;
+}
+
+// -----------------------------------------------------------------------
 // Configuration
 // -----------------------------------------------------------------------
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException(
-        "Connection string 'DefaultConnection' is missing. " +
-        "Copy appsettings.Development.json.example to appsettings.Development.json and fill in values.");
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
 
 var authOptions = builder.Configuration
     .GetSection(AuthOptions.SectionName)
@@ -42,14 +70,47 @@ var jwtOptions = builder.Configuration
 
 if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey))
 {
-    if (builder.Environment.IsProduction())
-        throw new InvalidOperationException("Jwt:SigningKey is required in Production. Set it via environment variable.");
-
+    // Development only — StartupValidation refuses an empty key everywhere else.
     jwtOptions.SigningKey = Convert.ToBase64String(
         System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
-    Console.WriteLine("⚠  Jwt:SigningKey not configured — using a randomly generated key. " +
-                      "Tokens will not survive a restart. Set Jwt:SigningKey for persistence.");
+    Log.Warning("Jwt:SigningKey not configured; using a randomly generated key. Tokens will not survive a restart. Set Jwt:SigningKey for persistence.");
 }
+
+// Options classes are also registered through the options pipeline with
+// ValidateDataAnnotations().ValidateOnStart() (#173). StartupValidation has already
+// evaluated the same annotations; this keeps IOptions<T> consumers and the host's own
+// start-up check on one source of truth.
+builder.Services.AddOptions<JwtOptions>()
+    .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
+    .PostConfigure(o => { if (string.IsNullOrWhiteSpace(o.SigningKey)) o.SigningKey = jwtOptions.SigningKey; })
+    .ValidateDataAnnotations()
+    .Validate(o => StartupValidation.ValidateSigningKey(o.SigningKey, isDevelopment: false) is null,
+              "Jwt:SigningKey is missing, shorter than 32 bytes or an example placeholder.")
+    .ValidateOnStart();
+builder.Services.AddOptions<AuthOptions>()
+    .Bind(builder.Configuration.GetSection(AuthOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<StorageOptions>()
+    .Bind(builder.Configuration.GetSection(StorageOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(o => o.Validate(builder.Environment.IsDevelopment() ? null : builder.Environment.ContentRootPath) is null,
+              "Storage options are invalid (see StorageOptions.Validate).")
+    .ValidateOnStart();
+builder.Services.AddOptions<MediaScannerOptions>()
+    .Bind(builder.Configuration.GetSection(MediaScannerOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddOptions<EmailOptions>()
+    .Bind(builder.Configuration.GetSection(EmailOptions.SectionName))
+    .Validate(o => StartupValidation.ValidateSmtp(o, builder.Environment.IsDevelopment()) is null,
+              "Email:Smtp options are invalid (see StartupValidation.ValidateSmtp).")
+    .ValidateOnStart();
+builder.Services.AddOptions<LoggingSinkOptions>()
+    .Bind(builder.Configuration.GetSection(LoggingSinkOptions.SectionName))
+    .ValidateDataAnnotations()
+    .Validate(o => !o.Validate(builder.Environment.IsDevelopment()).Any(), "Logging:Sinks options are invalid (see LoggingSinkOptions.Validate).")
+    .ValidateOnStart();
 
 // -----------------------------------------------------------------------
 // Host hardening (#162): explicit AllowedHosts outside Development; forwarded
@@ -69,40 +130,19 @@ if (corsOrigins.Length > 0)
 // -----------------------------------------------------------------------
 // Authentication
 // -----------------------------------------------------------------------
-// -----------------------------------------------------------------------
-// Session policy guards (#164, VA 6500): DevBypass and the fake AD handlers exist
-// for local development only — a Staging box misconfigured into DevBypass is a
-// deployment with no authentication. Everything below refuses to start outside
-// ASPNETCORE_ENVIRONMENT=Development rather than merely outside Production.
-// -----------------------------------------------------------------------
-if (authOptions.Mode == AuthMode.DevBypass && !builder.Environment.IsDevelopment())
-{
-    throw new InvalidOperationException(
-        $"Auth:Mode=DevBypass is only permitted in the Development environment (current: {builder.Environment.EnvironmentName}). " +
-        "Set Auth:Mode=AzureAd (or WindowsAuth) and configure real AD credentials.");
-}
-if (authOptions.Mode == AuthMode.DevBypass && authOptions.DevBypassAllowedUsers.Length == 0)
-{
-    throw new InvalidOperationException(
-        "Auth:DevBypassAllowedUsers is empty: with DevBypass every UPN would be accepted. " +
-        "List the developer UPNs allowed to sign in (see appsettings.Development.json.example).");
-}
-// Outside Development the refresh cookie is Secure and would never come back over
-// plain HTTP. When Kestrel's own bindings are configured and none is https://, and
-// no TLS-terminating proxy is trusted for X-Forwarded-Proto, every sign-in would
-// silently fail — refuse to start instead. IIS in-process hosting sets no urls.
-if (VA.CMS.API.HostHardeningOptions.ValidateHttpsAvailable(builder.Configuration, builder.Environment.IsDevelopment()) is { } httpsError)
-    throw new InvalidOperationException(httpsError);
+// Session policy guards (#164, VA 6500): DevBypass and the fake AD handlers exist for
+// local development only. StartupValidation has already refused them outside
+// ASPNETCORE_ENVIRONMENT=Development, so the switch below only wires what was allowed.
 
 // JWT bearer validation shared by every auth mode. OnTokenValidated consults the
 // session revocation guard (#163) so a token minted before a deactivation or role
 // change is refused even though its signature and lifetime are fine.
-void ConfigureJwtBearer(JwtBearerOptions options)
-{
-    var jwtSvc = new JwtService(jwtOptions);
-    options.TokenValidationParameters = jwtSvc.GetValidationParameters();
-    options.Events = SessionRevocationJwtEvents.Build();
-}
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IJwtService>((options, jwt) =>
+    {
+        options.TokenValidationParameters = jwt.GetValidationParameters();
+        options.Events = SessionRevocationJwtEvents.Build();
+    });
 
 switch (authOptions.Mode)
 {
@@ -117,14 +157,11 @@ switch (authOptions.Mode)
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
             })
-            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwtBearer);
+            .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { });
         break;
 
     case AuthMode.WindowsAuth:
         var useFakeNegotiate = builder.Configuration["WINDOWS_AUTH_FAKE_NEGOTIATE"] == "true";
-        if (useFakeNegotiate && !builder.Environment.IsDevelopment())
-            throw new InvalidOperationException(
-                "WINDOWS_AUTH_FAKE_NEGOTIATE is only permitted in the Development environment.");
 
         var authBuilder = builder.Services
             .AddAuthentication(options =>
@@ -143,27 +180,14 @@ switch (authOptions.Mode)
             authBuilder.AddNegotiate();
         }
 
-        authBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwtBearer);
+        authBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { });
         break;
 
     case AuthMode.AzureAd:
     default:
         // The OIDC redirect URI (AzureAd:CallbackPath, default /signin-oidc) is owned by the
-        // OIDC handler. /api/auth/callback is the app's own post-login action, so the two must
-        // never coincide — the handler would swallow the second GET with "state is null" (#154).
-        var aadCallbackPath = builder.Configuration["AzureAd:CallbackPath"];
-        if (!string.IsNullOrEmpty(aadCallbackPath)
-            && aadCallbackPath.StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                $"AzureAd:CallbackPath '{aadCallbackPath}' collides with the API routes. Leave it unset " +
-                $"(defaults to {AzureAdSchemes.CallbackPath}) and register that path as the redirect URI " +
-                "in the app registration.");
-        }
-
+        // OIDC handler; StartupValidation refuses a CallbackPath under /api/ (#154).
         var useFakeOidc = builder.Configuration["AZUREAD_FAKE_OIDC"] == "true";
-        if (useFakeOidc && !builder.Environment.IsDevelopment())
-            throw new InvalidOperationException("AZUREAD_FAKE_OIDC is only permitted in the Development environment.");
 
         var aadBuilder = builder.Services
             .AddAuthentication(options =>
@@ -199,7 +223,7 @@ switch (authOptions.Mode)
             o.SlidingExpiration   = false;
         });
 
-        aadBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwtBearer);
+        aadBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { });
         break;
 }
 
@@ -209,9 +233,45 @@ builder.Services.AddCmsAuthorization();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, AuditingAuthorizationResultHandler>();
 
 // -----------------------------------------------------------------------
+// Request bounds (#167): header/line limits on Kestrel explicitly (IIS in-process
+// applies its own requestLimits from web.config — see DEPLOYMENT.md); the body limit
+// is per request from api.maxRequestBodyBytes / media.maxUploadBytes in
+// UseSiteSettingGates so it can change without a restart.
+// -----------------------------------------------------------------------
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    kestrel.Limits.MaxRequestHeadersTotalSize = 32 * 1024;
+    kestrel.Limits.MaxRequestHeaderCount      = 100;
+    kestrel.Limits.MaxRequestLineSize         = 8 * 1024;
+    kestrel.AddServerHeader                   = false;
+});
+
+// -----------------------------------------------------------------------
 // Services
 // -----------------------------------------------------------------------
-builder.Services.AddControllers();
+// Every controller action gets a rate-limit policy by convention (#167) unless it
+// declares one; see RateLimitPolicyConvention for the mapping.
+builder.Services.AddControllers(options => options.Conventions.Add(new RateLimitPolicyConvention()));
+builder.Services.AddCmsRateLimiting();
+
+// -----------------------------------------------------------------------
+// Errors and health (#166, NFR-OPS-01/02)
+// Unhandled exceptions become RFC 7807 ProblemDetails carrying the correlation id
+// and nothing else (the exception itself is logged with the same id); exception
+// text is only added to the body in Development. Health checks: see HealthEndpoints.
+// -----------------------------------------------------------------------
+builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = ctx =>
+{
+    ctx.ProblemDetails.Extensions["correlationId"] = ctx.HttpContext.GetCorrelationId();
+    // .NET 8's exception handler exposes the error via the feature, not ProblemDetailsContext.Exception.
+    var error = ctx.Exception ?? ctx.HttpContext.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+    if (error is not null && builder.Environment.IsDevelopment())
+    {
+        ctx.ProblemDetails.Detail = error.Message;
+        ctx.ProblemDetails.Extensions["exception"] = error.ToString();
+    }
+});
+builder.Services.AddCmsHealthChecks();
 
 // -----------------------------------------------------------------------
 // OpenAPI / Swagger (Issue #55 — BRD FR-DEV-01)
@@ -309,6 +369,9 @@ builder.Services.AddScoped<VA.CMS.API.Services.IMediaUsageSyncService, VA.CMS.AP
 
 // Issue #49: Full-text search repository (FR-SEARCH-02)
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();
+// #167: search/click analytics rows go through a bounded channel + hosted writer,
+// never on the request's own (scoped, soon disposed) CmsDatabase.
+builder.Services.AddSearchLogQueue();
 
 // Issue #51: Search analytics repository (FR-SEARCH-06)
 builder.Services.AddScoped<ISearchAnalyticsRepository, SearchAnalyticsRepository>();
@@ -320,8 +383,8 @@ builder.Services.AddScoped<ISearchPinRepository, SearchPinRepository>();
 builder.Services.AddScoped<ITaxonomyRepository, TaxonomyRepository>();
 
 // Auth services
-builder.Services.AddSingleton(authOptions);
-builder.Services.AddSingleton(jwtOptions);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<AuthOptions>>().Value);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<JwtOptions>>().Value);
 builder.Services.AddSingleton<IJwtService, JwtService>();
 // #163: refresh tokens are rows in [RefreshToken] (rotation, replay detection, revocation);
 // InMemoryRefreshTokenService exists for tests only.
@@ -332,14 +395,12 @@ builder.Services.AddSingleton<IRbacService, RbacService>();
 // -----------------------------------------------------------------------
 // Storage backend (issue #40: BRD FR-MEDIA-07 / FR-SECURITY-06)
 // -----------------------------------------------------------------------
+// On-prem only: local disk or a UNC share. Anything else (the former azure_blob stub)
+// was refused by StartupValidation rather than failing on the first upload (#170).
 var storageOptions = builder.Configuration
     .GetSection(StorageOptions.SectionName)
     .Get<StorageOptions>() ?? new StorageOptions();
-// On-prem only: local disk or a UNC share. Anything else (the former azure_blob stub)
-// is refused here rather than failing on the first upload (#170).
-if (storageOptions.Validate(builder.Environment.IsDevelopment() ? null : builder.Environment.ContentRootPath) is { } storageError)
-    throw new InvalidOperationException(storageError);
-builder.Services.AddSingleton(storageOptions);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<StorageOptions>>().Value);
 
 IStorageBackend storageBackend = storageOptions.Backend.Trim().ToLowerInvariant() switch
 {
@@ -349,18 +410,13 @@ IStorageBackend storageBackend = storageOptions.Backend.Trim().ToLowerInvariant(
 builder.Services.AddSingleton<IStorageBackend>(storageBackend);
 builder.Services.AddSingleton<IImageProcessingService, ImageProcessingService>();
 // Virus scanning (#159, BRD FR-MEDIA-04, NIST SI-3): Media:Scanner selects ICAP (enterprise
-// engines), ClamAV (dev/CI) or Disabled. Disabled is refused in Production; FailClosed
-// defaults to true outside Development so an unreachable engine rejects uploads.
+// engines), ClamAV (dev/CI) or Disabled. Disabled is refused in Production by
+// StartupValidation; FailClosed defaults to true outside Development so an unreachable
+// engine rejects uploads.
 var scannerOptions = builder.Configuration
     .GetSection(MediaScannerOptions.SectionName)
     .Get<MediaScannerOptions>() ?? new MediaScannerOptions();
-if (scannerOptions.Mode == MediaScannerMode.Disabled && builder.Environment.IsProduction())
-{
-    throw new InvalidOperationException(
-        "Media:Scanner:Mode=Disabled is not permitted in Production. Configure Mode=Icap (host, port, service path) " +
-        "or Mode=ClamAv so uploads are scanned for malware (NIST SI-3).");
-}
-builder.Services.AddSingleton(scannerOptions);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<MediaScannerOptions>>().Value);
 builder.Services.AddSingleton<IVirusScanService>(scannerOptions.Mode switch
 {
     MediaScannerMode.Icap   => new IcapVirusScanService(scannerOptions),
@@ -376,7 +432,8 @@ builder.Services.AddScoped<IMediaUploadService>(sp => new MediaUploadService(
     sp.GetRequiredService<IMediaExtendedRepository>(),
     sp.GetRequiredService<ISiteSettingsService>(),
     failClosed: scannerOptions.ResolveFailClosed(builder.Environment.IsDevelopment()),
-    audit: sp.GetRequiredService<IAuditLogRepository>()));
+    audit: sp.GetRequiredService<IAuditLogRepository>(),
+    logger: sp.GetRequiredService<ILogger<MediaUploadService>>()));
 
 // Preview token service — issue #34 (BRD FR-AUTH-08)
 builder.Services.AddSingleton<IPreviewTokenService, PreviewTokenService>();
@@ -410,14 +467,13 @@ builder.Services.AddScoped<IWorkflowNotifier, WorkflowNotifier>();
 var emailOptions = builder.Configuration
     .GetSection(EmailOptions.SectionName)
     .Get<EmailOptions>() ?? new EmailOptions();
-emailOptions.Validate();
-builder.Services.AddSingleton(emailOptions);
+builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<EmailOptions>>().Value);
 if (emailOptions.IsEnabled)
     builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 else
 {
     builder.Services.AddSingleton<IEmailSender, DisabledEmailSender>();
-    Console.WriteLine("ℹ  Email:Smtp:Host not configured — workflow emails will be logged, not sent.");
+    Log.Information("Email:Smtp:Host not configured; workflow emails will be logged, not sent.");
 }
 builder.Services.AddSingleton<IEmailDispatcher, BackgroundEmailDispatcher>();
 
@@ -472,10 +528,6 @@ builder.Services.AddCustomFieldType<GeoPointFieldType>();
 // -----------------------------------------------------------------------
 // Build
 // -----------------------------------------------------------------------
-// Last of the fail-fast checks (#162): a wildcard Host header is only acceptable in Development.
-if (VA.CMS.API.HostHardeningOptions.ValidateAllowedHosts(builder.Configuration["AllowedHosts"], builder.Environment.IsDevelopment()) is { } hostsError)
-    throw new InvalidOperationException(hostsError);
-
 var app = builder.Build();
 
 // -----------------------------------------------------------------------
@@ -498,42 +550,61 @@ if (!skipMigrations)
         var result = VA.CMS.Infrastructure.Data.Migrations.MigrationRunner.Upgrade(connectionString, migrationsPath);
         if (!result.Successful)
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.Error.WriteLine($"Migration failed: {result.Error}");
-            Console.ResetColor();
+            app.Logger.LogCritical("Migration failed: {Error}", result.Error);
             return 1;
         }
 
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine("Database migrations applied successfully.");
-        Console.ResetColor();
+        app.Logger.LogInformation("Database migrations applied successfully.");
     }
     else
     {
         var status = await VA.CMS.Infrastructure.Data.Migrations.MigrationRunner.CheckAsync(connectionString, migrationsPath);
         if (!status.IsUpToDate)
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.Error.WriteLine(status.Error ?? "The database is behind the deployed migration set.");
-            Console.Error.WriteLine($"Pending migrations ({status.Pending.Count}): {string.Join(", ", status.Pending)}");
-            Console.Error.WriteLine("Run `vacms db migrate` with the deployment account, or set Database:MigrateOnStartup=true.");
-            Console.ResetColor();
+            app.Logger.LogCritical(
+                "{Error} Pending migrations ({PendingCount}): {Pending}. Run `vacms db migrate` with the deployment account, or set Database:MigrateOnStartup=true.",
+                status.Error ?? "The database is behind the deployed migration set.", status.Pending.Count, string.Join(", ", status.Pending));
             return 1;
         }
 
-        Console.WriteLine($"Database schema is current ({status.Applied.Count} migrations applied).");
+        app.Logger.LogInformation("Database schema is current ({AppliedCount} migrations applied).", status.Applied.Count);
     }
 }
 
 // -----------------------------------------------------------------------
 // HTTP pipeline
 // -----------------------------------------------------------------------
-// Forwarded headers first so Request.Scheme / RemoteIpAddress are right for
-// everything below (HTTPS redirect, Secure cookies, HSTS, audit source IPs).
+// Correlation id first (#166) so the exception handler, the request log line and
+// every audit row of a request share one id; then the exception handler so any
+// failure below becomes ProblemDetails instead of an empty 500.
+app.UseCorrelationId();
+app.UseExceptionHandler();
+
+// Forwarded headers next so Request.Scheme / RemoteIpAddress are right for
+// everything below (HTTPS redirect, Secure cookies, HSTS, audit source IPs, request log).
 if (forwardedHeaders is not null)
     app.UseForwardedHeaders(forwardedHeaders);
 
 app.UseSecurityHeaders();   // #162: on every response, including errors
+
+// One structured line per request (#166). The enricher runs at completion, so the
+// user id is available even though authentication happens further down; UPN/e-mail
+// are deliberately not logged (docs/LOGGING.md). Liveness polls are demoted to Debug.
+app.UseSerilogRequestLogging(options =>
+{
+    options.MessageTemplate = "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+    options.GetLevel = (httpContext, elapsed, ex) =>
+        ex is not null || httpContext.Response.StatusCode >= 500 ? Serilog.Events.LogEventLevel.Error
+        : HealthEndpoints.Prefixes.Any(p => httpContext.Request.Path.StartsWithSegments(p)) ? Serilog.Events.LogEventLevel.Debug
+        : Serilog.Events.LogEventLevel.Information;
+    options.EnrichDiagnosticContext = (diagnostics, httpContext) =>
+    {
+        diagnostics.Set("UserId",   long.TryParse(httpContext.User.FindFirst("cms_user_id")?.Value, out var id) ? id : null);
+        diagnostics.Set("ClientIp", httpContext.Connection.RemoteIpAddress?.ToString());
+        diagnostics.Set("Scheme",   httpContext.Request.Scheme);
+        diagnostics.Set("Host",     httpContext.Request.Host.Value);
+    };
+});
 
 if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
@@ -575,6 +646,7 @@ if (authOptions.Mode == AuthMode.DevBypass)
     app.UseDevBypassAuth();
 
 app.UseAuthentication();
+app.UseRateLimiter();       // #167: after authentication so the admin policy can key on the user id
 app.UseAuthHeaderRedaction();
 app.UseAuditContext();      // #165: actor / IP / agent / correlation id for every audit row
 app.UseAuthorization();
@@ -585,13 +657,19 @@ app.MapControllers();
 // Endpoint:  /api/graphql
 // Playground: /api/graphql/ui (Development only — HC disables Banana Cake Pop in non-dev by default)
 app.MapGraphQL("/api/graphql")
-   .AllowAnonymous();   // #156: anonymous = Published-only surface; CanRead JWT = full surface (see GraphQLAudience)
+   .AllowAnonymous()    // #156: anonymous = Published-only surface; CanRead JWT = full surface (see GraphQLAudience)
+   .RequireRateLimiting(RateLimitPolicies.PublicRead);   // #167: on top of the depth/cost limits
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
-   .AllowAnonymous();
+app.MapCmsHealthChecks();   // #166: /health(/live) liveness, /health/ready readiness (+ /api/health aliases)
 
-app.Run();
-
-return 0;
+try
+{
+    app.Run();
+    return 0;
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
 public partial class Program { }

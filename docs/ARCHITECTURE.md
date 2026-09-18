@@ -211,7 +211,7 @@ HTML streamed to browser (SSR) or served from ISR cache
                     │    /         → Next.js (node)
                     │    /admin    → React SPA (static)
                     │    /api      → ASP.NET Core 8
-                    │    /health   → Health check endpoint
+                    │    /health   → liveness; /health/ready → readiness (#166)
                     └──────────────────────┘
                             │
                     ┌───────▼──────────────┐

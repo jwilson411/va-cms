@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace VA.CMS.Infrastructure.Storage;
 
 /// <summary>Which engine <see cref="IVirusScanService"/> talks to.</summary>
@@ -21,14 +23,17 @@ public sealed class MediaScannerOptions
 
     public MediaScannerMode Mode { get; set; } = MediaScannerMode.Disabled;
 
+    [Required, MinLength(1)]
     public string Host { get; set; } = "localhost";
 
     /// <summary>Defaults to 1344 (ICAP) or 3310 (clamd) when zero.</summary>
+    [Range(0, 65535)]
     public int Port { get; set; }
 
     /// <summary>ICAP service path, e.g. "/avscan" or "/reqmod"; ignored for ClamAV.</summary>
     public string ServicePath { get; set; } = "/avscan";
 
+    [Range(1, 600)]
     public int TimeoutSeconds { get; set; } = 30;
 
     /// <summary>

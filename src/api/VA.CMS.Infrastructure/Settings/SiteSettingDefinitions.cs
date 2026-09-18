@@ -99,9 +99,20 @@ public static class SiteSettingKeys
     public const string SearchPublicPageSize  = "search.publicPageSize";
     public const string SearchDefaultPageSize = "search.defaultPageSize";
     public const string SearchMaxPageSize     = "search.maxPageSize";
+    public const string SearchMaxQueryLength  = "search.maxQueryLength";
+    public const string SearchLogQueueCapacity = "search.logQueueCapacity";
 
     // API (Server)
-    public const string ApiMaxPageSize = "api.maxPageSize";
+    public const string ApiMaxPageSize         = "api.maxPageSize";
+    public const string ApiMaxRequestBodyBytes = "api.maxRequestBodyBytes";
+
+    // API rate limits (Server) — #167. Per-minute allowances per client (IP for anonymous
+    // surfaces, user id for authenticated ones); 0 disables that one policy.
+    public const string ApiRateLimitsEnabled                 = "api.rateLimits.enabled";
+    public const string ApiRateLimitsPublicReadPerMinute     = "api.rateLimits.publicReadPerMinute";
+    public const string ApiRateLimitsAuthPerMinute           = "api.rateLimits.authPerMinute";
+    public const string ApiRateLimitsAnalyticsWritePerMinute = "api.rateLimits.analyticsWritePerMinute";
+    public const string ApiRateLimitsAdminPerMinute          = "api.rateLimits.adminPerMinute";
 
     // Notifications (Admin)
     public const string NotificationsPollIntervalSeconds = "notifications.pollIntervalSeconds";
@@ -304,10 +315,26 @@ public static class SiteSettingDefinitions
           "Default page size for GET /api/v1/search when pageSize is omitted.", 20),
         I(SiteSettingKeys.SearchMaxPageSize, 100, SiteSettingCategories.Search, SiteSettingScope.Server,
           "Largest pageSize GET /api/v1/search will honour.", 30),
+        I(SiteSettingKeys.SearchMaxQueryLength, 200, SiteSettingCategories.Search, SiteSettingScope.Public,
+          "Longest search query (characters) GET /api/v1/search and POST /api/v1/search/click accept; longer is 400.", 40),
+        I(SiteSettingKeys.SearchLogQueueCapacity, 10_000, SiteSettingCategories.Search, SiteSettingScope.Server,
+          "Search/click analytics rows buffered in memory before the oldest are dropped (applied when the queue is first used after a restart).", 50),
 
         // ── Api ─────────────────────────────────────────────────────────────
         I(SiteSettingKeys.ApiMaxPageSize, 200, SiteSettingCategories.Api, SiteSettingScope.Server,
           "Largest pageSize honoured by admin list endpoints and GraphQL.", 10),
+        I(SiteSettingKeys.ApiMaxRequestBodyBytes, 1_048_576, SiteSettingCategories.Api, SiteSettingScope.Server,
+          "Request body limit in bytes for every endpoint except media upload (which uses media.maxUploadBytes); larger bodies are 413.", 20),
+        B(SiteSettingKeys.ApiRateLimitsEnabled, true, SiteSettingCategories.Api, SiteSettingScope.Server,
+          "Master switch for API rate limiting (#167). Off means no policy applies; use only while diagnosing.", 30),
+        I(SiteSettingKeys.ApiRateLimitsPublicReadPerMinute, 300, SiteSettingCategories.Api, SiteSettingScope.Server,
+          "Anonymous reads (public content, search, navigation, media serve, GraphQL, health) allowed per client IP per minute; 0 = unlimited.", 31),
+        I(SiteSettingKeys.ApiRateLimitsAuthPerMinute, 30, SiteSettingCategories.Api, SiteSettingScope.Server,
+          "/api/auth/* calls (login, callback, refresh, logout) allowed per client IP per minute; 0 = unlimited.", 32),
+        I(SiteSettingKeys.ApiRateLimitsAnalyticsWritePerMinute, 60, SiteSettingCategories.Api, SiteSettingScope.Server,
+          "Anonymous writes (search click tracking, CSP reports) allowed per client IP per minute (token bucket); 0 = unlimited.", 33),
+        I(SiteSettingKeys.ApiRateLimitsAdminPerMinute, 600, SiteSettingCategories.Api, SiteSettingScope.Server,
+          "Authenticated admin/API calls allowed per user per minute; 0 = unlimited.", 34),
 
         // ── Notifications ───────────────────────────────────────────────────
         I(SiteSettingKeys.NotificationsPollIntervalSeconds, 30, SiteSettingCategories.Notifications, SiteSettingScope.Admin,

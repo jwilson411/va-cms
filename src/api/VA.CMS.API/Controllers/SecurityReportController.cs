@@ -19,6 +19,7 @@ public class SecurityReportController(ILogger<SecurityReportController> logger) 
 
     [HttpPost("csp-report")]
     [AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(VA.CMS.API.RateLimiting.RateLimitPolicies.AnalyticsWrite)]
     [Consumes("application/csp-report", "application/reports+json", "application/json")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]

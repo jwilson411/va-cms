@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace VA.CMS.Infrastructure.Storage;
 
 /// <summary>
@@ -13,6 +15,7 @@ public class StorageOptions
     /// Selected backend: "local" (default) or "unc". The deployment is on-prem only;
     /// "azure_blob" and any other value are rejected by <see cref="Validate"/> at startup.
     /// </summary>
+    [Required, MinLength(1)]
     public string Backend { get; set; } = "local";
 
     /// <summary>

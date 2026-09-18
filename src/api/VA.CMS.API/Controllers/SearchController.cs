@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using VA.CMS.API.Search;
 using VA.CMS.Infrastructure.Data.Repositories;
 using VA.CMS.Infrastructure.Settings;
 
@@ -14,7 +15,10 @@ namespace VA.CMS.API.Controllers;
 ///
 ///   - Public endpoint: no JWT required (search is available to the public site).
 ///   - Delegates to usp_Search_FullText via ISearchRepository.
-///   - Logs every query (result count + optional userId) via usp_Search_LogQuery.
+///   - Queues every query (result count + optional userId) for usp_Search_LogQuery
+///     through ISearchLogQueue (#167) — never on the request's own connection.
+///   - q is capped at search.maxQueryLength characters (400 beyond that) and the
+///     endpoint sits behind the public-read rate limit.
 ///   - Returns results ordered by FTS rank descending.
 ///   - Each result includes: title, content type, slug, summary excerpt, published date.
 ///
@@ -31,11 +35,13 @@ public class SearchController : ControllerBase
 {
     private readonly ISearchRepository    _search;
     private readonly ISiteSettingsService _settings;
+    private readonly ISearchLogQueue      _log;
 
-    public SearchController(ISearchRepository search, ISiteSettingsService settings)
+    public SearchController(ISearchRepository search, ISiteSettingsService settings, ISearchLogQueue log)
     {
         _search   = search;
         _settings = settings;
+        _log      = log;
     }
 
     /// <summary>
@@ -89,6 +95,10 @@ public class SearchController : ControllerBase
         if (string.IsNullOrWhiteSpace(q))
             return BadRequest(new { error = "Query parameter 'q' is required." });
 
+        var maxLength = _settings.GetInt(SiteSettingKeys.SearchMaxQueryLength);
+        if (q.Length > maxLength)
+            return BadRequest(new { error = $"Query parameter 'q' must be at most {maxLength} characters." });
+
         if (page < 1) page = 1;
         var effectivePageSize = _settings.ClampSearchPageSize(pageSize);
 
@@ -102,10 +112,10 @@ public class SearchController : ControllerBase
             pageSize: effectivePageSize);
 
         // Log every search query for admin analytics (issue #49 / FR-SEARCH-02) unless
-        // features.searchAnalytics is off. Fire-and-forget: we do not await to avoid delaying
-        // the HTTP response. A failure here does not affect the search result.
+        // features.searchAnalytics is off. Queued, not awaited (#167): the write happens on
+        // the SearchLogWriter's own scope after this response has gone out.
         if (_settings.GetBool(SiteSettingKeys.FeatureSearchAnalytics))
-            _ = _search.LogQueryAsync(q.Trim(), (int)results.TotalItems);
+            _log.TryEnqueue(new SearchQueryLogItem(q.Trim(), (int)results.TotalItems, null));
 
         return Ok(new SearchResponse
         {

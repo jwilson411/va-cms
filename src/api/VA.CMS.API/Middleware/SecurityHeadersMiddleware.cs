@@ -37,29 +37,53 @@ public sealed class SecurityHeadersMiddleware(RequestDelegate next, IWebHostEnvi
 
     public async Task InvokeAsync(HttpContext context, ISiteSettingsService settings)
     {
+        Apply(context, settings, onlyIfMissing: false);
+
+        // The exception handler (#166) clears the response before writing ProblemDetails,
+        // which drops everything set above; OnStarting survives that and puts the headers
+        // back without overriding a policy an endpoint chose deliberately (media serve CSP).
+        context.Response.OnStarting(state =>
+        {
+            var (ctx, cfg) = ((HttpContext, ISiteSettingsService))state;
+            Apply(ctx, cfg, onlyIfMissing: true);
+            return Task.CompletedTask;
+        }, (context, settings));
+
+        await next(context);
+    }
+
+    private void Apply(HttpContext context, ISiteSettingsService settings, bool onlyIfMissing)
+    {
         var headers = context.Response.Headers;
 
-        headers["X-Content-Type-Options"] = "nosniff";
-        headers["X-Frame-Options"]        = "DENY";
-        headers["Referrer-Policy"]        = "strict-origin-when-cross-origin";
-        headers["Permissions-Policy"]     = PermissionsPolicy;
-        headers["Cross-Origin-Opener-Policy"] = "same-origin";
+        Set(headers, "X-Content-Type-Options", "nosniff", onlyIfMissing);
+        Set(headers, "X-Frame-Options",        "DENY", onlyIfMissing);
+        Set(headers, "Referrer-Policy",        "strict-origin-when-cross-origin", onlyIfMissing);
+        Set(headers, "Permissions-Policy",     PermissionsPolicy, onlyIfMissing);
+        Set(headers, "Cross-Origin-Opener-Policy", "same-origin", onlyIfMissing);
 
         var csp = context.Request.Path.StartsWithSegments("/swagger") ? SwaggerCsp : ApiCsp;
-        headers["Reporting-Endpoints"] = $"csp=\"{ReportPath}\"";
+        Set(headers, "Reporting-Endpoints", $"csp=\"{ReportPath}\"", onlyIfMissing);
         var cspWithReporting = $"{csp}; report-to csp; report-uri {ReportPath}";
-        headers[settings.GetBool(SiteSettingKeys.SecurityCspReportOnly)
-            ? "Content-Security-Policy-Report-Only"
-            : "Content-Security-Policy"] = cspWithReporting;
+        if (!onlyIfMissing || (!headers.ContainsKey("Content-Security-Policy") && !headers.ContainsKey("Content-Security-Policy-Report-Only")))
+        {
+            headers[settings.GetBool(SiteSettingKeys.SecurityCspReportOnly)
+                ? "Content-Security-Policy-Report-Only"
+                : "Content-Security-Policy"] = cspWithReporting;
+        }
 
         if (context.Request.IsHttps && !env.IsDevelopment())
         {
-            headers["Strict-Transport-Security"] = settings.GetBool(SiteSettingKeys.SecurityHstsPreload)
+            Set(headers, "Strict-Transport-Security", settings.GetBool(SiteSettingKeys.SecurityHstsPreload)
                 ? "max-age=31536000; includeSubDomains; preload"
-                : "max-age=31536000; includeSubDomains";
+                : "max-age=31536000; includeSubDomains", onlyIfMissing);
         }
+    }
 
-        await next(context);
+    private static void Set(IHeaderDictionary headers, string name, string value, bool onlyIfMissing)
+    {
+        if (onlyIfMissing && headers.ContainsKey(name)) return;
+        headers[name] = value;
     }
 }
 
