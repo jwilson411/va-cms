@@ -10,7 +10,7 @@ SharePoint 2016 on-prem is aging out. Drupal 11 (the only cleanly TRM-authorized
 - Runs on the Windows/.NET/MSSQL stack most VA teams already own and operate
 - Lets **content owners** publish and manage content without a developer
 - Gives **dev teams** full extensibility to build custom content types, workflows, and embedded applications
-- Meets VA TRM, Section 508, and FedRAMP requirements by design
+- Built for VA TRM alignment and Section 508 (WCAG 2.1 AA) compliance, with the NIST 800-53 / VA Handbook 6500 controls mapped in [docs/SECURITY_CONTROLS.md](docs/SECURITY_CONTROLS.md); on-prem only — no cloud services are required or supported
 
 ## Tech Stack
 
@@ -20,23 +20,25 @@ SharePoint 2016 on-prem is aging out. Drupal 11 (the only cleanly TRM-authorized
 | Design System | USWDS 3.x (Web Components + CSS tokens) |
 | API | ASP.NET Core 8 Web API |
 | Database | Microsoft SQL Server 2019+ |
-| Auth | Azure AD / Windows Auth (SAML/OIDC) |
-| Search | SQL Full-Text Search (+ optional Elasticsearch) |
+| Auth | Windows Integrated Authentication (Kerberos via IIS) or AD FS OpenID Connect — no CMS passwords |
+| Search | SQL Server Full-Text Search |
 | File Storage | Local disk / network share (UNC) — on-prem only |
-| Hosting | IIS / Windows Server or containerized |
+| Hosting | IIS / Windows Server (single node, web garden or ARR farm) |
 
 ## Quick Links
 
-- [Business Requirements Document](docs/BRD.md)
-- [Database Layer: SPs, Indexes & Hygiene](docs/DATABASE_LAYER.md)
-- [Claude Design Prompt](docs/CLAUDE_DESIGN_PROMPT.md)
+- [Business Requirements Document](docs/BRD.md) — annotated where the build diverged from the original requirement
 - [Architecture Overview](docs/ARCHITECTURE.md)
 - [Data Model](docs/DATA_MODEL.md)
-- [API Reference](docs/API_REFERENCE.md)
-- [Deployment Guide](docs/DEPLOYMENT.md)
-- [Content Owner Guide](docs/CONTENT_OWNER_GUIDE.md)
+- [Database Layer: SPs, Indexes & Hygiene](docs/DATABASE_LAYER.md)
 - [Developer Guide](docs/DEVELOPER_GUIDE.md)
+- [API Reference](docs/openapi.json) — OpenAPI 3.0, snapshot-tested against the built API on every PR; browse it at `/swagger` on a running API
 - [Runtime Settings & Feature Flags](docs/SETTINGS.md)
+- [Deployment Guide](docs/DEPLOYMENT.md) — IIS STIG checklist, TLS/TDE, secrets, key rotation, retention, blue-green updates
+- [Security Controls (NIST 800-53 mapping)](docs/SECURITY_CONTROLS.md) and [Security Policy](SECURITY.md)
+- [Logging & Observability](docs/LOGGING.md)
+- [Accessibility Audit](docs/ACCESSIBILITY_AUDIT.md)
+- [Claude Design Prompt](docs/CLAUDE_DESIGN_PROMPT.md)
 
 ## Local Development Setup
 
@@ -243,9 +245,30 @@ step 4 above — and open Mailpit.
 
 ## Project Status
 
-🟢 **Feature-complete, hardening for deployment** — every BRD epic through #151 is built and
-tested (see `docs/`), and epic #152 tracks the security, VA-policy and operational work needed
-before a shared or production deployment. CI and security scanning run on every change.
+_Updated 2026-09-18._ Every functional BRD epic is built and tested; the remaining work is the tail of
+epic #152 (enterprise readiness). CI (`ci.yml`) and security scanning (`security.yml`) run on every change.
+
+| Area | Status | Notes |
+|---|---|---|
+| Content authoring, versioning, workflow, scheduling | ✅ Production-ready | BRD §5.1–5.3; WYSIWYG Markdown editor, per-section review, publish/expire scheduler safe across nodes (#171) |
+| Media library | ✅ Production-ready | Byte-sniffed MIME allow-list, SVG sanitiser, ICAP/ClamAV malware scanning that fails closed (#158/#159); local or UNC storage only |
+| Navigation, redirects, search, taxonomy | ✅ Production-ready | Redirects are served with loop/chain rules (#169); SQL Full-Text Search with analytics |
+| Public site (Next.js) and admin SPA | ✅ Production-ready | USWDS 3.x, nonce/`'self'` CSPs, axe + Playwright accessibility gate in CI |
+| Authentication and sessions | ✅ Production-ready | WIA or AD FS OIDC, DB-backed rotating refresh tokens, VA 6500 idle/absolute limits, system-use banner (#153/#154/#163/#164) |
+| Authorization and audit | ✅ Production-ready | Default-deny policies, section-scoped roles, AU-2/AU-3 audit trail with IP/outcome/correlation id (#155/#165) |
+| Database security model | ✅ Production-ready | `vacms_app` is EXECUTE-only; migrations run out-of-process by `vacms db migrate` (#157) |
+| HTTP hardening, rate limits, startup validation | ✅ Production-ready | HSTS/CSP/security headers, `AllowedHosts`, forwarded-header trust, per-client rate limits, fail-fast config checks (#162/#167/#173) |
+| Observability | ✅ Production-ready | JSON logs to file / Event Log / Splunk HEC, correlation ids, `/health/live` + `/health/ready`, ProblemDetails (#166) |
+| Webhooks and notifications | ✅ Production-ready | Encrypted secrets, egress allow-list and SSRF guard, transactional outbox, SMTP email (#168/#171) |
+| CI / supply chain | ✅ In place | Build + 790+ API tests on SQL Server 2022, 400+ SPA tests, CodeQL, dependency advisories, gitleaks, CycloneDX SBOMs, OpenAPI drift check (#160/#161) |
+| ATO documentation | ✅ In place | `docs/SECURITY_CONTROLS.md`, `SECURITY.md`, `docs/DEPLOYMENT.md` hardening sections (#174) |
+| Search-analytics PII (redaction, retention, restricted readers) | ⚠️ Open — #175 | Raw anonymous query text is kept 90 days and readable by system admins; listed as a POA&M item in `docs/SECURITY_CONTROLS.md` § 8 |
+| SharePoint 2016 migration tooling | ⏳ Later — epic #13 | Not started; no stories filed |
+| Pre-production security assessment (pen test, NFR-SEC-01) | ⏳ VA OIS activity | Inputs (SBOM, SARIF, control mapping) are produced by this repo |
+
+Not built, by decision: Azure Blob storage, Elasticsearch, API keys for headless consumers (anonymous callers
+get the Published-only surface; everything else is a user JWT), SAML, a plugin host. See the annotations in
+[docs/BRD.md](docs/BRD.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## License
 
