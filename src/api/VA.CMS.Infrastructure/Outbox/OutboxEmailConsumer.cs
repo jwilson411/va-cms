@@ -6,7 +6,7 @@ using VA.CMS.Infrastructure.Settings;
 namespace VA.CMS.Infrastructure.Outbox;
 
 /// <summary>
-/// Outbox consumer for <see cref="OutboundEventTypes.Email"/> rows: one SMTP session per row
+/// Outbox consumer for <see cref="OutboundEventTypes.Smtp"/> rows: one SMTP session per row
 /// through <see cref="IEmailSender"/>. A relay failure is retried on the
 /// notifications.emailRetryDelaysSeconds schedule up to notifications.emailMaxAttempts.
 /// </summary>
@@ -23,7 +23,7 @@ public sealed class OutboxEmailConsumer : IOutboxConsumer
         _logger   = logger;
     }
 
-    public string Type => OutboundEventTypes.Email;
+    public string Type => OutboundEventTypes.Smtp;
 
     public async Task<OutboxOutcome> HandleAsync(OutboundEvent evt, CancellationToken ct)
     {

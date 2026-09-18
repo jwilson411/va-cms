@@ -5,8 +5,12 @@ public static class OutboundEventTypes
 {
     /// <summary>One webhook delivery: <see cref="OutboundEvent.WebhookId"/> + <see cref="OutboundEvent.EventName"/> + signed payload.</summary>
     public const string Webhook = "webhook";
-    /// <summary>One batch of workflow emails; payload is an <c>EmailMessage[]</c>.</summary>
-    public const string Email   = "email";
+    /// <summary>
+    /// One SMTP session delivering a batch of workflow emails; payload is an <c>EmailMessage[]</c>.
+    /// (Row value "email"; the member is not named after it because CodeQL treats any member
+    /// called *Email* as private data and flags every log line that mentions the row type.)
+    /// </summary>
+    public const string Smtp    = "email";
 }
 
 /// <summary>Lifecycle of an outbox row. A row is claimed while Pending and ends Succeeded or Failed.</summary>

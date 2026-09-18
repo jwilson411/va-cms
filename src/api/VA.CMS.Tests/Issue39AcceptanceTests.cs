@@ -497,7 +497,7 @@ public class Issue39AcceptanceTests(DatabaseFixture fixture)
         var dispatcher = new OutboxEmailDispatcher(outbox, NullLogger<OutboxEmailDispatcher>.Instance);
         await dispatcher.EnqueueAsync([new EmailMessage("a@va.gov", null, "s", "b")]);
         var row = Assert.Single(outbox.Rows);
-        Assert.Equal(OutboundEventTypes.Email, row.Type);
+        Assert.Equal(OutboundEventTypes.Smtp, row.Type);
 
         IReadOnlyList<EmailMessage>? sent = null;
         var consumer = new OutboxEmailConsumer(new DelegateSender(m => { sent = m; return Task.CompletedTask; }),

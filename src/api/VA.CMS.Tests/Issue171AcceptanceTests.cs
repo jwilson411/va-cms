@@ -63,7 +63,7 @@ public class Issue171AcceptanceTests(DatabaseFixture fixture)
     public async Task Enqueue_Email_WritesExactlyOneRow()
     {
         var marker = Marker();
-        Assert.Equal(1, await Outbox().EnqueueAsync(OutboundEventTypes.Email, null, marker));
+        Assert.Equal(1, await Outbox().EnqueueAsync(OutboundEventTypes.Smtp, null, marker));
         Assert.Equal(1, await ScalarAsync<int>("SELECT COUNT(*) FROM [OutboundEvent] WHERE [PayloadJson] = @P", ("@P", marker)));
         Assert.Null((await FirstRowAsync(marker)).WebhookId);
     }
@@ -75,7 +75,7 @@ public class Issue171AcceptanceTests(DatabaseFixture fixture)
         var marker = Marker();
         var outbox = Outbox();
         for (var i = 0; i < 40; i++)
-            await outbox.EnqueueAsync(OutboundEventTypes.Email, null, marker + ":" + i);
+            await outbox.EnqueueAsync(OutboundEventTypes.Smtp, null, marker + ":" + i);
 
         var claimedBy = new ConcurrentDictionary<long, string>();
         var duplicate = 0;
@@ -110,7 +110,7 @@ public class Issue171AcceptanceTests(DatabaseFixture fixture)
         var marker = Marker();
         var outbox = Outbox();
         await DrainAsync();
-        await outbox.EnqueueAsync(OutboundEventTypes.Email, null, marker);
+        await outbox.EnqueueAsync(OutboundEventTypes.Smtp, null, marker);
 
         var first = await outbox.ClaimAsync("node-a", 50, leaseSeconds: 60);
         var row   = Assert.Single(first, r => r.PayloadJson == marker);
@@ -140,7 +140,7 @@ public class Issue171AcceptanceTests(DatabaseFixture fixture)
         var marker = Marker();
         var outbox = Outbox();
         await DrainAsync();
-        await outbox.EnqueueAsync(OutboundEventTypes.Email, null, marker);
+        await outbox.EnqueueAsync(OutboundEventTypes.Smtp, null, marker);
 
         var row = Assert.Single(await outbox.ClaimAsync("n1", 50, 300), r => r.PayloadJson == marker);
         await outbox.RescheduleAsync(row.Id, "n1", DateTime.UtcNow.AddMinutes(5), "relay down");
@@ -169,8 +169,8 @@ public class Issue171AcceptanceTests(DatabaseFixture fixture)
     {
         var marker = Marker();
         var outbox = Outbox();
-        await outbox.EnqueueAsync(OutboundEventTypes.Email, null, marker + ":old");
-        await outbox.EnqueueAsync(OutboundEventTypes.Email, null, marker + ":pending");
+        await outbox.EnqueueAsync(OutboundEventTypes.Smtp, null, marker + ":old");
+        await outbox.EnqueueAsync(OutboundEventTypes.Smtp, null, marker + ":pending");
         await ExecAsync("UPDATE [OutboundEvent] SET [Status] = 'Succeeded', [CompletedAt] = DATEADD(DAY, -30, SYSUTCDATETIME()) WHERE [PayloadJson] = @P", ("@P", marker + ":old"));
 
         var deleted = await outbox.PurgeAsync(olderThanDays: 14);
@@ -194,13 +194,13 @@ public class Issue171AcceptanceTests(DatabaseFixture fixture)
         var marker  = Marker();
         var outbox  = Outbox();
         var handled = new ConcurrentDictionary<long, int>();
-        var consumer = new DelegateConsumer(OutboundEventTypes.Email, evt =>
+        var consumer = new DelegateConsumer(OutboundEventTypes.Smtp, evt =>
         {
             handled.AddOrUpdate(evt.Id, 1, (_, n) => n + 1);
             return Task.FromResult(OutboxOutcome.Succeeded);
         });
         for (var i = 0; i < 30; i++)
-            await outbox.EnqueueAsync(OutboundEventTypes.Email, null, marker + ":" + i);
+            await outbox.EnqueueAsync(OutboundEventTypes.Smtp, null, marker + ":" + i);
 
         var settings = StaticSiteSettings.Defaults.With(SiteSettingKeys.OutboxBatchSize, 4);
         await using var services = new ServiceCollection().AddScoped<IOutboxConsumer>(_ => consumer).BuildServiceProvider();
@@ -220,9 +220,9 @@ public class Issue171AcceptanceTests(DatabaseFixture fixture)
     public async Task Worker_AppliesRetryThenFailed_FromConsumerOutcome()
     {
         var outbox = new InMemoryOutboxRepository();
-        await outbox.EnqueueAsync(OutboundEventTypes.Email, null, "[]");
+        await outbox.EnqueueAsync(OutboundEventTypes.Smtp, null, "[]");
         var outcomes = new Queue<OutboxOutcome>([OutboxOutcome.Retry(TimeSpan.Zero, "first"), OutboxOutcome.Failed("second")]);
-        var consumer = new DelegateConsumer(OutboundEventTypes.Email, _ => Task.FromResult(outcomes.Dequeue()));
+        var consumer = new DelegateConsumer(OutboundEventTypes.Smtp, _ => Task.FromResult(outcomes.Dequeue()));
         await using var services = new ServiceCollection().AddScoped<IOutboxConsumer>(_ => consumer).BuildServiceProvider();
         var worker = Worker(outbox, services, StaticSiteSettings.Defaults, "x");
 
@@ -246,15 +246,15 @@ public class Issue171AcceptanceTests(DatabaseFixture fixture)
     public async Task Worker_ConsumerThrows_RowIsRetriedNotPoisoned_UnknownTypeFails()
     {
         var outbox = new InMemoryOutboxRepository();
-        await outbox.EnqueueAsync(OutboundEventTypes.Email, null, "[]");
+        await outbox.EnqueueAsync(OutboundEventTypes.Smtp, null, "[]");
         await outbox.EnqueueAsync("telegram", null, "{}");
-        var consumer = new DelegateConsumer(OutboundEventTypes.Email, _ => throw new InvalidOperationException("boom"));
+        var consumer = new DelegateConsumer(OutboundEventTypes.Smtp, _ => throw new InvalidOperationException("boom"));
         await using var services = new ServiceCollection().AddScoped<IOutboxConsumer>(_ => consumer).BuildServiceProvider();
         var worker = Worker(outbox, services, StaticSiteSettings.Defaults, "x");
 
         Assert.Equal(2, await worker.RunOnceAsync(CancellationToken.None));
 
-        var email = outbox.Rows.Single(r => r.Type == OutboundEventTypes.Email);
+        var email = outbox.Rows.Single(r => r.Type == OutboundEventTypes.Smtp);
         Assert.Equal(OutboundEventStatus.Pending, email.Status);
         Assert.Contains("boom", email.LastError);
         Assert.True(email.NextAttemptAt > DateTime.UtcNow.AddSeconds(20));
@@ -502,7 +502,7 @@ public class Issue171AcceptanceTests(DatabaseFixture fixture)
 
         Assert.Equal(HealthStatus.Healthy, (await check.CheckHealthAsync(ctx)).Status);
 
-        await outbox.EnqueueAsync(OutboundEventTypes.Email, null, "[]");
+        await outbox.EnqueueAsync(OutboundEventTypes.Smtp, null, "[]");
         Assert.Equal(HealthStatus.Healthy, (await check.CheckHealthAsync(ctx)).Status);
 
         outbox.Rows[0].NextAttemptAt = DateTime.UtcNow.AddMinutes(-5);

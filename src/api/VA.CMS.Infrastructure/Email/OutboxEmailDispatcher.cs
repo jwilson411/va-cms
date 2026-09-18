@@ -34,7 +34,7 @@ public sealed class OutboxEmailDispatcher : IEmailDispatcher
         if (messages.Count == 0) return;
         try
         {
-            await _outbox.EnqueueAsync(OutboundEventTypes.Email, null, JsonSerializer.Serialize(messages), ct);
+            await _outbox.EnqueueAsync(OutboundEventTypes.Smtp, null, JsonSerializer.Serialize(messages), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
