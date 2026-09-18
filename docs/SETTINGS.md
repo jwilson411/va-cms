@@ -99,7 +99,7 @@ Defaults are the values that were previously hard-coded.
 |---|---|---|---|
 | `features.graphql` | **false** | Server | `/api/graphql` → 404 (on: anonymous = Published only, CanRead JWT = full surface — see DEVELOPER_GUIDE) |
 | `features.swaggerUi` | false | Server | `/swagger` → 404 outside Development (always on in Development) |
-| `features.webhooks` | true | Server | `IWebhookBackgroundDispatcher.Enqueue` is a no-op |
+| `features.webhooks` | true | Server | `IWebhookBackgroundDispatcher.EnqueueAsync` writes nothing to the outbox; queued rows are marked failed at delivery time |
 | `features.scheduledPublishing` | true | Server | `ScheduledPublishWorker` skips its sweep |
 | `features.notifications` | true | Admin | Workflow notifications not recorded; admin bell hidden |
 | `features.webpVariants` | true | Server | Uploads skip WebP generation |
@@ -199,6 +199,20 @@ default.
 | `notifications.emailFromAddress` | cms-noreply@va.gov | Sender address; must be accepted by the SMTP connector. |
 | `notifications.emailFromName` | VA CMS | Sender display name. |
 | `notifications.adminBaseUrl` | http://localhost:5173 | Admin site origin; emails link to `{origin}/admin/content/{id}/edit`. |
+| `notifications.emailMaxAttempts` | 5 | SMTP attempts per queued email batch before its outbox row is marked failed (#171). |
+| `notifications.emailRetryDelaysSeconds` | `[30, 120, 600]` (last value repeats) | Wait before each email retry (#171). |
+
+### Outbox (Server; #171)
+Every webhook delivery and workflow email is an `[OutboundEvent]` row drained by the `OutboxDispatcherWorker`
+on every API node.
+
+| Key | Default | Effect |
+|---|---|---|
+| `outbox.pollSeconds` | 5 (minimum 1) | How often each node claims a batch. A full batch is followed by another poll at once. |
+| `outbox.batchSize` | 20 (1–500) | Rows one node claims per poll. |
+| `outbox.leaseSeconds` | 300 (minimum 10) | How long a claimed row stays with a node before another may take it over. Must exceed the longest single delivery (`webhooks.timeoutSeconds`, one SMTP session). |
+| `outbox.retentionDays` | 14 | Delivered / failed rows older than this are purged hourly. |
+| `outbox.staleAfterSeconds` | 600 (0 disables) | `/health/ready` reports Degraded when the oldest due row has waited longer — no node is delivering. |
 | `admin.autoSaveIntervalSeconds` | 60 (0 disables) |
 | `admin.contentListPageSize` | 25 |
 | `admin.auditLogPageSize` | 50 |
@@ -206,9 +220,12 @@ default.
 
 ## Multi-node deployments
 
-Each API node holds its own snapshot. The node that handled the admin write refreshes
-immediately; the others pick the change up within the 60-second refresh interval
-(`SiteSettingsService.DefaultRefreshInterval`). The admin SPA caches `/settings/client` for five
+Each API node holds its own snapshot. The node that handled the admin write refreshes immediately;
+every other node polls `usp_SiteSetting_GetChangeStamp` (one row: newest `UpdatedAt` + row count)
+every 5 seconds (`SiteSettingsService.DefaultChangePollInterval`, #171) and reloads as soon as the
+stamp moves, so a change is live cluster-wide within a few seconds; the full reload every 60 seconds
+(`DefaultRefreshInterval`) remains as the backstop. The admin SPA caches `/settings/client` for five
 minutes per session and invalidates it on every save from the settings screen. The public site
 drops its ISR cache on the `settings.updated` webhook (register `settings.updated` alongside the
-content events — see README step 5).
+content events — see README step 5). Supported topologies and recycle behaviour are in
+docs/DEPLOYMENT.md § "Topologies and multi-node behaviour".

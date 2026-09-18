@@ -125,6 +125,16 @@ public static class SiteSettingKeys
     public const string NotificationsEmailFromAddress    = "notifications.emailFromAddress";
     public const string NotificationsEmailFromName       = "notifications.emailFromName";
     public const string NotificationsAdminBaseUrl        = "notifications.adminBaseUrl";
+    // Email delivery retry policy (Server); issue #171 — emails go through the outbox.
+    public const string NotificationsEmailMaxAttempts        = "notifications.emailMaxAttempts";
+    public const string NotificationsEmailRetryDelaysSeconds = "notifications.emailRetryDelaysSeconds";
+
+    // Outbox (Server); issue #171. The OutboxDispatcherWorker on every node reads these per poll.
+    public const string OutboxPollSeconds    = "outbox.pollSeconds";
+    public const string OutboxBatchSize      = "outbox.batchSize";
+    public const string OutboxLeaseSeconds   = "outbox.leaseSeconds";
+    public const string OutboxRetentionDays  = "outbox.retentionDays";
+    public const string OutboxStaleAfterSeconds = "outbox.staleAfterSeconds";
 
     // Admin SPA (Admin)
     public const string AdminAutoSaveIntervalSeconds  = "admin.autoSaveIntervalSeconds";
@@ -148,6 +158,7 @@ public static class SiteSettingCategories
     public const string Api           = "Api";
     public const string Notifications = "Notifications";
     public const string Admin         = "Admin";
+    public const string Outbox        = "Outbox";
 }
 
 public static class SiteSettingDefinitions
@@ -362,6 +373,23 @@ public static class SiteSettingDefinitions
           "Sender display name for notification emails.", 50),
         S(SiteSettingKeys.NotificationsAdminBaseUrl, "http://localhost:5173", SiteSettingCategories.Notifications, SiteSettingScope.Server,
           "Public origin of the admin site (e.g. https://cms.va.gov). Notification emails link to {origin}/admin/content/{id}/edit.", 60),
+        I(SiteSettingKeys.NotificationsEmailMaxAttempts, 5, SiteSettingCategories.Notifications, SiteSettingScope.Server,
+          "SMTP delivery attempts per queued email before it is marked failed in the outbox.", 70),
+        J(SiteSettingKeys.NotificationsEmailRetryDelaysSeconds, new[] { 30, 120, 600 }, SiteSettingCategories.Notifications, SiteSettingScope.Server,
+          "JSON array of seconds to wait before each email retry. The last value repeats if attempts exceed the list.", 80),
+
+        // ── Outbox (#171) ───────────────────────────────────────────────────
+        I(SiteSettingKeys.OutboxPollSeconds, 5, SiteSettingCategories.Outbox, SiteSettingScope.Server,
+          "How often each API node checks the outbox for due webhook deliveries and emails, in seconds (minimum 1).", 10),
+        I(SiteSettingKeys.OutboxBatchSize, 20, SiteSettingCategories.Outbox, SiteSettingScope.Server,
+          "Rows one node claims per poll (1–500). A full batch is followed immediately by another poll.", 20),
+        I(SiteSettingKeys.OutboxLeaseSeconds, 300, SiteSettingCategories.Outbox, SiteSettingScope.Server,
+          "How long a claimed row stays owned by a node before another node may take it over (minimum 10). " +
+          "Must exceed the longest single delivery (webhooks.timeoutSeconds, one SMTP session).", 30),
+        I(SiteSettingKeys.OutboxRetentionDays, 14, SiteSettingCategories.Outbox, SiteSettingScope.Server,
+          "Days to keep delivered and failed outbox rows before the hourly purge removes them.", 40),
+        I(SiteSettingKeys.OutboxStaleAfterSeconds, 600, SiteSettingCategories.Outbox, SiteSettingScope.Server,
+          "/health/ready reports Degraded when the oldest due outbox row has waited longer than this. 0 disables the check.", 50),
 
         // ── Admin ───────────────────────────────────────────────────────────
         I(SiteSettingKeys.AdminAutoSaveIntervalSeconds, 60, SiteSettingCategories.Admin, SiteSettingScope.Admin,

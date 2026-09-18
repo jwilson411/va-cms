@@ -118,7 +118,7 @@ readable by the operations and security teams only. Splunk access uses the enter
 | Endpoint | Purpose | Body |
 |---|---|---|
 | `GET /health`, `GET /health/live` | liveness: the process serves requests; no dependencies | `{"status":"Healthy"}` |
-| `GET /health/ready` | readiness: SQL Server (`SELECT 1` as the app login), storage root writable (probe file through the configured backend), settings snapshot loaded and fresh, SMTP relay reachable when e-mail is on | `{"status":"Healthy"|"Degraded"|"Unhealthy"}`; 503 when Unhealthy |
+| `GET /health/ready` | readiness: SQL Server (`SELECT 1` as the app login), storage root writable (probe file through the configured backend), settings snapshot loaded and fresh, SMTP relay reachable when e-mail is on, outbox backlog not stale (oldest due row younger than `outbox.staleAfterSeconds`, #171) | `{"status":"Healthy"|"Degraded"|"Unhealthy"}`; 503 when Unhealthy |
 
 The same three routes exist under `/api/health` for hosts that route only `/api/*` to the API. Both are
 anonymous so monitoring tools need no token, but the readiness body carries per-check names, durations and

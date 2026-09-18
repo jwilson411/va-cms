@@ -393,6 +393,55 @@ checks (name, duration, failure text) for a caller with the Developer role. Conf
 poll `/health/ready` every 60 seconds and alert on 503. Logging, correlation ids and the full health-check
 description are in `docs/LOGGING.md`.
 
+### 8. Topologies and multi-node behaviour (NFR-OPS-04, #171)
+
+The API has no in-process state that a second node would contradict: sessions are bearer tokens with
+database-backed refresh tokens (#163), site settings are read from `[SiteSetting]` on every node (#141),
+Data Protection keys live on the shared `DataProtection__KeysPath` (#168), media is on the shared storage
+root, and since #171 every deferred job — webhook deliveries, workflow emails, the publish/expire
+scheduler — is coordinated through SQL Server. The supported layouts:
+
+| Topology | Notes |
+|---|---|
+| **Single IIS site** (one app pool, one worker process) | The default. Everything below still applies to the nightly app-pool recycle. |
+| **Web garden** (one site, `Maximum Worker Processes` > 1) | Each worker process is a node. Nothing to configure. |
+| **2+ node farm behind IIS ARR / a hardware load balancer** | Point every node at the same SQL Server, storage root and `DataProtection__KeysPath` (UNC). Set `ForwardedHeaders__KnownProxies` to the ARR hops (#162/#167). Health-check `/health/live` per node. |
+
+**Sticky sessions are not required.** Access tokens are self-contained JWTs, the refresh cookie is
+validated against `[RefreshToken]` on whichever node receives it, and nothing is cached per node that a
+request depends on. Round-robin, least-connections and health-based routing all work.
+
+**What runs on every node, and how they avoid stepping on each other:**
+
+| Component | Coordination |
+|---|---|
+| `ScheduledPublishWorker` (publish / expire due content) | Each sweep is one call to `usp_ContentEntry_ClaimScheduledForPublish` / `_ClaimScheduledForExpiry`, which updates due rows read `WITH (UPDLOCK, READPAST)` in one transaction and audits + queues their webhooks there. Two nodes sweeping at once split the rows; a due entry is published exactly once and its `content.published` webhook fires exactly once. |
+| `OutboxDispatcherWorker` (webhook deliveries, workflow emails) | Claims batches of `[OutboundEvent]` rows with `usp_OutboundEvent_Claim` (`UPDLOCK, READPAST`, one `UPDATE … OUTPUT`), so every row is delivered by one node. A claim is a lease (`outbox.leaseSeconds`, default 5 min): a node that is recycled mid-delivery loses the row to another node when the lease expires, and the attempt it started counts toward `webhooks.maxAttempts` / `notifications.emailMaxAttempts`. |
+| `SiteSettingsService` (settings snapshot) | The node that handles an admin write reloads at once; every other node polls the table's change stamp every 5 s and reloads when it moves, with a full reload every 60 s as the backstop. A change is live cluster-wide within seconds; the `settings.updated` webhook still tells the public site. |
+| `WebhookSecretRekeyService` (one-time clear-text → Data Protection re-key) | Idempotent per row (`usp_Webhook_ListSecretsForRekey`); running on several nodes at once is harmless. |
+
+**App-pool recycle / process restart.** IIS recycles the pool nightly by default (and on config
+changes, idle timeout, memory limits). Because every deferred job is a database row, a recycle loses
+nothing: a webhook or email that was queued but not yet sent is delivered by the next poll on any node
+(within `outbox.pollSeconds`, default 5 s, plus the lease if the recycled node had already claimed it);
+a scheduled publish that was due is picked up by the next sweep. In-flight HTTP requests are drained by
+IIS's overlapped recycle as usual. There is no need to disable the recycle, set `Disable Overlapped
+Recycle`, or pin a single node for background work. The only per-node caches are the redirect resolve
+cache (`redirects.cacheSeconds`, #169) and the rate-limit buckets (#167), both of which are safe to
+lose and to hold independently per node.
+
+**What to watch.** `/health/ready` reports **Degraded** when the oldest due outbox row has waited
+longer than `outbox.staleAfterSeconds` (default 10 min) — that means no node is delivering
+(all pools stopped, or every poll is failing; check the `OutboxDispatcherWorker` log lines). Failed
+rows (`Status = 'Failed'`) keep their `LastError`; webhook failures are also visible per attempt under
+**Admin → Webhooks → deliveries**, from where an operator can redeliver. Completed rows are purged after
+`outbox.retentionDays`.
+
+**Zero-downtime updates.** Migrations are additive and run before the new build is deployed (§ Updating
+below); the previous build keeps running against the migrated schema until the swap. Roll nodes one at a
+time: take a node out of the load balancer, deploy, wait for `/health/ready` = 200, put it back. The
+outbox and the scheduler need no drain step — whatever a node held is picked up by the others.
+
 ## Backup and Recovery
 
 - SQL Server: Full backup nightly, differential every 4 hours, transaction log every 15 minutes. Retain 30 days.

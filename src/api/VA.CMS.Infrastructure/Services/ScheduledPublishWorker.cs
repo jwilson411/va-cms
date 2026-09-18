@@ -22,6 +22,13 @@ namespace VA.CMS.Infrastructure.Services;
 /// The poll interval and the features.scheduledPublishing switch are site settings
 /// (issue #144/#147) read on every loop, so an admin change applies without a restart.
 /// Issue #39: a scheduled publish notifies the entry owner (in-app + email) like a manual one.
+///
+/// Issue #171 (NFR-OPS-04): this worker runs on every API node. A sweep is one call to
+/// usp_ContentEntry_ClaimScheduledForPublish / _ClaimScheduledForExpiry, which transitions the
+/// due rows it can lock (UPDLOCK, READPAST), audits them and queues their content.published /
+/// content.unpublished webhook rows in one transaction, and returns only those rows. Two nodes
+/// sweeping at the same instant therefore split the due entries between them; nothing is
+/// published or notified twice. <see cref="SweepOnceAsync"/> is that unit of work.
 /// </summary>
 public sealed class ScheduledPublishWorker : BackgroundService
 {
@@ -92,6 +99,9 @@ public sealed class ScheduledPublishWorker : BackgroundService
         _logger.LogInformation("ScheduledPublishWorker stopped.");
     }
 
+    /// <summary>One sweep: claim and publish every due entry, then claim and expire. Public for tests.</summary>
+    public Task SweepOnceAsync(CancellationToken ct = default) => RunSweepAsync(ct);
+
     private async Task RunSweepAsync(CancellationToken ct)
     {
         // IContentEntryRepository is Scoped — create a fresh scope per sweep.
@@ -100,52 +110,41 @@ public sealed class ScheduledPublishWorker : BackgroundService
         var notifier = scope.ServiceProvider.GetRequiredService<IWorkflowNotifier>();
 
         // ── Publish due entries ──────────────────────────────────────────────
-        var toPublish = await repo.GetScheduledForPublishAsync();
-        if (toPublish.Count > 0)
+        // The claim SP has already transitioned, audited and queued the webhook for each row
+        // it returns; what remains is the owner notification (in-app row + outbox email).
+        var published = await repo.ClaimScheduledForPublishAsync();
+        if (published.Count > 0)
         {
             _logger.LogInformation(
-                "ScheduledPublishWorker: publishing {Count} scheduled entries.", toPublish.Count);
+                "ScheduledPublishWorker: published {Count} scheduled entries.", published.Count);
 
-            foreach (var entry in toPublish)
+            foreach (var entry in published)
             {
                 ct.ThrowIfCancellationRequested();
+                _logger.LogInformation(
+                    "Scheduled publish: entry {EntryId} (slug={Slug}) published.", entry.Id, entry.Slug);
                 try
                 {
-                    await repo.PublishScheduledAsync(entry.Id, SystemActorId);
-                    _logger.LogInformation(
-                        "Scheduled publish: entry {EntryId} (slug={Slug}) published.", entry.Id, entry.Slug);
                     await notifier.NotifyAsync(entry.Id, NotificationEventTypes.ContentPublished, SystemActorId);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex,
-                        "Scheduled publish: failed to publish entry {EntryId}.", entry.Id);
+                        "Scheduled publish: entry {EntryId} published but its notification failed.", entry.Id);
                 }
             }
         }
 
         // ── Expire due entries ───────────────────────────────────────────────
-        var toExpire = await repo.GetScheduledForExpiryAsync();
-        if (toExpire.Count > 0)
+        var expired = await repo.ClaimScheduledForExpiryAsync();
+        if (expired.Count > 0)
         {
             _logger.LogInformation(
-                "ScheduledPublishWorker: expiring {Count} scheduled entries.", toExpire.Count);
+                "ScheduledPublishWorker: expired {Count} scheduled entries.", expired.Count);
 
-            foreach (var entry in toExpire)
-            {
-                ct.ThrowIfCancellationRequested();
-                try
-                {
-                    await repo.ExpireScheduledAsync(entry.Id, SystemActorId);
-                    _logger.LogInformation(
-                        "Scheduled expiry: entry {EntryId} (slug={Slug}) unpublished.", entry.Id, entry.Slug);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex,
-                        "Scheduled expiry: failed to expire entry {EntryId}.", entry.Id);
-                }
-            }
+            foreach (var entry in expired)
+                _logger.LogInformation(
+                    "Scheduled expiry: entry {EntryId} (slug={Slug}) unpublished.", entry.Id, entry.Slug);
         }
     }
 }

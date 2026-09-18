@@ -16,10 +16,10 @@ namespace VA.CMS.Infrastructure.Notifications;
 ///
 /// Recipient resolution lives in usp_Notification_CreateForWorkflowEvent; the rows it
 /// returns carry each recipient's address, so email goes to exactly the people whose inbox
-/// got the row. Emails are handed to <see cref="IEmailDispatcher"/> and delivered off the
-/// request thread. A failure here is logged and swallowed: the transition has already been
-/// committed and a broken inbox or mail relay must never turn a successful workflow action
-/// into a 500.
+/// got the row. Emails are handed to <see cref="IEmailDispatcher"/>, which writes them to the
+/// transactional outbox (#171) for delivery off the request thread on whichever node claims
+/// them. A failure here is logged and swallowed: the transition has already been committed
+/// and a broken inbox or mail relay must never turn a successful workflow action into a 500.
 ///
 /// Site settings (read per call, so an admin change applies immediately): nothing is recorded
 /// while features.notifications is off (issue #144); no email is queued while
@@ -86,7 +86,7 @@ public sealed class WorkflowNotifier : IWorkflowNotifier
                 messages.Add(message);
             }
 
-            _email.Enqueue(messages);
+            await _email.EnqueueAsync(messages);
         }
         catch (Exception ex)
         {

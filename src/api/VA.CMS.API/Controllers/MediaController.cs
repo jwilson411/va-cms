@@ -167,7 +167,7 @@ public class MediaController : ControllerBase
                 : BadRequest(new MediaErrorResponse(error));
         }
 
-        _webhooks.Enqueue(WebhookEvents.MediaUploaded, new { id = asset!.Id, fileName = asset.FileName, mimeType = asset.MimeType });
+        await _webhooks.EnqueueAsync(WebhookEvents.MediaUploaded, new { id = asset!.Id, fileName = asset.FileName, mimeType = asset.MimeType });
 
         var response = new MediaUploadResponse(
             Id:              asset!.Id,

@@ -37,6 +37,7 @@ const CATEGORY_ORDER = [
   'Navigation',
   'Security',
   'Webhooks',
+  'Outbox',
   'Api',
 ];
 
@@ -53,6 +54,7 @@ const CATEGORY_HELP: Record<string, string> = {
   Navigation: 'Which external hosts redirects may point at.',
   Security: 'Content-Security-Policy enforcement and HSTS preload for API responses.',
   Webhooks: 'Delivery retry policy for registered webhooks.',
+  Outbox: 'How each API node drains queued webhook deliveries and emails.',
   Api: 'Limits applied across API list endpoints.',
 };
 

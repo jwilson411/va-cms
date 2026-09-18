@@ -392,6 +392,36 @@ public class ContentEntryRepository : IContentEntryRepository
         await cmd.ExecuteNonQueryAsync();
     }
 
+    public Task<IList<ContentEntry>> ClaimScheduledForPublishAsync()
+        => ClaimScheduledAsync("EXEC usp_ContentEntry_ClaimScheduledForPublish", "Published");
+
+    public Task<IList<ContentEntry>> ClaimScheduledForExpiryAsync()
+        => ClaimScheduledAsync("EXEC usp_ContentEntry_ClaimScheduledForExpiry", "Approved");
+
+    // #171: the SP transitions, audits and queues webhooks in one transaction and returns
+    // only the rows this call won (UPDLOCK, READPAST against other nodes' sweeps).
+    private async Task<IList<ContentEntry>> ClaimScheduledAsync(string commandText, string newStatus)
+    {
+        await using var conn = new Microsoft.Data.SqlClient.SqlConnection(_db.ConnectionString);
+        await conn.OpenAsync();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = commandText;
+        var results = new List<ContentEntry>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            results.Add(new ContentEntry
+            {
+                Id            = reader.GetInt64(reader.GetOrdinal("Id")),
+                ContentTypeId = reader.GetInt64(reader.GetOrdinal("ContentTypeId")),
+                Slug          = reader.GetString(reader.GetOrdinal("Slug")),
+                Locale        = reader.GetString(reader.GetOrdinal("Locale")),
+                Status        = newStatus,
+            });
+        }
+        return results;
+    }
+
     // ── Issue #36: Duplicate entry ────────────────────────────────────────────
 
     /// <summary>

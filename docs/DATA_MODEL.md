@@ -307,6 +307,32 @@ Log of webhook delivery attempts.
 | ErrorMessage | NVARCHAR(2000) | Nullable; `Refused: …` when the destination policy blocked the send (#168) |
 | RedeliveryOfId | BIGINT | Nullable FK → WebhookDelivery; set when an operator redelivered that row (V046) |
 
+### OutboundEvent
+Transactional outbox (#171, V048). One row per pending webhook delivery or email batch, written by
+the request or scheduler that made the domain change and drained by the `OutboxDispatcherWorker` on
+every API node. A node claims rows with `UPDLOCK, READPAST`; a claim expires after `outbox.leaseSeconds`
+so work owned by a recycled node is picked up again. Each webhook attempt still writes a WebhookDelivery
+row for the admin delivery log; the retry state lives here.
+
+| Column | Type | Notes |
+|---|---|---|
+| Id | BIGINT IDENTITY | PK |
+| Type | NVARCHAR(50) | `webhook` or `email` (CHECK) |
+| EventName | NVARCHAR(100) | Webhook rows: the CMS event (`content.published` …) |
+| WebhookId | BIGINT | Webhook rows: FK → Webhook, the subscriber this row delivers to (fan-out happens at enqueue) |
+| PayloadJson | NVARCHAR(MAX) | Webhook: the signed body; email: `EmailMessage[]` |
+| Status | NVARCHAR(20) | `Pending` → `Succeeded` \| `Failed` (CHECK) |
+| Attempts | INT | Incremented at claim time, so a node that dies mid-delivery has used an attempt |
+| NextAttemptAt | DATETIME2 | Due time; pushed out by the consumer's retry schedule |
+| LockedBy | NVARCHAR(100) | `machine:pid:instance` of the claiming node; NULL when not claimed |
+| LockedAt | DATETIME2 | Claim time; the lease runs from here |
+| LastError | NVARCHAR(2000) | Nullable; last failure text |
+| CreatedAt | DATETIME2 | |
+| CompletedAt | DATETIME2 | Nullable; set on Succeeded/Failed; the hourly purge deletes completed rows older than `outbox.retentionDays` |
+
+Indexes: filtered `IX_OutboundEvent_Pending (NextAttemptAt, Id) WHERE Status = 'Pending'` for the claim scan;
+`IX_OutboundEvent_Webhook_CreatedAt`; `IX_OutboundEvent_Status_CompletedAt WHERE Status <> 'Pending'` for the purge.
+
 ---
 
 ## Search (Full-Text)

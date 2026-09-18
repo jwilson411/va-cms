@@ -35,6 +35,26 @@ public static class WebhookEvents
 }
 
 /// <summary>
+/// Retry policy shared by the in-process <see cref="WebhookDispatcher.DispatchAsync"/> loop and
+/// the outbox consumer (#171): webhooks.maxAttempts and webhooks.retryDelaysSeconds (issue #147),
+/// defaults 3 attempts / 5 s, 25 s.
+/// </summary>
+public static class WebhookRetryPolicy
+{
+    public static int MaxAttempts(ISiteSettingsService settings) =>
+        Math.Max(1, settings.GetInt(SiteSettingKeys.WebhooksMaxAttempts));
+
+    /// <summary>Delay before the retry that follows attempt number <paramref name="attempt"/> (1-based). The last configured delay repeats.</summary>
+    public static TimeSpan Delay(ISiteSettingsService settings, int attempt)
+    {
+        var delays = settings.GetIntList(SiteSettingKeys.WebhooksRetryDelaysSeconds);
+        if (delays.Count == 0) return TimeSpan.FromSeconds(5);
+        var idx = Math.Min(Math.Max(attempt, 1) - 1, delays.Count - 1);
+        return TimeSpan.FromSeconds(Math.Max(0, delays[idx]));
+    }
+}
+
+/// <summary>
 /// Dispatches webhook deliveries for CMS events.
 /// Signs each payload with HMAC-SHA256 in X-CMS-Signature header.
 /// Retries on non-2xx responses; attempts, delays and timeout are the webhooks.* site
@@ -43,6 +63,9 @@ public static class WebhookEvents
 /// (#168): a webhook whose host fell off webhooks.allowedHosts, or that resolves to a
 /// private address, is logged as refused and not retried. Secrets come out of the table
 /// protected and are unprotected only for the moment of signing.
+/// In production every event reaches this class one attempt at a time from the outbox
+/// (<see cref="OutboxWebhookConsumer"/>, #171); <see cref="DispatchAsync"/> is the
+/// synchronous fan-out-with-retry used where a caller needs the result inline.
 /// Issue #54 — BRD FR-DEV-07.
 /// </summary>
 public interface IWebhookDispatcher
@@ -52,6 +75,12 @@ public interface IWebhookDispatcher
     /// Awaits all deliveries (including retries) before returning.
     /// </summary>
     Task DispatchAsync(string eventName, object payload, CancellationToken ct = default);
+
+    /// <summary>
+    /// One signed send of an already-serialized payload, recorded as one delivery row with
+    /// <paramref name="attempt"/> as its attempt number. The outbox owns the retry schedule.
+    /// </summary>
+    Task<WebhookDelivery> DeliverOnceAsync(Webhook target, string eventName, string payloadJson, int attempt, CancellationToken ct = default);
 
     /// <summary>
     /// Operator-triggered resend of a logged delivery (#168): one attempt, no retry, recorded
@@ -88,16 +117,8 @@ public class WebhookDispatcher : IWebhookDispatcher
         _secrets           = secrets ?? PassthroughSecretProtector.Instance;
     }
 
-    private int MaxAttempts => Math.Max(1, _settings.GetInt(SiteSettingKeys.WebhooksMaxAttempts));
-
-    /// <summary>Delay before retry number <paramref name="attempt"/> (1-based). The last configured delay repeats.</summary>
-    private TimeSpan RetryDelay(int attempt)
-    {
-        var delays = _settings.GetIntList(SiteSettingKeys.WebhooksRetryDelaysSeconds);
-        if (delays.Count == 0) return TimeSpan.FromSeconds(5);
-        var idx = Math.Min(attempt - 1, delays.Count - 1);
-        return TimeSpan.FromSeconds(Math.Max(0, delays[idx]));
-    }
+    private int MaxAttempts => WebhookRetryPolicy.MaxAttempts(_settings);
+    private TimeSpan RetryDelay(int attempt) => WebhookRetryPolicy.Delay(_settings, attempt);
 
     private TimeSpan Timeout => TimeSpan.FromSeconds(Math.Max(1, _settings.GetInt(SiteSettingKeys.WebhooksTimeoutSeconds)));
 
@@ -114,6 +135,10 @@ public class WebhookDispatcher : IWebhookDispatcher
         var tasks = list.Select(t => DeliverWithRetryAsync(t, eventName, payloadJson, ct));
         await Task.WhenAll(tasks);
     }
+
+    /// <inheritdoc />
+    public Task<WebhookDelivery> DeliverOnceAsync(Webhook target, string eventName, string payloadJson, int attempt, CancellationToken ct = default)
+        => AttemptAsync(target, eventName, payloadJson, attempt, redeliveryOfId: null, ct);
 
     /// <inheritdoc />
     public async Task<WebhookDelivery> RedeliverAsync(Webhook target, WebhookDelivery original, CancellationToken ct = default)
