@@ -51,7 +51,6 @@ public static class WebhookHttpHandler
             AllowAutoRedirect        = false,
             UseProxy                 = false,
             UseCookies               = false,
-            MaxAutomaticRedirections = 1,
             MaxResponseHeadersLength = 16,          // KB
             PooledConnectionLifetime = TimeSpan.FromMinutes(2),   // re-resolve DNS regularly
             ConnectTimeout           = TimeSpan.FromSeconds(10),
