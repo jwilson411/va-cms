@@ -456,9 +456,11 @@ GET    /api/v1/search?q=&type=&from=&to=&page=  Full-text search
 
 GET    /api/v1/navigation/{handle}               Get navigation menu tree
 
-POST   /api/v1/webhooks                          Register webhook
+POST   /api/v1/webhooks                          Register webhook (secret returned once)
 GET    /api/v1/webhooks                          List webhooks
 DELETE /api/v1/webhooks/{id}                     Remove webhook
+GET    /api/v1/webhooks/{id}/deliveries          Delivery log, newest first (page, pageSize)
+POST   /api/v1/webhooks/{id}/deliveries/{d}/redeliver   Resend a logged payload once
 ```
 
 Full OpenAPI spec: `/swagger` when running in Development, or exported to `docs/openapi.json`.
@@ -579,6 +581,25 @@ function verifyWebhook(payload: string, signature: string, secret: string): bool
   );
 }
 ```
+
+### Destination policy (#168)
+
+The API POSTs from inside the network, so a webhook URL is treated as an egress rule, not a free-text
+field. Registration and every delivery run `WebhookDestinationPolicy`:
+
+- `https://` outside Development, no `user:pass@` in the URL.
+- The host must match the `webhooks.allowedHosts` site setting (exact name or `*.suffix`). The default
+  is empty, which means **nothing is delivered** outside Development until an admin adds the subscriber.
+- The address the host resolves to is checked inside the HTTP connect callback (`WebhookHttpHandler`), so
+  a DNS answer that changes after registration (rebinding) is refused at the socket: loopback,
+  link-local, multicast and unspecified always; RFC 1918 / CGNAT / ULA unless
+  `webhooks.allowPrivateNetworks` is on. Redirects are not followed.
+- Locally (`ASPNETCORE_ENVIRONMENT=Development`) all of this is relaxed so `http://localhost:3000/api/revalidate`
+  keeps working.
+
+Refused deliveries appear in the delivery log (`Refused: …`) and are not retried; **Admin → Webhooks**
+shows the log per webhook with a *Redeliver* action. Secrets are stored as Data Protection payloads
+(`DataProtection:KeysPath`, see DEPLOYMENT.md) and are unprotected only to sign a delivery.
 
 ## CLI Tool
 

@@ -186,6 +186,8 @@ Logging__Sinks__File__Path=D:\logs\vacms\api-.json
 Logging__Sinks__Splunk__Enabled=true             # on-prem Splunk HTTP Event Collector
 Logging__Sinks__Splunk__HecUrl=https://splunk-hec.va.gov:8088
 Logging__Sinks__Splunk__Token=<hec token>
+DataProtection__KeysPath=\\files\va-cms\dp-keys          # key ring that encrypts webhook secrets; required outside Development (#168)
+# DataProtection__DpapiNgDescriptor=SID=S-1-5-21-…        # optional: lock the key files to the app-pool gMSA (Windows CNG DPAPI-NG)
 
 # Public site (Next.js)
 NEXT_PUBLIC_API_URL=https://cms.youragency.va.gov/api/v1
@@ -321,6 +323,7 @@ apply). The rules:
 | `Storage__Backend` other than `local`/`unc`; UNC root not a UNC path; local root inside the web root | backend/root checks | all checks |
 | `Media__Scanner__Mode=Disabled` | allowed | **refused in Production**; engines need `Host` |
 | `Email__Smtp__Security=None`; half-configured credentials; bad port | port/credential checks | all checks |
+| `DataProtection__KeysPath` set (key ring for webhook secrets, #168); `DpapiNgDescriptor` only on Windows | optional | required |
 | DataAnnotations on every options class (`[Range]`, `[Required]`) | checked | checked |
 
 Every options class is also registered with `AddOptions<T>().Bind().ValidateDataAnnotations().ValidateOnStart()`,
@@ -332,6 +335,33 @@ reports the setting until it has been changed from its `http://localhost:5173` d
 # Migrations are NOT applied by the API. Run them as the deployment account before starting the app pool:
 vacms db migrate --connection "<deployment-account connection string>"
 # The API verifies the schema at startup and exits 1 with the list of pending scripts if it is behind.
+
+#### Data Protection key ring and webhook egress (#168)
+
+Webhook signing secrets are stored in `[Webhook].[Secret]` as ASP.NET Data Protection payloads
+(`dp1:…`), never in clear text, and the reporting login `vacms_readonly` is denied the column
+(`dbo.vw_Webhook` is the projection without it). The key ring that encrypts them must outlive an
+app-pool recycle and be readable by every node, so `DataProtection__KeysPath` is **required outside
+Development**: a local directory on a single-node host, a UNC share (`\\files\va-cms\dp-keys`) for a farm.
+The directory is created if missing; grant the app-pool identity Modify on it and nobody else Read. On
+Windows the key files are additionally wrapped with DPAPI (machine scope) or, when
+`DataProtection__DpapiNgDescriptor` names the app-pool gMSA (`SID=S-1-5-21-…`), with CNG DPAPI-NG so the
+same key files decrypt on every domain-joined node. There is no cloud key vault option, per the on-prem
+constraint. Rows written before V046 are re-keyed automatically on the first start after the upgrade.
+
+Webhook deliveries are outbound HTTP from inside the network, so the destination is policed at
+registration and again on every delivery (`WebhookDestinationPolicy`):
+
+| Control | Where |
+|---|---|
+| `https://` only outside Development; URLs with credentials refused | registration + delivery |
+| Host on the `webhooks.allowedHosts` site setting (`"www.va.gov"`, `"*.va.gov"`); empty = **no deliveries** outside Development | registration + delivery |
+| Every resolved A/AAAA (and any literal IP) must be routable unicast: loopback, link-local (`169.254.169.254`), multicast, unspecified always refused; RFC 1918 / CGNAT / ULA only with `webhooks.allowPrivateNetworks` | literal at registration; resolved inside the socket connect callback, so the address checked is the address connected to |
+| Redirects never followed (`AllowAutoRedirect=false`), no proxy inheritance, no cookies, TLS 1.2+, response body capped at 64 KB, 10 s connect timeout | `WebhookHttpHandler` |
+
+A refused delivery is written to the delivery log with `Refused: …` and is not retried. Operators can
+inspect the log and redeliver from **Admin → Webhooks**. For an on-prem public site (an RFC 1918 host), add
+its name to `webhooks.allowedHosts` *and* turn on `webhooks.allowPrivateNetworks`; loopback stays refused.
 
 ### 5. Malware scanning (NIST SI-3)
 
