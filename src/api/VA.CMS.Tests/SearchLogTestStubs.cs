@@ -33,6 +33,17 @@ internal sealed class InlineSearchLogQueue(ISearchRepository? search = null, ISe
     }
 }
 
+/// <summary>
+/// Unique query text that cannot look like an identifier (#175): a hex GUID has 7+ digit runs
+/// often enough that usp_Search_LogQuery's scrub would turn it into "[redacted]". Digits are
+/// mapped onto letters so the string stays unique and stays text.
+/// </summary>
+internal static class SearchTestText
+{
+    public static string Unique(string prefix)
+        => prefix + "-" + new string(Guid.NewGuid().ToString("N").Select(c => char.IsDigit(c) ? (char)('g' + (c - '0')) : c).ToArray());
+}
+
 /// <summary>Content repository stub for which every slug is a published entry (click-tracking slug check, #167).</summary>
 internal sealed class AnySlugPublishedStub : Issue23ContentEntryStub
 {

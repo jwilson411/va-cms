@@ -1313,26 +1313,39 @@ GO
 
 ### 6.5 Search Query Log Rollup
 
+Retention is the site setting `search.analytics.retentionDays` (default 90), read from `SiteSetting`
+by the procedure itself (V049, #175). The rollup is idempotent — every completed day without a summary
+row is aggregated — and purges `SearchResultClick` on the same cut-off. Query text reaching either raw
+table has already been redacted by the API (`SearchQueryRedactor`); `usp_Search_LogQuery` and
+`usp_Search_LogClick` apply `fn_Search_LooksLikeIdentifier` as a last line for bare SSN / 9-digit shapes.
+
 ```sql
 CREATE OR ALTER PROCEDURE [dbo].[usp_Maint_RollupSearchLogs]
 AS
 BEGIN
     SET NOCOUNT ON;
-    -- Aggregate yesterday's raw logs into the summary table
-    -- Raw logs older than 90 days are purged; summaries are kept indefinitely
-    DECLARE @Yesterday DATE = DATEADD(DAY, -1, CAST(SYSUTCDATETIME() AS DATE));
 
+    DECLARE @RetentionDays INT;
+    SELECT @RetentionDays = TRY_CAST(COALESCE(NULLIF(LTRIM(RTRIM([Value])), N''), [DefaultValue]) AS INT)
+    FROM   [dbo].[SiteSetting] WHERE [Key] = N'search.analytics.retentionDays';
+    SET @RetentionDays = ISNULL(@RetentionDays, 90);
+    IF @RetentionDays < 1    SET @RetentionDays = 1;
+    IF @RetentionDays > 3650 SET @RetentionDays = 3650;
+
+    DECLARE @Today  DATE      = CAST(SYSUTCDATETIME() AS DATE);
+    DECLARE @Cutoff DATETIME2 = DATEADD(DAY, -@RetentionDays, SYSUTCDATETIME());
+
+    -- Every completed day that has no summary row yet
     INSERT INTO [SearchQuerySummary] ([QueryDate], [Query], [SearchCount], [ZeroResults])
-    SELECT @Yesterday,
-           [Query],
-           COUNT(*)                                    AS SearchCount,
-           SUM(CASE WHEN [ResultCount] = 0 THEN 1 ELSE 0 END) AS ZeroResults
-    FROM   [SearchQueryLog]
-    WHERE  CAST([CreatedAt] AS DATE) = @Yesterday
-    GROUP  BY [Query];
+    SELECT d.[QueryDate], d.[Query], COUNT(*), SUM(CASE WHEN d.[ResultCount] = 0 THEN 1 ELSE 0 END)
+    FROM  (SELECT CAST([CreatedAt] AS DATE) AS QueryDate, [Query], [ResultCount]
+           FROM   [SearchQueryLog] WHERE [CreatedAt] < @Today) d
+    WHERE NOT EXISTS (SELECT 1 FROM [SearchQuerySummary] s
+                      WHERE s.[QueryDate] = d.[QueryDate] AND s.[Query] = d.[Query])
+    GROUP BY d.[QueryDate], d.[Query];
 
-    DELETE FROM [SearchQueryLog]
-    WHERE [CreatedAt] < DATEADD(DAY, -90, SYSUTCDATETIME());
+    DELETE FROM [SearchQueryLog]    WHERE [CreatedAt] < @Cutoff;
+    DELETE FROM [SearchResultClick] WHERE [CreatedAt] < @Cutoff;
 END;
 GO
 ```
@@ -1441,6 +1454,7 @@ GO
 | `V046__webhook_hardening.sql` | `Webhook.Secret` protected at rest, `vw_Webhook`, delivery log / redelivery / re-key SPs (#168) |
 | `V047__redirect_resolution.sql` | redirect rows are public paths (`/pages/…`, `/news/…`); slug-change rows normalised; `usp_Redirect_GetByPath` matches the trailing-slash twin; `usp_Redirect_Create/_Update` flatten chains; `usp_ContentEntry_UpdateSlug` un-shadows the new path (#169) |
 | `V048__outbox_and_scheduler_lease.sql` | `[OutboundEvent]` transactional outbox + `usp_OutboundEvent_Enqueue/_Claim/_Complete/_Reschedule/_Fail/_Purge/_Stats` (claim is one `UPDATE … OUTPUT` over `UPDLOCK, READPAST` rows with a lease); `usp_ContentEntry_ClaimScheduledForPublish/_ClaimScheduledForExpiry` transition, audit and queue the webhook rows in one transaction so N scheduler nodes never double-publish; `usp_SiteSetting_GetChangeStamp` for the settings cache bust (#171) |
+| `V049__search_analytics_pii.sql` | `fn_Search_LooksLikeIdentifier`; `usp_Search_LogQuery` / `usp_Search_LogClick` scrub bare SSN / 9-digit shapes; `usp_Maint_RollupSearchLogs` reads `search.analytics.retentionDays`, is idempotent and purges `SearchResultClick`; `DENY SELECT` on `SearchQueryLog` / `SearchResultClick` to `vacms_readonly`; one-time scrub of pre-redaction rows (#175) |
 
 ---
 

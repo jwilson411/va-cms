@@ -3,6 +3,10 @@
 -- Schedule: Daily at 00:15 local time
 -- Procedure: usp_Maint_RollupSearchLogs
 --
+-- Retention of the raw SearchQueryLog / SearchResultClick rows is the site setting
+-- search.analytics.retentionDays (default 90), read by the procedure itself (#175);
+-- nothing here needs editing to change it.
+--
 -- Run this script as a sysadmin to register the Agent job.
 -- Idempotent: drops and recreates the job if it already exists.
 
@@ -28,7 +32,7 @@ DECLARE @schedule_id INT;
 
 EXEC msdb.dbo.sp_add_job
     @job_name        = N'job_Maint_RollupSearchLogs',
-    @description     = N'Aggregates yesterday''s SearchQueryLog into SearchQuerySummary; purges raw logs older than 90 days.',
+    @description     = N'Aggregates completed days of SearchQueryLog into SearchQuerySummary; purges raw query and click rows older than search.analytics.retentionDays (site setting, default 90).',
     @category_name   = N'Database Maintenance',
     @owner_login_name= N'sa',
     @job_id          = @job_id OUTPUT;

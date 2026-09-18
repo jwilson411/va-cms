@@ -15,7 +15,9 @@
 
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { clientSettingKeys, useClientSettings, type ClientSettingKey } from '../features/siteSettings/useClientSettings';
+import { SEARCH_ANALYTICS_ROLES } from '../features/searchAnalytics/access';
 
 interface NavItem {
   label: string;
@@ -24,6 +26,8 @@ interface NavItem {
   ariaLabel?: string;
   /** Site setting (bool) that must be on for the item to render. */
   feature?: ClientSettingKey;
+  /** Role names (any one of) the user must hold for the item to render; omitted = every role. */
+  roles?: readonly string[];
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -33,7 +37,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Content Types', to: '/admin/content-types' },
   { label: 'Users', to: '/admin/users', ariaLabel: 'User directory' },
   { label: 'Audit Log', to: '/admin/audit' },
-  { label: 'Search Analytics', to: '/admin/search/analytics', feature: clientSettingKeys.featureSearchAnalytics },
+  // #175: the API answers 403 below SiteAdmin, so the link is not offered either.
+  { label: 'Search Analytics', to: '/admin/search/analytics', feature: clientSettingKeys.featureSearchAnalytics, roles: SEARCH_ANALYTICS_ROLES },
   { label: 'Navigation', to: '/admin/navigation', ariaLabel: 'Navigation menu editor' },
   { label: 'Redirects', to: '/admin/redirects', ariaLabel: 'Redirect management' },
   { label: 'Search Pins', to: '/admin/search/pins' },
@@ -68,9 +73,15 @@ export function SkipNav(): JSX.Element {
 }
 
 export function AdminNav(): JSX.Element {
-  // Feature-flagged items (site settings) disappear from the nav while the flag is off.
+  // Feature-flagged items (site settings) disappear from the nav while the flag is off;
+  // role-gated items disappear for users the API would refuse anyway.
   const settings = useClientSettings();
-  const visibleItems = NAV_ITEMS.filter((item) => !item.feature || settings.getBool(item.feature));
+  const { roles } = useAuth();
+  const visibleItems = NAV_ITEMS.filter(
+    (item) =>
+      (!item.feature || settings.getBool(item.feature)) &&
+      (!item.roles || item.roles.some((r) => roles.includes(r))),
+  );
 
   return (
     <>

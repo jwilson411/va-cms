@@ -104,6 +104,8 @@ public static class SiteSettingKeys
     public const string SearchMaxPageSize     = "search.maxPageSize";
     public const string SearchMaxQueryLength  = "search.maxQueryLength";
     public const string SearchLogQueueCapacity = "search.logQueueCapacity";
+    public const string SearchAnalyticsRedactionPatterns = "search.analytics.redactionPatterns";
+    public const string SearchAnalyticsRetentionDays     = "search.analytics.retentionDays";
 
     // API (Server)
     public const string ApiMaxPageSize         = "api.maxPageSize";
@@ -196,6 +198,25 @@ public static class SiteSettingDefinitions
         "including criminal investigations. Such information includes sensitive data encrypted to comply with " +
         "confidentiality and privacy requirements. Access or use of this computer system by any person, whether " +
         "authorized or unauthorized, constitutes consent to these terms. There is no right of privacy in this system.";
+
+    /// <summary>
+    /// Regular expressions applied to every search / click query before it is stored (#175).
+    /// Each match becomes "[redacted]". Veterans type identifiers into site search; none of
+    /// them belongs in an analytics table. Case-insensitive; see SearchQueryRedactor.
+    /// </summary>
+    public static readonly string[] DefaultSearchRedactionPatterns =
+    {
+        // SSN: 123-45-6789, 123 45 6789, 123456789
+        @"\b\d{3}[-\s.]?\d{2}[-\s.]?\d{4}\b",
+        // Any 9-digit run (SSN without separators, claim/EDIPI-style numbers)
+        @"\b\d{9}\b",
+        // VA file / claim number: 7–9 digits, optionally prefixed C / CSS / SS / XC
+        @"\b(?:XC|CSS|C|SS)?[-\s]?\d{7,9}\b",
+        // North American phone number with optional country code and separators
+        @"(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b",
+        // E-mail address
+        @"[\w.+%-]+@[\w-]+(?:\.[\w-]+)+",
+    };
 
     private static SiteSettingDefinition S(string key, string def, string cat, SiteSettingScope scope, string desc, int order)
         => new(key, SiteSettingType.String, def, cat, scope, desc, order);
@@ -342,6 +363,12 @@ public static class SiteSettingDefinitions
           "Longest search query (characters) GET /api/v1/search and POST /api/v1/search/click accept; longer is 400.", 40),
         I(SiteSettingKeys.SearchLogQueueCapacity, 10_000, SiteSettingCategories.Search, SiteSettingScope.Server,
           "Search/click analytics rows buffered in memory before the oldest are dropped (applied when the queue is first used after a restart).", 50),
+        J(SiteSettingKeys.SearchAnalyticsRedactionPatterns, DefaultSearchRedactionPatterns, SiteSettingCategories.Search, SiteSettingScope.Server,
+          "Regular expressions (case-insensitive) applied to every search/click query before it is stored; each match becomes [redacted]. " +
+          "Defaults cover SSN, 9-digit numbers, VA file numbers, phone numbers and e-mail addresses. An invalid pattern is logged and skipped.", 60),
+        I(SiteSettingKeys.SearchAnalyticsRetentionDays, 90, SiteSettingCategories.Search, SiteSettingScope.Server,
+          "Days the nightly rollup keeps raw SearchQueryLog / SearchResultClick rows after aggregating them into SearchQuerySummary (1–3650). " +
+          "Read by usp_Maint_RollupSearchLogs directly from the SiteSetting table.", 70),
 
         // ── Api ─────────────────────────────────────────────────────────────
         I(SiteSettingKeys.ApiMaxPageSize, 200, SiteSettingCategories.Api, SiteSettingScope.Server,

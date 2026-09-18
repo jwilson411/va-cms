@@ -55,7 +55,11 @@ BEGIN
         GRANT SELECT ON SCHEMA::dbo TO [vacms_readonly];
         DENY INSERT, UPDATE, DELETE ON SCHEMA::dbo TO [vacms_readonly];
         IF OBJECT_ID(N''dbo.Webhook'') IS NOT NULL
-            DENY SELECT ON OBJECT::dbo.Webhook ([Secret]) TO [vacms_readonly];');
+            DENY SELECT ON OBJECT::dbo.Webhook ([Secret]) TO [vacms_readonly];
+        IF OBJECT_ID(N''dbo.SearchQueryLog'') IS NOT NULL
+            DENY SELECT ON OBJECT::dbo.SearchQueryLog TO [vacms_readonly];
+        IF OBJECT_ID(N''dbo.SearchResultClick'') IS NOT NULL
+            DENY SELECT ON OBJECT::dbo.SearchResultClick TO [vacms_readonly];');
     PRINT N'Mapped vacms_app / vacms_readonly into $(DatabaseName) and applied grants.';
 END
 ELSE

@@ -252,7 +252,7 @@ public class Issue49AcceptanceTests(DatabaseFixture fixture)
     [Fact]
     public async Task LogQueryAsync_DoesNotThrow_AndRowAppears()
     {
-        var uniqueQuery = $"issue49-acceptance-{Guid.NewGuid():N}";
+        var uniqueQuery = SearchTestText.Unique("issue49-acceptance");
         var repo = Repo();
 
         // Should not throw

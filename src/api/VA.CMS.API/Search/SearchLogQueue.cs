@@ -1,6 +1,7 @@
 using System.Diagnostics.Metrics;
 using System.Threading.Channels;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Search;
 using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.API.Search;
@@ -25,6 +26,10 @@ public sealed record SearchClickLogItem(string Query, string ClickedSlug, int Re
 /// read once when the queue is first used) so a flood of searches can never exhaust
 /// memory; every drop is counted on the <c>vacms.search.log.dropped</c> meter and the
 /// first plus every thousandth is logged.
+///
+/// Query text is redacted on the way in (#175, <see cref="ISearchQueryRedactor"/>): the
+/// raw string never sits in the buffer, so neither the writer, a heap dump nor the
+/// database sees an SSN a visitor typed into the search box.
 /// </summary>
 public interface ISearchLogQueue
 {
@@ -48,15 +53,17 @@ public sealed class SearchLogQueue : ISearchLogQueue
         description: "Search analytics rows discarded because the in-memory queue was full.");
 
     private readonly ISiteSettingsService     _settings;
+    private readonly ISearchQueryRedactor     _redactor;
     private readonly ILogger<SearchLogQueue>  _logger;
     private readonly object                   _gate = new();
     private Channel<SearchLogItem>?           _channel;
     private int                               _pending;
     private long                              _dropped;
 
-    public SearchLogQueue(ISiteSettingsService settings, ILogger<SearchLogQueue> logger)
+    public SearchLogQueue(ISiteSettingsService settings, ISearchQueryRedactor redactor, ILogger<SearchLogQueue> logger)
     {
         _settings = settings;
+        _redactor = redactor;
         _logger   = logger;
     }
 
@@ -85,11 +92,20 @@ public sealed class SearchLogQueue : ISearchLogQueue
 
     public bool TryEnqueue(SearchLogItem item)
     {
+        item = Redact(item);
         Interlocked.Increment(ref _pending);
         if (Channel.Writer.TryWrite(item)) return true;
         Interlocked.Decrement(ref _pending);
         return false;
     }
+
+    /// <summary>Applies search.analytics.redactionPatterns to the query text of an item (#175).</summary>
+    private SearchLogItem Redact(SearchLogItem item) => item switch
+    {
+        SearchQueryLogItem q => q with { Query = _redactor.Redact(q.Query) },
+        SearchClickLogItem c => c with { Query = _redactor.Redact(c.Query) },
+        _ => item,
+    };
 
     /// <summary>Called by the writer once an item has been handled (written or failed).</summary>
     internal void Completed() => Interlocked.Decrement(ref _pending);
@@ -182,6 +198,7 @@ public static class SearchLogQueueExtensions
 {
     public static IServiceCollection AddSearchLogQueue(this IServiceCollection services)
     {
+        services.AddSingleton<ISearchQueryRedactor, SearchQueryRedactor>();
         services.AddSingleton<SearchLogQueue>();
         services.AddSingleton<ISearchLogQueue>(sp => sp.GetRequiredService<SearchLogQueue>());
         services.AddHostedService<SearchLogWriter>();

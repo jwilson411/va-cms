@@ -164,6 +164,8 @@ Defaults are the values that were previously hard-coded.
 | `search.maxPageSize` | 100 | Server |
 | `search.maxQueryLength` | 200 — longer `q` / click `query` is 400 (#167) | Public |
 | `search.logQueueCapacity` | 10000 — search/click analytics rows buffered before the oldest drop; read when the queue is first used after a restart (#167) | Server |
+| `search.analytics.redactionPatterns` | five case-insensitive regular expressions — SSN in any spacing, 9-digit runs, VA file/claim numbers (`C…`/`CSS…`), North American phone numbers, e-mail addresses. Each match in a search or click query becomes `[redacted]` before the row is queued; a pattern that does not compile is logged and skipped; one that times out (250 ms) redacts the whole query (#175) | Server |
+| `search.analytics.retentionDays` | 90 — days `usp_Maint_RollupSearchLogs` keeps raw `SearchQueryLog` / `SearchResultClick` rows after aggregating them (1–3650; the procedure reads the row itself, so no restart or job edit) (#175) | Server |
 | `api.maxPageSize` | 200 — clamp for admin list endpoints and GraphQL | Server |
 | `api.maxRequestBodyBytes` | 1048576 — body limit for every endpoint except media upload (413 beyond) (#167) | Server |
 

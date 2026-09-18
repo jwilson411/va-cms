@@ -17,6 +17,12 @@ import { AdminNav, SkipNav } from './AdminNav';
 // Site settings (epic #141): render with the code defaults, no QueryClient needed.
 import * as siteSettings from '../features/siteSettings/useClientSettings';
 
+// Auth (#175): role-gated items read the signed-in user's roles; default to a SystemAdmin.
+const authState = { roles: ['SystemAdmin'] as string[] };
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => authState,
+}));
+
 vi.mock('../features/siteSettings/useClientSettings', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../features/siteSettings/useClientSettings')>();
   return {
@@ -91,5 +97,26 @@ describe('AdminNav', () => {
     );
     expect(screen.queryByRole('link', { name: /search analytics/i })).toBeNull();
     expect(screen.getByRole('link', { name: /audit log/i })).toBeDefined();
+  });
+
+  it('hides the Search Analytics link for roles the API refuses (#175)', () => {
+    authState.roles = ['Editor'];
+    try {
+      renderNav();
+      expect(screen.queryByRole('link', { name: /search analytics/i })).toBeNull();
+      expect(screen.getByRole('link', { name: /audit log/i })).toBeDefined();
+    } finally {
+      authState.roles = ['SystemAdmin'];
+    }
+  });
+
+  it('shows the Search Analytics link to a SiteAdmin (#175)', () => {
+    authState.roles = ['SiteAdmin'];
+    try {
+      renderNav();
+      expect(screen.getByRole('link', { name: /search analytics/i })).toBeDefined();
+    } finally {
+      authState.roles = ['SystemAdmin'];
+    }
   });
 });
