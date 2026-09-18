@@ -120,6 +120,20 @@ public interface IWebhookRepository
 
     /// <summary>Soft-delete a webhook (sets IsActive = 0).</summary>
     Task DeleteAsync(long id);
+
+    // ── Issue #168: delivery log and secret re-keying ─────────────────────────
+
+    /// <summary>Delivery attempts for one webhook, newest first, with the total row count for paging.</summary>
+    Task<(IReadOnlyList<WebhookDelivery> Items, int TotalRows)> ListDeliveriesAsync(long webhookId, int page, int pageSize);
+
+    /// <summary>One delivery row (payload included) so an operator can inspect or redeliver it.</summary>
+    Task<WebhookDelivery?> GetDeliveryAsync(long deliveryId);
+
+    /// <summary>Rows whose Secret is still clear text (no "dp1:" prefix). Used once at startup to re-key.</summary>
+    Task<IReadOnlyList<(long Id, string Secret)>> ListSecretsForRekeyAsync();
+
+    /// <summary>Replace the stored (protected) secret of one webhook.</summary>
+    Task UpdateSecretAsync(long id, string protectedSecret);
 }
 
 // ── Extended User ─────────────────────────────────────────────────────────────

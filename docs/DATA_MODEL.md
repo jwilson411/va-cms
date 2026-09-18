@@ -286,7 +286,7 @@ Registered webhook endpoints.
 | Id | BIGINT IDENTITY | PK |
 | Name | NVARCHAR(200) | |
 | Url | NVARCHAR(2000) | HTTPS endpoint |
-| Secret | NVARCHAR(500) | HMAC signing key (encrypted at rest) |
+| Secret | NVARCHAR(1000) | HMAC signing key as an ASP.NET Data Protection payload (`dp1:…`, V046); `DENY SELECT` on this column for `vacms_readonly`, which reports through `dbo.vw_Webhook` instead |
 | EventsJson | NVARCHAR(MAX) | JSON array of subscribed event names |
 | IsActive | BIT | |
 | CreatedById | BIGINT | FK → User |
@@ -304,7 +304,8 @@ Log of webhook delivery attempts.
 | ResponseStatusCode | INT | Nullable |
 | AttemptNumber | INT | |
 | DeliveredAt | DATETIME2 | |
-| ErrorMessage | NVARCHAR(2000) | Nullable |
+| ErrorMessage | NVARCHAR(2000) | Nullable; `Refused: …` when the destination policy blocked the send (#168) |
+| RedeliveryOfId | BIGINT | Nullable FK → WebhookDelivery; set when an operator redelivered that row (V046) |
 
 ---
 

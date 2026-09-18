@@ -9,6 +9,7 @@ using VA.CMS.API.Controllers;
 using VA.CMS.API.Webhooks;
 using VA.CMS.Infrastructure.Data.Pocos;
 using VA.CMS.Infrastructure.Data.Repositories;
+using VA.CMS.Infrastructure.Settings;
 
 namespace VA.CMS.Tests;
 
@@ -41,7 +42,13 @@ public class Issue54AcceptanceTests(DatabaseFixture fixture)
 
     private WebhooksController Controller(long userId)
     {
-        var ctrl = new WebhooksController(Repo());
+        var repo = Repo();
+        // Development-mode policy (any host), pass-through protector and a dispatcher that never
+        // sends: these tests cover #54 registration/listing, not the #168 egress controls.
+        var policy = new WebhookDestinationPolicy(StaticSiteSettings.Defaults, isDevelopment: true);
+        var ctrl = new WebhooksController(repo, policy, new PassthroughProtector(),
+            new WebhookDispatcher(repo, new FakeHttpClientFactory(new FakeHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<WebhookDispatcher>.Instance));
         ctrl.ControllerContext = new ControllerContext
         {
             HttpContext = new DefaultHttpContext
@@ -361,6 +368,14 @@ public class Issue54AcceptanceTests(DatabaseFixture fixture)
 
 // ── Test doubles ─────────────────────────────────────────────────────────────
 
+/// <summary>Stores secrets as given (the #168 protector is exercised in Issue168AcceptanceTests).</summary>
+internal sealed class PassthroughProtector : IWebhookSecretProtector
+{
+    public string Protect(string secret) => secret;
+    public string Unprotect(string stored) => stored;
+    public bool IsProtected(string stored) => false;
+}
+
 /// <summary>In-memory webhook repository for dispatcher tests (no DB required).</summary>
 internal class InMemoryWebhookRepository : IWebhookRepository
 {
@@ -412,6 +427,29 @@ internal class InMemoryWebhookRepository : IWebhookRepository
         delivery.Id = id;
         Deliveries.Add(delivery);
         return Task.FromResult((long)id);
+    }
+
+    // ── #168 ──
+    public Task<(IReadOnlyList<WebhookDelivery> Items, int TotalRows)> ListDeliveriesAsync(long webhookId, int page, int pageSize)
+    {
+        var all = Deliveries.Where(d => d.WebhookId == webhookId).OrderByDescending(d => d.Id).ToList();
+        IReadOnlyList<WebhookDelivery> pageItems = all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return Task.FromResult((pageItems, all.Count));
+    }
+
+    public Task<WebhookDelivery?> GetDeliveryAsync(long deliveryId) =>
+        Task.FromResult(Deliveries.FirstOrDefault(d => d.Id == deliveryId));
+
+    public Task<IReadOnlyList<(long Id, string Secret)>> ListSecretsForRekeyAsync() =>
+        Task.FromResult<IReadOnlyList<(long, string)>>(
+            _webhooks.Where(w => w.Secret is not null && !w.Secret.StartsWith("dp1:", StringComparison.Ordinal))
+                     .Select(w => (w.Id, w.Secret!)).ToList());
+
+    public Task UpdateSecretAsync(long id, string protectedSecret)
+    {
+        var w = _webhooks.First(x => x.Id == id);
+        w.Secret = protectedSecret;
+        return Task.CompletedTask;
     }
 }
 

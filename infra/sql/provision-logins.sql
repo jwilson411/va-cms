@@ -53,7 +53,9 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE [name] = N''vacms_readonly'')
             CREATE USER [vacms_readonly] FOR LOGIN [vacms_readonly];
         GRANT SELECT ON SCHEMA::dbo TO [vacms_readonly];
-        DENY INSERT, UPDATE, DELETE ON SCHEMA::dbo TO [vacms_readonly];');
+        DENY INSERT, UPDATE, DELETE ON SCHEMA::dbo TO [vacms_readonly];
+        IF OBJECT_ID(N''dbo.Webhook'') IS NOT NULL
+            DENY SELECT ON OBJECT::dbo.Webhook ([Secret]) TO [vacms_readonly];');
     PRINT N'Mapped vacms_app / vacms_readonly into $(DatabaseName) and applied grants.';
 END
 ELSE

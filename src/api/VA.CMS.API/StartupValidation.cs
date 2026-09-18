@@ -57,6 +57,7 @@ public static class StartupValidation
         var scanner = configuration.GetSection(MediaScannerOptions.SectionName).Get<MediaScannerOptions>() ?? new MediaScannerOptions();
         var email   = configuration.GetSection(EmailOptions.SectionName).Get<EmailOptions>() ?? new EmailOptions();
         var sinks   = configuration.GetSection(LoggingSinkOptions.SectionName).Get<LoggingSinkOptions>() ?? new LoggingSinkOptions();
+        var keyRing = configuration.GetSection(KeyRingOptions.SectionName).Get<KeyRingOptions>() ?? new KeyRingOptions();
 
         var problems = new List<string?>
         {
@@ -70,6 +71,7 @@ public static class StartupValidation
             storage.Validate(isDevelopment ? null : contentRootPath),
             ValidateScanner(scanner, isProduction),
             ValidateSmtp(email, isDevelopment),
+            keyRing.Validate(isDevelopment),
         };
 
         // Forwarded-header trust parses CIDRs; a malformed entry is a configuration problem too.
@@ -82,6 +84,7 @@ public static class StartupValidation
         problems.AddRange(ValidateAnnotations(scanner, MediaScannerOptions.SectionName));
         problems.AddRange(ValidateAnnotations(email.Smtp, $"{EmailOptions.SectionName}:Smtp"));
         problems.AddRange(sinks.Validate(isDevelopment));
+        problems.AddRange(ValidateAnnotations(keyRing, KeyRingOptions.SectionName));
         problems.AddRange(ValidateAnnotations(sinks.File,     $"{LoggingSinkOptions.SectionName}:File"));
         problems.AddRange(ValidateAnnotations(sinks.EventLog, $"{LoggingSinkOptions.SectionName}:EventLog"));
         problems.AddRange(ValidateAnnotations(sinks.Splunk,   $"{LoggingSinkOptions.SectionName}:Splunk"));

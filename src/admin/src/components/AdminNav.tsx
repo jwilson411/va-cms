@@ -37,6 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Navigation', to: '/admin/navigation', ariaLabel: 'Navigation menu editor' },
   { label: 'Redirects', to: '/admin/redirects', ariaLabel: 'Redirect management' },
   { label: 'Search Pins', to: '/admin/search/pins' },
+  { label: 'Webhooks', to: '/admin/webhooks', ariaLabel: 'Webhook management' },
   { label: 'Settings', to: '/admin/settings', ariaLabel: 'Admin settings' },
 ];
 

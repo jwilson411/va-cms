@@ -152,6 +152,8 @@ Defaults are the values that were previously hard-coded.
 | `webhooks.maxAttempts` | 3 |
 | `webhooks.retryDelaysSeconds` | `[5, 25]` (last value repeats) |
 | `webhooks.timeoutSeconds` | 15 |
+| `webhooks.allowedHosts` | `[]` — host names a webhook may target (`"www.va.gov"`, `"*.va.gov"`). Empty means **no deliveries** outside Development. Checked at registration and on every delivery (#168) |
+| `webhooks.allowPrivateNetworks` | false — allow allow-listed hosts to resolve to RFC 1918 / CGNAT / ULA addresses (an on-prem subscriber). Loopback, link-local and multicast are always refused outside Development (#168) |
 
 ### Search / API
 | Key | Default | Scope |

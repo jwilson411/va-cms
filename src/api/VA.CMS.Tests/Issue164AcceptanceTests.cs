@@ -366,6 +366,7 @@ public class Issue164AcceptanceTests
         {
             builder.UseEnvironment(environment);
             builder.UseSetting("AllowedHosts", "localhost");
+            builder.UseSetting("DataProtection:KeysPath", TestKeyRing.Path);   // #168: key ring required outside Development
             builder.UseSetting("SKIP_MIGRATIONS", "true");
             builder.UseSetting("Auth:Mode", mode);
             if (allowedUsers)

@@ -211,6 +211,7 @@ public class Issue162AcceptanceTests
         {
             builder.UseEnvironment(environment);
             builder.UseSetting("AllowedHosts", allowedHosts);
+            builder.UseSetting("DataProtection:KeysPath", TestKeyRing.Path);   // #168: key ring required outside Development
             if (knownNetwork is not null)
                 builder.UseSetting("ForwardedHeaders:KnownNetworks:0", knownNetwork);
             builder.UseSetting("SKIP_MIGRATIONS", "true");
