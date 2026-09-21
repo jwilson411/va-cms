@@ -154,11 +154,11 @@ function SettingRow({ setting }: RowProps): JSX.Element {
   );
 
   const actions = (
-    <div className="margin-top-1">
+    <div className="va-settings-row__actions">
       {setting.dataType !== 'bool' && (
         <button
           type="button"
-          className="usa-button usa-button--outline"
+          className="usa-button usa-button--outline margin-0"
           onClick={() => save(draft)}
           disabled={busy || !isDirty}
           aria-label={`Save ${setting.key}`}
@@ -169,7 +169,7 @@ function SettingRow({ setting }: RowProps): JSX.Element {
       {setting.isOverridden && (
         <button
           type="button"
-          className="usa-button usa-button--unstyled margin-left-1"
+          className="usa-button usa-button--unstyled"
           onClick={reset}
           disabled={busy}
           aria-label={`Reset ${setting.key} to default`}
@@ -183,7 +183,7 @@ function SettingRow({ setting }: RowProps): JSX.Element {
   if (setting.dataType === 'bool') {
     const checked = draft.trim().toLowerCase() === 'true';
     return (
-      <div className="usa-form-group" data-testid={`setting-row-${setting.key}`}>
+      <div className="usa-form-group va-settings-row" data-testid={`setting-row-${setting.key}`}>
         <div className="usa-checkbox">
           <input
             id={inputId}
@@ -204,47 +204,48 @@ function SettingRow({ setting }: RowProps): JSX.Element {
         </div>
         {meta}
         {statusEl}
-        {actions}
       </div>
     );
   }
 
   return (
-    <div className="usa-form-group" data-testid={`setting-row-${setting.key}`}>
+    <div className="usa-form-group va-settings-row" data-testid={`setting-row-${setting.key}`}>
       <label className="usa-label" htmlFor={inputId}>
         <code>{setting.key}</code>
       </label>
       {meta}
+      <div className="va-settings-row__control">
+        {setting.dataType === 'json' ? (
+          <textarea
+            id={inputId}
+            className={`usa-textarea${status?.kind === 'error' ? ' usa-input--error' : ''}`}
+            value={draft}
+            disabled={busy}
+            aria-describedby={describedBy}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        ) : (
+          <input
+            id={inputId}
+            className={`usa-input${status?.kind === 'error' ? ' usa-input--error' : ''}`}
+            type={setting.dataType === 'int' ? 'number' : 'text'}
+            min={setting.dataType === 'int' ? 0 : undefined}
+            inputMode={setting.dataType === 'int' ? 'numeric' : undefined}
+            value={draft}
+            disabled={busy}
+            aria-describedby={describedBy}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && isDirty) {
+                e.preventDefault();
+                save(draft);
+              }
+            }}
+          />
+        )}
+        {actions}
+      </div>
       {statusEl}
-      {setting.dataType === 'json' ? (
-        <textarea
-          id={inputId}
-          className={`usa-textarea${status?.kind === 'error' ? ' usa-input--error' : ''}`}
-          value={draft}
-          disabled={busy}
-          aria-describedby={describedBy}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-      ) : (
-        <input
-          id={inputId}
-          className={`usa-input${status?.kind === 'error' ? ' usa-input--error' : ''}`}
-          type={setting.dataType === 'int' ? 'number' : 'text'}
-          min={setting.dataType === 'int' ? 0 : undefined}
-          inputMode={setting.dataType === 'int' ? 'numeric' : undefined}
-          value={draft}
-          disabled={busy}
-          aria-describedby={describedBy}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && isDirty) {
-              e.preventDefault();
-              save(draft);
-            }
-          }}
-        />
-      )}
-      {actions}
     </div>
   );
 }
@@ -277,15 +278,35 @@ export function SiteSettingsSection(): JSX.Element {
         </p>
       )}
 
-      {groups.map(([category, items]) => (
-        <fieldset key={category} className="usa-fieldset margin-top-4" data-testid={`settings-category-${category}`}>
-          <legend className="usa-legend usa-legend--large">{category}</legend>
-          {CATEGORY_HELP[category] && <p className="usa-hint margin-top-0">{CATEGORY_HELP[category]}</p>}
-          {items.map((setting) => (
-            <SettingRow key={setting.key} setting={setting} />
+      {groups.length > 1 && (
+        <nav aria-label="Jump to settings category" className="va-settings-jumpnav">
+          {groups.map(([category], i) => (
+            <React.Fragment key={category}>
+              {i > 0 && <span className="va-settings-jumpnav__sep" aria-hidden="true">·</span>}
+              <a className="usa-link" href={`#settings-category-${category}`}>{category}</a>
+            </React.Fragment>
           ))}
-        </fieldset>
-      ))}
+        </nav>
+      )}
+
+      <div className="va-settings-grid">
+        {groups.map(([category, items]) => (
+          <fieldset
+            key={category}
+            id={`settings-category-${category}`}
+            className="usa-fieldset va-settings-category"
+            data-testid={`settings-category-${category}`}
+          >
+            <legend className="usa-legend usa-legend--large">{category}</legend>
+            {CATEGORY_HELP[category] && (
+              <p className="usa-hint va-settings-category__help">{CATEGORY_HELP[category]}</p>
+            )}
+            {items.map((setting) => (
+              <SettingRow key={setting.key} setting={setting} />
+            ))}
+          </fieldset>
+        ))}
+      </div>
     </section>
   );
 }

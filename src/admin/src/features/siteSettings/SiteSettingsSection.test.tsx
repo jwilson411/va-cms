@@ -73,8 +73,14 @@ describe('SiteSettingsSection', () => {
     renderInProvider(<SiteSettingsSection />);
     expect(screen.getByRole('heading', { name: /site settings/i })).toBeDefined();
 
-    const legends = screen.getAllByText(/^(Site|Features|Webhooks|Api)$/).map((el) => el.textContent);
-    expect(legends).toEqual(['Site', 'Features', 'Webhooks', 'Api']);
+    // Each category renders as a <fieldset> (implicit role="group", named by its <legend>).
+    const categories = screen.getAllByRole('group').map((el) => el.getAttribute('data-testid'));
+    expect(categories).toEqual([
+      'settings-category-Site',
+      'settings-category-Features',
+      'settings-category-Webhooks',
+      'settings-category-Api',
+    ]);
 
     expect(screen.getByLabelText('features.webhooks')).toHaveProperty('type', 'checkbox');
     expect(screen.getByLabelText('api.maxPageSize')).toHaveProperty('type', 'number');
