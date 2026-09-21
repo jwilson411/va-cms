@@ -52,7 +52,7 @@ export function WebhooksPage() {
   const forbidden = isError && error instanceof WebhookApiError && error.status === 403;
 
   return (
-    <main id="main-content" className="grid-container padding-y-4">
+    <main id="main-content" className="padding-y-4">
       <div className="grid-row grid-gap">
         <div className="grid-col-12">
           <div className="display-flex flex-align-center flex-justify margin-bottom-3">

@@ -65,15 +65,20 @@ public class SearchAnalyticsRepository : ISearchAnalyticsRepository
 
     /// <inheritdoc />
     public async Task<(IReadOnlyList<SearchAnalyticsRow> Items, int TotalRows)> GetFullAnalyticsAsync(
-        int daysBack = 30, int page = 1, int pageSize = 50)
+        int daysBack = 30, int page = 1, int pageSize = 50,
+        string sortBy = "SearchCount", string sortDir = "DESC", string? queryFilter = null)
     {
         await using var conn = new SqlConnection(_db.ConnectionString);
         await conn.OpenAsync();
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "EXEC usp_Search_GetAnalyticsFull @DaysBack, @Page, @PageSize, @TotalRows OUTPUT";
+        cmd.CommandText =
+            "EXEC usp_Search_GetAnalyticsFull @DaysBack, @Page, @PageSize, @SortBy, @SortDir, @QueryFilter, @TotalRows OUTPUT";
         cmd.Parameters.AddWithValue("@DaysBack", daysBack);
         cmd.Parameters.AddWithValue("@Page", page);
         cmd.Parameters.AddWithValue("@PageSize", pageSize);
+        cmd.Parameters.AddWithValue("@SortBy", sortBy);
+        cmd.Parameters.AddWithValue("@SortDir", sortDir);
+        cmd.Parameters.AddWithValue("@QueryFilter", (object?)queryFilter ?? DBNull.Value);
 
         var totalRowsParam = cmd.Parameters.Add("@TotalRows", System.Data.SqlDbType.Int);
         totalRowsParam.Direction = System.Data.ParameterDirection.Output;

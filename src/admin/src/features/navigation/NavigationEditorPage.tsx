@@ -167,7 +167,7 @@ export function NavigationEditorPage(): JSX.Element {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <main id="main-content" className="grid-container margin-y-4">
+    <main id="main-content" className="margin-y-4">
       <h1>Navigation Menus</h1>
 
       {menusLoading && <p>Loading menus…</p>}

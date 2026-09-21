@@ -202,7 +202,7 @@ export function ContentEntryListPage(): JSX.Element {
   const totalPages = data?.totalPages ?? 1;
 
   return (
-    <main id="main-content" className="grid-container">
+    <main id="main-content">
       <div className="usa-section">
 
         {/* ── Header row ─────────────────────────────────────────────────── */}

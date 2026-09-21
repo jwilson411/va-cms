@@ -73,7 +73,7 @@ export function SearchPinsPage(): JSX.Element {
   }
 
   return (
-    <main id="main-content" className="grid-container">
+    <main id="main-content">
       <h1>Pinned Search Results</h1>
       <p className="usa-prose">
         Pin a content entry to the top of search results for a specific query string. Each

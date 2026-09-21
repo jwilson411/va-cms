@@ -16,7 +16,7 @@ export function ContentTypeBrowserPage(): JSX.Element {
 
   if (selectedTypeName != null) {
     return (
-      <main id="main-content" className="grid-container padding-top-3">
+      <main id="main-content" className="padding-top-3">
         <ContentTypeDetailPanel
           typeName={selectedTypeName}
           onBack={() => setSelectedTypeName(null)}
@@ -26,7 +26,7 @@ export function ContentTypeBrowserPage(): JSX.Element {
   }
 
   return (
-    <main id="main-content" className="grid-container padding-top-3">
+    <main id="main-content" className="padding-top-3">
       <h1 className="usa-heading-xl">Content Types</h1>
       <p className="usa-prose">
         All content types registered in the CMS. Click a type to view its field schema.

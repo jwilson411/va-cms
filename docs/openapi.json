@@ -4493,7 +4493,7 @@
         "tags": [
           "SearchAnalytics"
         ],
-        "summary": "GET /api/v1/admin/search/analytics\nFull paginated analytics table with CTR, used by /admin/search/analytics page.\nRequires SiteAdmin or SystemAdmin (#175).",
+        "summary": "GET /api/v1/admin/search/analytics\nFull paginated analytics table with CTR, used by /admin/search/analytics page.\nSortable by query/searchCount/zeroResultCount/avgResultCount/clickCount/\nclickThroughRate/lastSearchedAt (unrecognized values fall back to SearchCount DESC\nin the stored procedure); optionally filtered to queries containing q.\nRequires SiteAdmin or SystemAdmin (#175).",
         "parameters": [
           {
             "name": "daysBack",
@@ -4520,6 +4520,29 @@
               "type": "integer",
               "format": "int32",
               "default": 50
+            }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "SearchCount"
+            }
+          },
+          {
+            "name": "sortDir",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "DESC"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           }
         ],

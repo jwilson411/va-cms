@@ -149,7 +149,7 @@ export function DbHealthPage(): JSX.Element {
   const { data, isLoading, isError, error, refetch, isFetching } = useDbHealth();
 
   return (
-    <main id="main-content" className="grid-container">
+    <main id="main-content">
       <nav aria-label="Breadcrumb" className="usa-breadcrumb margin-bottom-2">
         <ol className="usa-breadcrumb__list">
           <li className="usa-breadcrumb__list-item">

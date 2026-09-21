@@ -347,7 +347,9 @@ public class Issue167AcceptanceTests
 
         public Task<IReadOnlyList<SearchQueryStat>> GetTopQueriesAsync(int topN = 10, int daysBack = 30) => Task.FromResult<IReadOnlyList<SearchQueryStat>>([]);
         public Task<IReadOnlyList<SearchZeroResultStat>> GetZeroResultQueriesAsync(int topN = 10, int daysBack = 30) => Task.FromResult<IReadOnlyList<SearchZeroResultStat>>([]);
-        public Task<(IReadOnlyList<SearchAnalyticsRow> Items, int TotalRows)> GetFullAnalyticsAsync(int daysBack = 30, int page = 1, int pageSize = 50)
+        public Task<(IReadOnlyList<SearchAnalyticsRow> Items, int TotalRows)> GetFullAnalyticsAsync(
+            int daysBack = 30, int page = 1, int pageSize = 50,
+            string sortBy = "SearchCount", string sortDir = "DESC", string? queryFilter = null)
             => Task.FromResult<(IReadOnlyList<SearchAnalyticsRow>, int)>(([], 0));
 
         public Task LogClickAsync(string query, string clickedSlug, int resultRank = 0, long? userId = null)

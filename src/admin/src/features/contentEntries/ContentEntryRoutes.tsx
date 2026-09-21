@@ -37,7 +37,7 @@ export function ContentEntryEditRoute(): JSX.Element {
   }
   if (isLoading) {
     return (
-      <main id="main-content" className="grid-container">
+      <main id="main-content">
         <p>Loading entry…</p>
       </main>
     );
@@ -57,7 +57,7 @@ export function ContentEntryEditRoute(): JSX.Element {
 
 function NotFound({ message }: { message: string }): JSX.Element {
   return (
-    <main id="main-content" className="grid-container">
+    <main id="main-content">
       <div className="usa-alert usa-alert--error" role="alert">
         <div className="usa-alert__body">
           <h1 className="usa-alert__heading">Content entry not found</h1>

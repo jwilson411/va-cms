@@ -112,7 +112,7 @@ export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Eleme
   const totalPages = data ? Math.ceil(data.totalItems / pageSize) : 0;
 
   return (
-    <div className="grid-container" data-testid="media-library-page">
+    <main id="main-content" data-testid="media-library-page">
       <h1 className="page-heading">Media Library</h1>
 
       {/* Upload — POST /api/v1/media/upload (issue #40); hidden while features.mediaUpload is off */}
@@ -274,7 +274,7 @@ export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Eleme
           />
         )}
       </div>
-    </div>
+    </main>
   );
 }
 
