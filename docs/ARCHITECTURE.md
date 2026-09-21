@@ -187,6 +187,7 @@ HTML streamed to browser (SSR) or served from ISR cache
 | Rich text editor | TipTap | ProseMirror-based, extensible, can enforce USWDS HTML output |
 | Auth | IIS Windows Authentication or Microsoft.Identity.Web OIDC against AD FS (AD → JWT) | On-prem only; AD authenticates, CMS issues its own short-lived JWT and DB-backed refresh token. The `AzureAd` configuration name is historical — no cloud tenant is involved |
 | Markdown renderer | Markdig | Fast, extensible CommonMark renderer for .NET; same pipeline in live preview and publish |
+| SharePoint HTML parser (migration) | AngleSharp | Spec-compliant HTML5 parser for the SharePoint/Word page bodies the migration normaliser (#192) turns into Markdown; parser only, no loader/network; pinned in `Directory.Packages.props` |
 | WYSIWYG editor | TipTap + tiptap-markdown | Decision in #69: true WYSIWYG (the editor is the preview); content owners see formatting, storage is Markdown serialised by tiptap-markdown |
 | Testing (API) | xUnit + TestContainers (MSSQL) | Real DB in CI, no mocks for data layer |
 | Testing (React) | Vitest + React Testing Library | Fast, co-located with components |

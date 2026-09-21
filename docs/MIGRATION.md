@@ -1,7 +1,8 @@
 # SharePoint 2016 Migration
 
 **Status:** epic #13 in progress. This document covers what is built: the export package format,
-the farm-side exporter, and the `--dry-run` validation/inventory pass (#191). The import itself —
+the farm-side exporter, the `--dry-run` validation/inventory pass (#191) and the page-body
+normaliser that turns SharePoint HTML into the Markdown the CMS stores (#192). The import itself —
 pages → Draft entries (#193), documents → media (#194), user mapping (#195), report files (#196) —
 lands in the follow-on stories and this page grows with them. BRD § 11, MIG-01 … MIG-05.
 
@@ -181,6 +182,69 @@ Problems: 0 error(s), 1 warning(s)
 Result: package is importable.
 ```
 
+## Page bodies: SharePoint HTML → Markdown (#192, MIG-02)
+
+The CMS stores rich text as CommonMark Markdown and renders it through Markdig with raw HTML
+disabled (BRD FR-AUTH-02), so a SharePoint page body cannot be imported as-is — every `<span style>`
+would show up as literal text. `SharePointHtmlNormalizer.Normalize(html, pageId, links, pageUrl)`
+turns the exported body into Markdown that renders as plain USWDS markup, and returns a
+`NormalizedBody { Markdown, Warnings[] }`. It is a pure function: no I/O, no network, no clock;
+the same input always gives the same output.
+
+**What survives, and how**
+
+| SharePoint / Word markup | Markdown |
+|---|---|
+| `h1` | `##` — the page title is the `h1`; body headings start at `h2` |
+| `h2`–`h6`, `p`, `br` | `##`…`######`, paragraphs, backslash hard breaks |
+| `ul`/`ol`/`li` (nested, `start`) | `-` / `1.` lists |
+| `strong`/`b`, `em`/`i`, `s`/`del`, `code`, `pre` | `**`, `*`, `~~`, backticks, fenced blocks |
+| `blockquote`, `hr` | `>`, `---` |
+| `table` with 2+ rows and columns, no `rowspan`/`colspan`, only inline content in cells | GFM pipe table; the first row is the header (a warning if it was not `th`) |
+| any other `table` (layout) | unwrapped — cell contents in reading order, with a warning |
+| `img` | `![alt](media url)`; a missing `alt` attribute is a warning, an explicit `alt=""` is decorative |
+| `a` | see link rules below |
+| Word `MsoListParagraph` runs | real lists; the bullet glyph and `mso-list … levelN` drive ordered/unordered and nesting |
+| `span`, `font`, `u`, `div`, `center`, smart tags, unknown elements | unwrapped |
+| `style`, `class`, `id`, every other attribute; `<o:p>`, `<xml>`, `<style>`, `<script>`, VML, `&nbsp;` runs | removed silently (nothing a reader saw) |
+| web-part zones, embed boxes, placeholders; `iframe`, `object`, `embed`, `video`, form controls | dropped with a warning |
+
+Prose that happens to look like Markdown (`5 * 3`, `snake_case`, a line starting with `1.`) is
+escaped so it renders as typed.
+
+**Link rules.** The normaliser never guesses a CMS URL; the importer hands it a
+`SharePointLinkResolver` with two callbacks (page path → CMS path, document path → media URL) and
+the source web URL:
+
+| href | Result |
+|---|---|
+| `/sites/<x>/…/Foo.aspx` (also `Foo.aspx`, `../Pages/Foo.aspx`, or absolute on the source host) | page resolver → e.g. `/foo`; fragment kept |
+| any other site path (document libraries, Site Assets) | document resolver → media URL |
+| resolver returns `null` | link dropped, text kept, `link-unresolved` / `image-unresolved` |
+| `/_layouts/…` | dropped, text kept, `link-layouts-dropped` |
+| `javascript:`, `vbscript:`, `data:`, any other scheme | removed, text kept, `link-script-removed` |
+| `https://` on another host, `mailto:`, `tel:`, `#anchor` | kept verbatim |
+
+**Warnings** carry the page id and the offending source markup so the report (#196) can point a
+content owner at the exact element:
+
+| Code | Meaning |
+|---|---|
+| `image-alt-missing` | Image kept with empty alt; needs alt text in the CMS before publishing (508). |
+| `image-unresolved` | Image source not in the package (or `_layouts`/`data:`); image dropped, alt text kept as text. |
+| `link-layouts-dropped` | Link to a SharePoint system page; text kept. |
+| `link-script-removed` | `javascript:`/other-scheme link removed; text kept. |
+| `link-unresolved` | Site link neither resolver knew; text kept. |
+| `layout-table-unwrapped` | Table used for layout; check the reading order of the result. |
+| `table-header-inferred` | Data table without `th`; first row promoted to header. |
+| `webpart-dropped` | A web part; its output is not in the export. |
+| `element-dropped` | `iframe`, embedded media, form control …; nothing in Markdown can hold it. |
+
+The golden files under `src/api/VA.CMS.Tests/Fixtures/SharePoint/html/` (`<case>.html` → `<case>.md`)
+are the specification: publishing page, wiki page, nested layout table, data table, Word paste,
+images, links, structure, web part page. To change the normaliser's output deliberately, run
+`VACMS_UPDATE_GOLDENS=1 dotnet test --filter Issue192` and review the diff.
+
 ## Code map
 
 | Piece | Where |
@@ -189,14 +253,15 @@ Result: package is importable.
 | Package model | `src/api/VA.CMS.Infrastructure/Migration/SharePoint/SharePointExportPackage.cs` |
 | Reader + validation | `…/Migration/SharePoint/SharePointExportReader.cs` |
 | Inventory text | `…/Migration/SharePoint/MigrationInventory.cs` |
+| HTML → Markdown normaliser | `…/Migration/SharePoint/SharePointHtmlNormalizer.cs`, `NormalizedBody.cs` (AngleSharp, pinned in `Directory.Packages.props`) |
 | CLI command | `src/api/VA.CMS.CLI/Program.cs` — `vacms migrate sharepoint` |
 | Tests + sample | `src/api/VA.CMS.Tests/Issue191AcceptanceTests.cs`, `…/Fixtures/SharePoint/sample-export/` |
+| Normaliser tests + golden files | `src/api/VA.CMS.Tests/Issue192AcceptanceTests.cs`, `…/Fixtures/SharePoint/html/` |
 
 ## Remaining stories
 
 | Story | Delivers |
 |---|---|
-| #192 | SharePoint HTML → USWDS-safe Markdown normaliser (MIG-02) |
 | #193 | Page import to Draft entries, `MigrationSourceMap` for idempotent re-runs, conflict detection (MIG-01) |
 | #194 | Document library → media library through `MediaUploadService` (MIG-03) |
 | #195 | User → CMS user mapping, `--user-map`, `--default-owner` (MIG-04) |

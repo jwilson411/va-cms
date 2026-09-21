@@ -11,6 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup Label="Runtime">
+    <!-- #192 SharePoint HTML → Markdown normaliser. Parser only; no loader/network is ever configured. -->
+    <PackageVersion Include="AngleSharp" Version="1.8.2" />
     <PackageVersion Include="dbup-sqlserver" Version="7.2.0" />
     <PackageVersion Include="HotChocolate.AspNetCore" Version="14.3.2" />
     <PackageVersion Include="HotChocolate.AspNetCore.Authorization" Version="14.3.2" />
