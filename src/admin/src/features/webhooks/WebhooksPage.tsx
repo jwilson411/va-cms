@@ -17,8 +17,16 @@ import {
 } from './api';
 import { WebhookForm } from './WebhookForm';
 import type { WebhookDeliveryDto, WebhookListItem, WebhookRegistrationResponse } from './types';
+import { AdminPagination, RowActions, SortableHeader, useSortableRows } from '../../components/table';
 
 const DELIVERY_PAGE_SIZE = 25;
+
+type WebhookSortKey = 'name' | 'url' | 'events' | 'isActive' | 'createdAt';
+
+function webhookSortValue(row: WebhookListItem, key: WebhookSortKey): string | boolean {
+  if (key === 'events') return row.events.join(', ');
+  return row[key];
+}
 
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -33,6 +41,17 @@ export function WebhooksPage() {
   const { data: webhooks, isLoading, isError, error } = useWebhooks();
   const registerMutation = useRegisterWebhook();
   const deleteMutation   = useDeleteWebhook();
+
+  const {
+    rows: sortedWebhooks,
+    sortKey,
+    sortDirection,
+    toggleSort,
+  } = useSortableRows<WebhookListItem, WebhookSortKey>(webhooks, {
+    initialKey: 'createdAt',
+    initialDirection: 'DESC',
+    getValue: webhookSortValue,
+  });
 
   function handleRegister(values: Parameters<typeof registerMutation.mutate>[0]) {
     setActionError(null);
@@ -117,24 +136,24 @@ export function WebhooksPage() {
           )}
 
           {webhooks && (
-            <div className="overflow-x-auto">
+            <div className="usa-table-container--scrollable" tabIndex={0}>
               <table className="usa-table usa-table--borderless width-full">
                 <caption className="usa-sr-only">Registered webhooks</caption>
                 <thead>
                   <tr>
-                    <th scope="col">Name</th>
-                    <th scope="col">URL</th>
-                    <th scope="col">Events</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Registered</th>
+                    <SortableHeader label="Name" field="name" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <SortableHeader label="URL" field="url" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <SortableHeader label="Events" field="events" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <SortableHeader label="Status" field="isActive" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <SortableHeader label="Registered" field="createdAt" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
                     <th scope="col">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {webhooks.length === 0 && (
+                  {sortedWebhooks.length === 0 && (
                     <tr><td colSpan={6} className="text-italic text-base">No webhooks registered.</td></tr>
                   )}
-                  {webhooks.map((row) => (
+                  {sortedWebhooks.map((row) => (
                     <tr key={row.id}>
                       <td>{row.name}</td>
                       <td><code className="font-code-sm">{row.url}</code></td>
@@ -146,7 +165,7 @@ export function WebhooksPage() {
                       </td>
                       <td>{new Date(row.createdAt).toLocaleDateString()}</td>
                       <td>
-                        <div className="display-flex flex-gap-1">
+                        <RowActions>
                           <button type="button" className="usa-button usa-button--unstyled"
                             aria-expanded={selectedId === row.id}
                             aria-controls="webhook-delivery-log"
@@ -162,7 +181,7 @@ export function WebhooksPage() {
                               Remove
                             </button>
                           )}
-                        </div>
+                        </RowActions>
                       </td>
                     </tr>
                   ))}
@@ -233,7 +252,7 @@ export function DeliveryLog({ webhook, webhookId }: DeliveryLogProps) {
 
       {data && (
         <>
-          <div className="overflow-x-auto">
+          <div className="usa-table-container--scrollable" tabIndex={0}>
             <table className="usa-table usa-table--borderless usa-table--compact width-full">
               <caption className="usa-sr-only">Delivery attempts, newest first</caption>
               <thead>
@@ -268,7 +287,7 @@ export function DeliveryLog({ webhook, webhookId }: DeliveryLogProps) {
                       </td>
                       <td className="font-body-xs">{d.errorMessage ?? '—'}</td>
                       <td>
-                        <div className="display-flex flex-gap-1">
+                        <RowActions>
                           <button type="button" className="usa-button usa-button--unstyled"
                             aria-expanded={expanded === d.id}
                             onClick={() => setExpanded(expanded === d.id ? null : d.id)}
@@ -283,7 +302,7 @@ export function DeliveryLog({ webhook, webhookId }: DeliveryLogProps) {
                               Redeliver
                             </button>
                           )}
-                        </div>
+                        </RowActions>
                       </td>
                     </tr>
                     {expanded === d.id && (
@@ -299,19 +318,14 @@ export function DeliveryLog({ webhook, webhookId }: DeliveryLogProps) {
             </table>
           </div>
 
-          {totalPages > 1 && (
-            <nav aria-label="Delivery pagination" className="usa-pagination margin-top-2">
-              <button type="button" className="usa-button usa-button--outline"
-                onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} aria-label="Previous page">
-                Previous
-              </button>
-              <span className="padding-x-2 font-body-sm">Page {page} of {totalPages} — {data.totalRows} total</span>
-              <button type="button" className="usa-button usa-button--outline"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages} aria-label="Next page">
-                Next
-              </button>
-            </nav>
-          )}
+          <AdminPagination
+            page={page}
+            totalPages={totalPages}
+            onPage={setPage}
+            ariaLabel="Delivery pagination"
+            totalRows={data.totalRows}
+            itemLabel="deliveries"
+          />
         </>
       )}
     </section>

@@ -9,6 +9,9 @@
  *   AC3: Filter by MIME type and upload date.
  *   AC4: Click to view detail: preview, alt text, usage list, metadata.
  *   AC5: 'Use this asset' button when opened from content editor (via onSelect prop).
+ *
+ * Built from USWDS components only (Card grid, Search, Select, Button group,
+ * Alert, Table, Pagination, Icons). No inline styles or ad-hoc glyphs.
  */
 
 import React, { useState, useCallback, useId } from 'react';
@@ -17,6 +20,8 @@ import { MediaUploadForm } from './MediaUploadForm';
 import type { MediaAssetSummary, MediaDetailDto } from './mediaTypes';
 import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
 import { AuthedImage } from './AuthedImage';
+import { Icon } from '../../components/Icon';
+import { AdminPagination, RowActions, SortableHeader, useSortableRows } from '../../components/table';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -38,6 +43,10 @@ const MIME_OPTIONS: { label: string; value: string }[] = [
   { label: 'Documents',  value: 'application/' },
 ];
 
+function isImage(mimeType: string): boolean {
+  return mimeType.startsWith('image/');
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 /**
@@ -56,6 +65,7 @@ export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Eleme
 
   const searchInputId  = useId();
   const mimeFilterId   = useId();
+  const viewModeLabelId = useId();
 
   const pageSize = 48;
 
@@ -110,76 +120,70 @@ export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Eleme
   }, [onSelect, detail]);
 
   const totalPages = data ? Math.ceil(data.totalItems / pageSize) : 0;
+  const hasDetail = selectedId !== null;
 
   return (
     <main id="main-content" data-testid="media-library-page">
-      <h1 className="page-heading">Media Library</h1>
+      <h1>Media Library</h1>
+      <p className="usa-prose">
+        Browse, upload, and caption the images and documents used across the site.
+      </p>
 
       {/* Upload — POST /api/v1/media/upload (issue #40); hidden while features.mediaUpload is off */}
       {uploadEnabled ? (
         <MediaUploadForm onUploaded={(id) => setSelectedId(id)} />
       ) : (
-        <div className="usa-alert usa-alert--info usa-alert--slim margin-bottom-2" data-testid="media-upload-disabled">
+        <div className="usa-alert usa-alert--info usa-alert--slim margin-bottom-3" data-testid="media-upload-disabled">
           <div className="usa-alert__body">
             <p className="usa-alert__text">Media uploads are currently disabled by a site administrator.</p>
           </div>
         </div>
       )}
 
-      {/* ── Toolbar ─────────────────────────────────────────────────────── */}
-      <div className="usa-prose display-flex flex-align-center flex-wrap margin-bottom-2">
+      {/* ── Toolbar: search, filter, view toggle ─────────────────────────── */}
+      {/* USWDS grid gives the controls real gutters and spreads them across
+          the full width; `grid-gap-*` only spaces `.grid-row` children. */}
+      <div className="grid-row grid-gap-2 flex-align-end va-media-toolbar margin-bottom-3">
 
         {/* Search */}
-        <form
-          onSubmit={handleSearchSubmit}
-          role="search"
-          className="usa-search usa-search--small margin-right-2"
-          data-testid="media-search-form"
-        >
-          <label className="usa-sr-only" htmlFor={searchInputId}>
-            Search media assets
+        <div className="grid-col-12 tablet:grid-col-6">
+          <label className="usa-label margin-top-0" htmlFor={searchInputId}>
+            Search media
           </label>
-          <input
-            id={searchInputId}
-            className="usa-input"
-            type="search"
-            placeholder="Search filename, alt text…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            data-testid="media-search-input"
-          />
-          <button
-            type="submit"
-            className="usa-button"
-            data-testid="media-search-button"
+          <form
+            onSubmit={handleSearchSubmit}
+            role="search"
+            className="usa-search usa-search--small margin-top-0"
+            data-testid="media-search-form"
           >
-            <span className="usa-sr-only">Search</span>
-            <svg
-              aria-hidden="true"
-              focusable="false"
-              role="img"
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+            <input
+              id={searchInputId}
+              className="usa-input"
+              type="search"
+              placeholder="Search filename, alt text…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              data-testid="media-search-input"
+            />
+            <button
+              type="submit"
+              className="usa-button"
+              data-testid="media-search-button"
             >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-          </button>
-        </form>
+              <span className="usa-sr-only">Search</span>
+              <Icon name="search" className="usa-search__submit-icon" />
+            </button>
+          </form>
+        </div>
 
         {/* MIME type filter */}
-        <div className="usa-form-group margin-right-2 margin-bottom-0">
-          <label className="usa-label usa-sr-only" htmlFor={mimeFilterId}>
-            Filter by file type
+        <div className="grid-col-6 tablet:grid-col-3">
+          <label className="usa-label margin-top-0" htmlFor={mimeFilterId}>
+            File type
           </label>
           <select
             id={mimeFilterId}
-            className="usa-select"
+            className="usa-select width-full"
             value={mimeType}
             onChange={(e) => handleMimeChange(e.target.value)}
             data-testid="media-mime-filter"
@@ -192,45 +196,46 @@ export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Eleme
           </select>
         </div>
 
-        {/* View toggle */}
-        <div
-          role="group"
-          aria-label="View mode"
-          className="display-flex flex-align-center"
-        >
-          <button
-            type="button"
-            className={`usa-button usa-button--unstyled padding-x-1${viewMode === 'grid' ? ' text-bold' : ''}`}
-            aria-pressed={viewMode === 'grid'}
-            onClick={() => setViewMode('grid')}
-            data-testid="view-toggle-grid"
-            title="Grid view"
-          >
-            <span aria-hidden="true">⊞</span>
-            <span className="usa-sr-only">Grid view</span>
-          </button>
-          <button
-            type="button"
-            className={`usa-button usa-button--unstyled padding-x-1${viewMode === 'list' ? ' text-bold' : ''}`}
-            aria-pressed={viewMode === 'list'}
-            onClick={() => setViewMode('list')}
-            data-testid="view-toggle-list"
-            title="List view"
-          >
-            <span aria-hidden="true">☰</span>
-            <span className="usa-sr-only">List view</span>
-          </button>
+        {/* View toggle — USWDS button group used as a segmented control */}
+        <div className="grid-col-6 tablet:grid-col-3">
+          <span className="usa-label margin-top-0" id={viewModeLabelId}>View</span>
+          <ul className="usa-button-group margin-bottom-0" role="group" aria-labelledby={viewModeLabelId}>
+            <li className="usa-button-group__item">
+              <button
+                type="button"
+                className={`usa-button${viewMode === 'grid' ? '' : ' usa-button--outline'}`}
+                aria-pressed={viewMode === 'grid'}
+                onClick={() => setViewMode('grid')}
+                data-testid="view-toggle-grid"
+              >
+                <Icon name="grid_view" size={3} />
+                <span className="usa-sr-only">Grid view</span>
+              </button>
+            </li>
+            <li className="usa-button-group__item">
+              <button
+                type="button"
+                className={`usa-button${viewMode === 'list' ? '' : ' usa-button--outline'}`}
+                aria-pressed={viewMode === 'list'}
+                onClick={() => setViewMode('list')}
+                data-testid="view-toggle-list"
+              >
+                <Icon name="list" size={3} />
+                <span className="usa-sr-only">List view</span>
+              </button>
+            </li>
+          </ul>
         </div>
       </div>
 
       {/* ── Main content area (library + detail) ────────────────────────── */}
-      <div className="display-flex flex-gap-4">
+      <div className="grid-row grid-gap-3">
 
         {/* Asset browser */}
-        <div className="flex-fill" style={{ minWidth: 0 }}>
+        <div className={hasDetail ? 'grid-col-12 tablet:grid-col-8' : 'grid-col-12'}>
           {isLoading && (
-            <p className="usa-prose" data-testid="media-loading">
-              Loading…
+            <p className="usa-prose" data-testid="media-loading" aria-live="polite" aria-busy="true">
+              Loading media…
             </p>
           )}
 
@@ -243,8 +248,8 @@ export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Eleme
           )}
 
           {!isLoading && !isError && data && data.items.length === 0 && (
-            <p className="usa-prose" data-testid="media-empty">
-              No assets found.{submittedSearch ? ` Try clearing the search.` : ''}
+            <p className="usa-prose text-base" data-testid="media-empty">
+              No assets found.{submittedSearch ? ' Try clearing the search.' : ''}
             </p>
           )}
 
@@ -256,16 +261,19 @@ export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Eleme
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <Pagination
+            <AdminPagination
               page={page}
               totalPages={totalPages}
               onPage={(p) => { setPage(p); setSelectedId(null); }}
+              ariaLabel="Media pagination"
+              totalRows={data?.totalItems}
+              itemLabel="assets"
             />
           )}
         </div>
 
         {/* Detail side panel */}
-        {selectedId !== null && (
+        {hasDetail && (
           <MediaDetailPanel
             isLoading={detailLoading}
             detail={detail ?? null}
@@ -288,20 +296,9 @@ interface MediaGridProps {
 
 function MediaGrid({ items, selectedId, onSelect }: MediaGridProps): JSX.Element {
   return (
-    <ul
-      className="usa-card-group"
-      data-testid="media-grid"
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-        gap: '1rem',
-        listStyle: 'none',
-        padding: 0,
-        margin: 0,
-      }}
-    >
+    <ul className="usa-card-group" data-testid="media-grid">
       {items.map((asset) => (
-        <li key={asset.id}>
+        <li key={asset.id} className="usa-card tablet:grid-col-6 desktop:grid-col-4">
           <MediaCard
             asset={asset}
             isSelected={asset.id === selectedId}
@@ -321,51 +318,81 @@ interface MediaListProps {
   onSelect:   (asset: MediaAssetSummary) => void;
 }
 
+type MediaSortKey = 'fileName' | 'mimeType' | 'altText' | 'fileSizeBytes' | 'createdAt';
+
+function mediaSortValue(asset: MediaAssetSummary, key: MediaSortKey): string | number {
+  if (key === 'altText') return asset.altText ?? '';
+  return asset[key];
+}
+
 function MediaList({ items, selectedId, onSelect }: MediaListProps): JSX.Element {
+  const {
+    rows: sortedItems,
+    sortKey,
+    sortDirection,
+    toggleSort,
+  } = useSortableRows<MediaAssetSummary, MediaSortKey>(items, {
+    initialKey: 'fileName',
+    getValue: mediaSortValue,
+  });
+
   return (
-    <table className="usa-table usa-table--borderless width-full" data-testid="media-list">
-      <caption className="usa-sr-only">Media assets</caption>
-      <thead>
-        <tr>
-          <th scope="col">Preview</th>
-          <th scope="col">Filename</th>
-          <th scope="col">Type</th>
-          <th scope="col">Alt Text</th>
-          <th scope="col">Size</th>
-          <th scope="col">Uploaded</th>
-          <th scope="col"><span className="usa-sr-only">Actions</span></th>
-        </tr>
-      </thead>
-      <tbody>
-        {items.map((asset) => (
-          <tr
-            key={asset.id}
-            aria-selected={asset.id === selectedId}
-            data-testid={`media-list-row-${asset.id}`}
-          >
-            <td style={{ width: 64 }}>
-              <AssetThumbnail asset={asset} size={40} />
-            </td>
-            <td>{asset.fileName}</td>
-            <td>{asset.mimeType}</td>
-            <td>{asset.altText ?? <span className="usa-hint">—</span>}</td>
-            <td>{formatBytes(asset.fileSizeBytes)}</td>
-            <td>{new Date(asset.createdAt).toLocaleDateString()}</td>
-            <td>
-              <button
-                type="button"
-                className="usa-button usa-button--unstyled"
-                onClick={() => onSelect(asset)}
-                data-testid={`media-list-select-${asset.id}`}
-                aria-label={`View details for ${asset.fileName}`}
-              >
-                View
-              </button>
-            </td>
+    <div className="usa-table-container--scrollable" tabIndex={0}>
+      <table className="usa-table usa-table--borderless width-full" data-testid="media-list">
+        <caption className="usa-sr-only">Media assets</caption>
+        <thead>
+          <tr>
+            <th scope="col">Preview</th>
+            <SortableHeader label="Filename" field="fileName" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+            <SortableHeader label="Type" field="mimeType" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+            <SortableHeader label="Alt Text" field="altText" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+            <SortableHeader label="Size" field="fileSizeBytes" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+            <SortableHeader label="Uploaded" field="createdAt" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+            <th scope="col"><span className="usa-sr-only">Actions</span></th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {sortedItems.map((asset) => (
+            <tr
+              key={asset.id}
+              aria-selected={asset.id === selectedId}
+              data-testid={`media-list-row-${asset.id}`}
+            >
+              <td className="va-media-list__thumb">
+                <AssetThumbnail asset={asset} size={40} />
+              </td>
+              <td>
+                <button
+                  type="button"
+                  className="usa-button usa-button--unstyled"
+                  onClick={() => onSelect(asset)}
+                  aria-label={`Open ${asset.fileName}`}
+                >
+                  {asset.fileName}
+                </button>
+              </td>
+              <td>{asset.mimeType}</td>
+              <td>{asset.altText ?? <span className="usa-hint">—</span>}</td>
+              <td>{formatBytes(asset.fileSizeBytes)}</td>
+              <td>{new Date(asset.createdAt).toLocaleDateString()}</td>
+              <td>
+                <RowActions>
+                  <button
+                    type="button"
+                    className="usa-button usa-button--unstyled"
+                    onClick={() => onSelect(asset)}
+                    data-testid={`media-list-select-${asset.id}`}
+                    aria-label={`View details for ${asset.fileName}`}
+                  >
+                    View
+                  </button>
+                </RowActions>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -377,33 +404,30 @@ interface MediaCardProps {
   onSelect:   (asset: MediaAssetSummary) => void;
 }
 
+/**
+ * USWDS Card styling on a button: the framework has no selectable-card variant,
+ * so `.va-media-card` adds the interactive states (hover, focus, selected) while
+ * `usa-card__*` supplies the surface, media, and body layout.
+ */
 function MediaCard({ asset, isSelected, onSelect }: MediaCardProps): JSX.Element {
   return (
     <button
       type="button"
-      className={`usa-button usa-button--unstyled width-full${isSelected ? ' bg-blue-10' : ''}`}
-      style={{
-        border: isSelected ? '2px solid #005ea2' : '2px solid #dfe1e2',
-        borderRadius: 4,
-        padding: '0.5rem',
-        textAlign: 'left',
-        cursor: 'pointer',
-        background: isSelected ? '#e7f0f9' : '#fff',
-      }}
+      className={`usa-card__container va-media-card${isSelected ? ' va-media-card--selected' : ''}`}
       onClick={() => onSelect(asset)}
       aria-pressed={isSelected}
       aria-label={`${asset.fileName}${asset.altText ? ` — ${asset.altText}` : ''}`}
       data-testid={`media-card-${asset.id}`}
     >
-      <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <span className="usa-card__media va-media-card__media">
         <AssetThumbnail asset={asset} size={112} />
-      </div>
-      <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {asset.fileName}
-      </p>
-      {!asset.altText && asset.mimeType.startsWith('image/') && (
-        <span className="usa-tag usa-tag--new" style={{ fontSize: '0.65rem' }}>No alt text</span>
-      )}
+      </span>
+      <span className="usa-card__body va-media-card__body">
+        <span className="va-media-card__name">{asset.fileName}</span>
+        {!asset.altText && isImage(asset.mimeType) && (
+          <span className="usa-tag usa-tag--new margin-top-1">No alt text</span>
+        )}
+      </span>
     </button>
   );
 }
@@ -411,39 +435,30 @@ function MediaCard({ asset, isSelected, onSelect }: MediaCardProps): JSX.Element
 // ── Thumbnail ─────────────────────────────────────────────────────────────────
 
 function AssetThumbnail({ asset, size }: { asset: MediaAssetSummary; size: number }): JSX.Element {
-  if (asset.mimeType.startsWith('image/')) {
+  if (isImage(asset.mimeType)) {
     return (
       <AuthedImage
         assetId={asset.id}
         alt={asset.altText ?? ''}
         width={size}
         height={size}
-        style={{ objectFit: 'cover', maxWidth: '100%', maxHeight: '100%' }}
+        className="va-media-thumb__img"
         data-testid={`media-thumb-${asset.id}`}
       />
     );
   }
 
-  // Non-image: icon with MIME prefix label
-  const label = asset.mimeType.split('/')[1]?.toUpperCase().slice(0, 4) ?? 'FILE';
+  // Non-image: USWDS file icon with the MIME subtype as a short label.
+  const ext = asset.mimeType.split('/')[1]?.toUpperCase().slice(0, 4) ?? 'FILE';
   return (
     <span
+      role="img"
       aria-label={asset.mimeType}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: size,
-        height: size,
-        background: '#f0f0f0',
-        borderRadius: 4,
-        fontSize: '0.75rem',
-        fontWeight: 'bold',
-        color: '#565c65',
-      }}
+      className="va-media-thumb va-media-thumb--file"
       data-testid={`media-thumb-${asset.id}`}
     >
-      {label}
+      <Icon name="file_present" size={6} />
+      <span className="va-media-thumb__ext">{ext}</span>
     </span>
   );
 }
@@ -478,8 +493,8 @@ function MediaDetailPanel({
 
   const patchMutation = useUpdateMediaMetadata(detail?.id ?? null);
 
-  const isImage = detail?.mimeType.startsWith('image/') ?? false;
-  const missingAltText = isImage && (!detail?.altText || detail.altText.trim() === '');
+  const image = detail ? isImage(detail.mimeType) : false;
+  const missingAltText = image && (!detail?.altText || detail.altText.trim() === '');
 
   const handleEditAltText = useCallback(() => {
     setAltTextDraft(detail?.altText ?? '');
@@ -506,22 +521,11 @@ function MediaDetailPanel({
   return (
     <aside
       aria-label="Asset details"
-      style={{
-        width: 320,
-        flexShrink: 0,
-        border: '1px solid #dfe1e2',
-        borderRadius: 4,
-        padding: '1rem',
-        background: '#fff',
-        overflowY: 'auto',
-        maxHeight: '80vh',
-      }}
+      className="grid-col-12 tablet:grid-col-4 va-media-detail"
       data-testid="media-detail-panel"
     >
-      <div className="display-flex flex-justify flex-align-center margin-bottom-2">
-        <h2 className="usa-modal__heading margin-0" style={{ fontSize: '1rem' }}>
-          Asset Details
-        </h2>
+      <div className="va-media-detail__header">
+        <h2 className="font-heading-md margin-0">Asset details</h2>
         <button
           type="button"
           className="usa-button usa-button--unstyled"
@@ -529,27 +533,28 @@ function MediaDetailPanel({
           onClick={onClose}
           data-testid="media-detail-close"
         >
-          ✕
+          <Icon name="close" size={3} />
         </button>
       </div>
 
-      {isLoading && <p data-testid="media-detail-loading">Loading…</p>}
+      {isLoading && (
+        <p data-testid="media-detail-loading" aria-live="polite" aria-busy="true">
+          Loading…
+        </p>
+      )}
 
       {!isLoading && detail && (
         <>
           {/* Preview */}
-          <div
-            style={{ marginBottom: '1rem', textAlign: 'center', background: '#f0f0f0', padding: '0.5rem', borderRadius: 4 }}
-            data-testid="media-detail-preview"
-          >
-            {detail.mimeType.startsWith('image/') ? (
+          <div className="va-media-detail__preview" data-testid="media-detail-preview">
+            {isImage(detail.mimeType) ? (
               <AuthedImage
                 assetId={detail.id}
                 alt={detail.altText ?? ''}
-                style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain' }}
+                className="va-media-detail__preview-img"
               />
             ) : (
-              <span style={{ fontSize: '2rem' }}>📄</span>
+              <Icon name="file_present" size={8} className="text-base" />
             )}
           </div>
 
@@ -569,19 +574,15 @@ function MediaDetailPanel({
           )}
 
           {/* ── Issue #43: Required alt text field for images ──────────────── */}
-          {isImage && (
-            <div className="usa-form-group margin-bottom-2" data-testid="alt-text-field-group">
-              <label className="usa-label" htmlFor={altTextInputId}>
+          {image && (
+            <div className="usa-form-group" data-testid="alt-text-field-group">
+              <label className="usa-label margin-top-0" htmlFor={altTextInputId}>
                 Alt text
-                <abbr title="required" className="usa-required"> *</abbr>
+                <abbr title="required" className="usa-hint--required"> *</abbr>
               </label>
               {!altTextEditing ? (
                 <>
-                  <p
-                    id={altTextInputId}
-                    data-testid="media-detail-alttext"
-                    style={{ marginBottom: '0.25rem' }}
-                  >
+                  <p id={altTextInputId} data-testid="media-detail-alttext">
                     {detail.altText ?? <span className="usa-hint">Not set</span>}
                   </p>
                   <button
@@ -612,10 +613,10 @@ function MediaDetailPanel({
                       {saveError}
                     </span>
                   )}
-                  <div className="display-flex flex-gap-2 margin-top-1">
+                  <RowActions className="margin-top-1">
                     <button
                       type="button"
-                      className="usa-button usa-button--small"
+                      className="usa-button"
                       onClick={handleSaveAltText}
                       disabled={patchMutation.isPending}
                       data-testid="alt-text-save-button"
@@ -624,74 +625,73 @@ function MediaDetailPanel({
                     </button>
                     <button
                       type="button"
-                      className="usa-button usa-button--unstyled usa-button--small"
+                      className="usa-button usa-button--unstyled"
                       onClick={handleCancelAltText}
                       disabled={patchMutation.isPending}
                       data-testid="alt-text-cancel-button"
                     >
                       Cancel
                     </button>
-                  </div>
+                  </RowActions>
                 </>
               )}
             </div>
           )}
 
-          {/* Metadata table */}
-          <dl data-testid="media-detail-metadata">
-            <dt className="text-bold">Filename</dt>
+          {/* Metadata */}
+          <dl className="va-media-detail__meta" data-testid="media-detail-metadata">
+            <dt>Filename</dt>
             <dd>{detail.fileName}</dd>
 
-            <dt className="text-bold">MIME type</dt>
+            <dt>MIME type</dt>
             <dd>{detail.mimeType}</dd>
 
-            <dt className="text-bold">Size</dt>
+            <dt>Size</dt>
             <dd>{formatBytes(detail.fileSizeBytes)}</dd>
 
             {detail.width && detail.height && (
               <>
-                <dt className="text-bold">Dimensions</dt>
+                <dt>Dimensions</dt>
                 <dd>{detail.width} × {detail.height}px</dd>
               </>
             )}
 
             {/* Alt text for non-images (no required field, just display) */}
-            {!isImage && (
+            {!image && (
               <>
-                <dt className="text-bold">Alt text</dt>
+                <dt>Alt text</dt>
                 <dd data-testid="media-detail-alttext">
-                  {detail.altText ?? (
-                    <span className="usa-hint">Not set</span>
-                  )}
+                  {detail.altText ?? <span className="usa-hint">Not set</span>}
                 </dd>
               </>
             )}
 
             {detail.title && (
               <>
-                <dt className="text-bold">Title</dt>
+                <dt>Title</dt>
                 <dd>{detail.title}</dd>
               </>
             )}
 
-            <dt className="text-bold">Uploaded</dt>
+            <dt>Uploaded</dt>
             <dd>{new Date(detail.createdAt).toLocaleString()}</dd>
 
-            <dt className="text-bold">Storage backend</dt>
+            <dt>Storage backend</dt>
             <dd>{detail.storageBackend}</dd>
           </dl>
 
           {/* Usage list */}
-          <section aria-label="Usage" data-testid="media-detail-usages">
-            <h3 style={{ fontSize: '0.9rem' }}>Used in ({detail.usages.length})</h3>
+          <section aria-labelledby="media-usage-heading" data-testid="media-detail-usages">
+            <h3 id="media-usage-heading" className="font-heading-sm margin-bottom-1">
+              Used in ({detail.usages.length})
+            </h3>
             {detail.usages.length === 0 ? (
               <p className="usa-hint">Not referenced by any content entry.</p>
             ) : (
-              <ul className="usa-list usa-list--unstyled">
+              <ul className="usa-list usa-list--unstyled va-media-detail__usage">
                 {detail.usages.map((u) => (
                   <li
                     key={`${u.contentEntryId}-${u.fieldName}`}
-                    style={{ marginBottom: '0.5rem', fontSize: '0.85rem' }}
                     data-testid={`usage-${u.contentEntryId}`}
                   >
                     {/* Issue #44: link to content entry edit page with entry title */}
@@ -702,8 +702,7 @@ function MediaDetailPanel({
                     >
                       {u.entryTitle || u.slug}
                     </a>
-                    <br />
-                    <span className="usa-hint">
+                    <span className="usa-hint display-block">
                       {u.contentTypeName} · {u.status} · field: {u.fieldName}
                     </span>
                   </li>
@@ -726,52 +725,6 @@ function MediaDetailPanel({
         </>
       )}
     </aside>
-  );
-}
-
-// ── Pagination ────────────────────────────────────────────────────────────────
-
-function Pagination({
-  page,
-  totalPages,
-  onPage,
-}: {
-  page: number;
-  totalPages: number;
-  onPage: (p: number) => void;
-}): JSX.Element {
-  return (
-    <nav aria-label="Pagination" className="usa-pagination margin-top-4" data-testid="media-pagination">
-      <ul className="usa-pagination__list">
-        <li className="usa-pagination__item">
-          <button
-            type="button"
-            className="usa-pagination__link usa-pagination__previous-page"
-            disabled={page <= 1}
-            onClick={() => onPage(page - 1)}
-            aria-label="Previous page"
-            data-testid="pagination-prev"
-          >
-            ‹ Previous
-          </button>
-        </li>
-        <li className="usa-pagination__item usa-pagination__page-no">
-          Page {page} of {totalPages}
-        </li>
-        <li className="usa-pagination__item">
-          <button
-            type="button"
-            className="usa-pagination__link usa-pagination__next-page"
-            disabled={page >= totalPages}
-            onClick={() => onPage(page + 1)}
-            aria-label="Next page"
-            data-testid="pagination-next"
-          >
-            Next ›
-          </button>
-        </li>
-      </ul>
-    </nav>
   );
 }
 

@@ -18,6 +18,7 @@
 import React, { useState } from 'react';
 import { useAuditLog, buildExportUrl, type AuditLogFilters } from './useAuditLog';
 import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
+import { AdminPagination, RowActions } from '../../components/table';
 
 
 interface FilterState {
@@ -237,13 +238,13 @@ export function AuditLogPage(): JSX.Element {
           </div>
         </div>
 
-        <div className="margin-top-3 display-flex flex-align-center flex-wrap gap-2">
-          <button type="submit" className="usa-button margin-right-1">
+        <RowActions className="margin-top-3">
+          <button type="submit" className="usa-button">
             Apply filters
           </button>
           <button
             type="button"
-            className="usa-button usa-button--unstyled margin-right-3"
+            className="usa-button usa-button--unstyled"
             onClick={handleClear}
           >
             Clear filters
@@ -256,7 +257,7 @@ export function AuditLogPage(): JSX.Element {
           >
             Export CSV
           </a>
-        </div>
+        </RowActions>
       </form>
 
       {/* ── Loading / error states ───────────────────────────────────────────── */}
@@ -293,7 +294,7 @@ export function AuditLogPage(): JSX.Element {
       {!isLoading && !isError && data && data.items.length > 0 && (
         <div className="usa-table-container--scrollable" tabIndex={0}>
           <table
-            className="usa-table usa-table--striped usa-table--compact usa-table--scrollable"
+            className="usa-table usa-table--borderless usa-table--compact width-full"
             aria-label="Audit log entries"
           >
             <thead>
@@ -341,42 +342,15 @@ export function AuditLogPage(): JSX.Element {
       )}
 
       {/* ── Pagination ───────────────────────────────────────────────────────── */}
-      {!isLoading && !isError && data && data.totalItems > PAGE_SIZE && (
-        <nav aria-label="Audit log pagination" className="usa-pagination margin-top-3">
-          <ul className="usa-pagination__list">
-            <li className="usa-pagination__item usa-pagination__arrow">
-              <button
-                type="button"
-                className="usa-pagination__link usa-pagination__previous-page"
-                aria-label="Previous page"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                <span aria-hidden="true">«</span>
-                <span className="usa-pagination__link-text">Previous</span>
-              </button>
-            </li>
-
-            <li className="usa-pagination__item usa-pagination__page-no" aria-current="page">
-              <span className="usa-pagination__button usa-current" aria-label={`Page ${page} of ${totalPages}`}>
-                {page} / {totalPages}
-              </span>
-            </li>
-
-            <li className="usa-pagination__item usa-pagination__arrow">
-              <button
-                type="button"
-                className="usa-pagination__link usa-pagination__next-page"
-                aria-label="Next page"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                <span className="usa-pagination__link-text">Next</span>
-                <span aria-hidden="true">»</span>
-              </button>
-            </li>
-          </ul>
-        </nav>
+      {!isLoading && !isError && data && (
+        <AdminPagination
+          page={page}
+          totalPages={totalPages}
+          onPage={setPage}
+          ariaLabel="Audit log pagination"
+          totalRows={data.totalItems}
+          itemLabel="entries"
+        />
       )}
     </main>
   );

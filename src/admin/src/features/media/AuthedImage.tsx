@@ -8,6 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import { authorizedFetch } from '../../lib/authorizedFetch';
+import { Icon } from '../../components/Icon';
 
 type AuthedImageProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
   /** Media asset id to load. */
@@ -46,11 +47,7 @@ export function AuthedImage({ assetId, variant, alt, ...rest }: AuthedImageProps
   }, [assetId, variant]);
 
   if (failed) {
-    return (
-      <span role="img" aria-label={alt ?? 'Image unavailable'} style={{ fontSize: '2rem' }}>
-        🖼️
-      </span>
-    );
+    return <Icon name="image" size={5} className="text-base" title={alt || 'Image unavailable'} />;
   }
 
   // Keep the element (and its test id / dimensions) in the tree while loading.

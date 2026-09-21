@@ -21,11 +21,37 @@
 
 import React, { useState } from 'react';
 import { useSearchPins, useCreateSearchPin, useDeleteSearchPin } from './useSearchPins';
+import type { SearchPinItem } from './useSearchPins';
+import { RowActions, SortableHeader, useSortableRows } from '../../components/table';
+
+type PinSortKey = 'queryString' | 'entryTitle' | 'entryStatus' | 'createdAt';
+
+function pinSortValue(pin: SearchPinItem, key: PinSortKey): string {
+  switch (key) {
+    case 'entryTitle':
+      return pin.entryTitle ?? '';
+    case 'entryStatus':
+      return pin.entryStatus ?? '';
+    default:
+      return pin[key];
+  }
+}
 
 export function SearchPinsPage(): JSX.Element {
   const { data, isLoading, isError } = useSearchPins();
   const createPin  = useCreateSearchPin();
   const deletePin  = useDeleteSearchPin();
+
+  const {
+    rows: sortedPins,
+    sortKey,
+    sortDirection,
+    toggleSort,
+  } = useSortableRows<SearchPinItem, PinSortKey>(data?.items, {
+    initialKey: 'createdAt',
+    initialDirection: 'DESC',
+    getValue: pinSortValue,
+  });
 
   const [queryString,    setQueryString]    = useState('');
   const [contentEntryId, setContentEntryId] = useState('');
@@ -93,7 +119,7 @@ export function SearchPinsPage(): JSX.Element {
             {/* Query string */}
             <div className="usa-form-group">
               <label className="usa-label" htmlFor="pin-query-string">
-                Query string <abbr title="required" className="usa-required"> *</abbr>
+                Query string <abbr title="required" className="usa-hint--required"> *</abbr>
               </label>
               <span className="usa-hint" id="pin-query-string-hint">
                 The exact search term that will trigger this pinned result (case-insensitive).
@@ -114,7 +140,7 @@ export function SearchPinsPage(): JSX.Element {
             {/* Content entry ID */}
             <div className="usa-form-group">
               <label className="usa-label" htmlFor="pin-entry-id">
-                Content entry ID <abbr title="required" className="usa-required"> *</abbr>
+                Content entry ID <abbr title="required" className="usa-hint--required"> *</abbr>
               </label>
               <span className="usa-hint" id="pin-entry-id-hint">
                 The numeric ID of the content entry to pin. The entry must be Published.
@@ -210,64 +236,77 @@ export function SearchPinsPage(): JSX.Element {
 
       {!isLoading && !isError && data && (
         <>
-          {data.items.length === 0 ? (
+          {sortedPins.length === 0 ? (
             <p className="usa-prose">No pinned results yet. Use the form above to add one.</p>
           ) : (
-            <table
-              className="usa-table usa-table--striped usa-table--compact usa-table--scrollable"
-              aria-label="Pinned search results"
-            >
-              <thead>
-                <tr>
-                  <th scope="col">Query string</th>
-                  <th scope="col">Content entry</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Pinned on</th>
-                  <th scope="col">
-                    <span className="usa-sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((pin) => (
-                  <tr key={pin.id}>
-                    <td>
-                      <code>{pin.queryString}</code>
-                    </td>
-                    <td>
-                      {pin.entryTitle ?? <em>Untitled</em>}
-                      {pin.entrySlug && (
-                        <span className="font-body-xs display-block text-base">
-                          /{pin.entrySlug}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className={
-                          pin.entryStatus === 'Published'
-                            ? 'usa-tag bg-green-warm-50 text-green-warm-70'
-                            : 'usa-tag'
-                        }
-                      >
-                        {pin.entryStatus ?? '—'}
-                      </span>
-                    </td>
-                    <td>{new Date(pin.createdAt).toLocaleDateString()}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="usa-button usa-button--unstyled text-error"
-                        onClick={() => handleDeleteClick(pin.id)}
-                        aria-label={`Remove pin for query "${pin.queryString}"`}
-                      >
-                        Remove
-                      </button>
-                    </td>
+            <div className="usa-table-container--scrollable" tabIndex={0}>
+              <table
+                className="usa-table usa-table--borderless width-full"
+                aria-label="Pinned search results"
+              >
+                <thead>
+                  <tr>
+                    <SortableHeader label="Query string" field="queryString" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <SortableHeader label="Content entry" field="entryTitle" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <SortableHeader label="Status" field="entryStatus" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <SortableHeader label="Pinned on" field="createdAt" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <th scope="col">
+                      <span className="usa-sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sortedPins.map((pin) => (
+                    <tr key={pin.id}>
+                      <td>
+                        <code>{pin.queryString}</code>
+                      </td>
+                      <td>
+                        {pin.entryTitle ? (
+                          <a
+                            className="usa-link"
+                            href={`/admin/content/${pin.contentEntryId}/edit`}
+                          >
+                            {pin.entryTitle}
+                          </a>
+                        ) : (
+                          <em>Untitled</em>
+                        )}
+                        {pin.entrySlug && (
+                          <span className="font-body-xs display-block text-base">
+                            /{pin.entrySlug}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <span
+                          className={
+                            pin.entryStatus === 'Published'
+                              ? 'usa-tag bg-green-warm-50 text-green-warm-70'
+                              : 'usa-tag'
+                          }
+                        >
+                          {pin.entryStatus ?? '—'}
+                        </span>
+                      </td>
+                      <td>{new Date(pin.createdAt).toLocaleDateString()}</td>
+                      <td>
+                        <RowActions>
+                          <button
+                            type="button"
+                            className="usa-button usa-button--unstyled text-error"
+                            onClick={() => handleDeleteClick(pin.id)}
+                            aria-label={`Remove pin for query "${pin.queryString}"`}
+                          >
+                            Remove
+                          </button>
+                        </RowActions>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}

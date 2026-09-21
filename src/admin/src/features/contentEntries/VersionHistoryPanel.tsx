@@ -83,7 +83,7 @@ export function VersionHistoryPanel({
       )}
 
       <table
-        className="usa-table usa-table--borderless usa-table--striped width-full"
+        className="usa-table usa-table--borderless width-full"
         aria-label="Content version history"
         data-testid="version-history-table"
       >

@@ -17,8 +17,27 @@ import {
 } from './api';
 import { RedirectForm } from './RedirectForm';
 import type { RedirectAdminDto } from './types';
+import {
+  AdminPagination,
+  RowActions,
+  SortableHeader,
+  useSortableRows,
+} from '../../components/table';
 
 type FilterMode = 'all' | 'active' | 'inactive';
+
+type RedirectSortKey = 'fromPath' | 'toPath' | 'statusCode' | 'isActive' | 'createdBy' | 'createdAt';
+
+function redirectSortValue(row: RedirectAdminDto, key: RedirectSortKey): string | number | boolean {
+  switch (key) {
+    case 'createdBy':
+      return row.createdByDisplayName ?? row.createdByEmail ?? '';
+    case 'isActive':
+      return row.isActive;
+    default:
+      return row[key];
+  }
+}
 
 export function RedirectsPage() {
   const [filter, setFilter]       = useState<FilterMode>('all');
@@ -43,6 +62,17 @@ export function RedirectsPage() {
 
   // Inline update mutation — keyed to current editTarget.id
   const updateMutation = useUpdateRedirect(editTarget?.id ?? 0);
+
+  const {
+    rows: sortedRedirects,
+    sortKey,
+    sortDirection,
+    toggleSort,
+  } = useSortableRows<RedirectAdminDto, RedirectSortKey>(data?.items, {
+    initialKey: 'createdAt',
+    initialDirection: 'DESC',
+    getValue: redirectSortValue,
+  });
 
   function handleCreate(values: { fromPath: string; toPath: string; statusCode: number }) {
     setActionError(null);
@@ -150,28 +180,65 @@ export function RedirectsPage() {
           )}
           {data && (
             <>
-              <div className="overflow-x-auto">
+              <div className="usa-table-container--scrollable" tabIndex={0}>
                 <table className="usa-table usa-table--borderless width-full">
+                  <caption className="usa-sr-only">Redirects</caption>
                   <thead>
                     <tr>
-                      <th scope="col">From Path</th>
-                      <th scope="col">To Path</th>
-                      <th scope="col">Code</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Created By</th>
-                      <th scope="col">Created</th>
+                      <SortableHeader
+                        label="From Path"
+                        field="fromPath"
+                        currentSortBy={sortKey}
+                        currentSortDir={sortDirection}
+                        onSort={toggleSort}
+                      />
+                      <SortableHeader
+                        label="To Path"
+                        field="toPath"
+                        currentSortBy={sortKey}
+                        currentSortDir={sortDirection}
+                        onSort={toggleSort}
+                      />
+                      <SortableHeader
+                        label="Code"
+                        field="statusCode"
+                        currentSortBy={sortKey}
+                        currentSortDir={sortDirection}
+                        onSort={toggleSort}
+                      />
+                      <SortableHeader
+                        label="Status"
+                        field="isActive"
+                        currentSortBy={sortKey}
+                        currentSortDir={sortDirection}
+                        onSort={toggleSort}
+                      />
+                      <SortableHeader
+                        label="Created By"
+                        field="createdBy"
+                        currentSortBy={sortKey}
+                        currentSortDir={sortDirection}
+                        onSort={toggleSort}
+                      />
+                      <SortableHeader
+                        label="Created"
+                        field="createdAt"
+                        currentSortBy={sortKey}
+                        currentSortDir={sortDirection}
+                        onSort={toggleSort}
+                      />
                       <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.items.length === 0 && (
+                    {sortedRedirects.length === 0 && (
                       <tr>
                         <td colSpan={7} className="text-italic text-base">
                           No redirects found.
                         </td>
                       </tr>
                     )}
-                    {data.items.map(row => (
+                    {sortedRedirects.map(row => (
                       <tr key={row.id}>
                         <td>
                           <code className="font-code-sm">{row.fromPath}</code>
@@ -193,7 +260,7 @@ export function RedirectsPage() {
                         </td>
                         <td>{new Date(row.createdAt).toLocaleDateString()}</td>
                         <td>
-                          <div className="display-flex flex-gap-1">
+                          <RowActions>
                             <button
                               type="button"
                               className="usa-button usa-button--unstyled"
@@ -217,7 +284,7 @@ export function RedirectsPage() {
                                 Deactivate
                               </button>
                             )}
-                          </div>
+                          </RowActions>
                         </td>
                       </tr>
                     ))}
@@ -226,31 +293,13 @@ export function RedirectsPage() {
               </div>
 
               {/* Pagination */}
-              {totalPages > 1 && (
-                <nav aria-label="Pagination" className="usa-pagination margin-top-3">
-                  <button
-                    type="button"
-                    className="usa-button usa-button--outline"
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                    disabled={page <= 1}
-                    aria-label="Previous page"
-                  >
-                    Previous
-                  </button>
-                  <span className="padding-x-2 font-body-sm">
-                    Page {page} of {totalPages} — {data.totalRows} total
-                  </span>
-                  <button
-                    type="button"
-                    className="usa-button usa-button--outline"
-                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                    disabled={page >= totalPages}
-                    aria-label="Next page"
-                  >
-                    Next
-                  </button>
-                </nav>
-              )}
+              <AdminPagination
+                page={page}
+                totalPages={totalPages}
+                onPage={setPage}
+                totalRows={data.totalRows}
+                itemLabel="redirects"
+              />
             </>
           )}
         </div>

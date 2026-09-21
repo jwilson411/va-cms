@@ -16,7 +16,15 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useUsers, useDeactivateUser } from './useUsers';
+import { useUsers, useDeactivateUser, type UserRow } from './useUsers';
+import { RowActions, SortableHeader, useSortableRows } from '../../components/table';
+
+type UserSortKey = 'displayName' | 'email' | 'lastLoginAt';
+
+function userSortValue(user: UserRow, key: UserSortKey): string {
+  if (key === 'lastLoginAt') return user.lastLoginAt ?? '';
+  return user[key];
+}
 
 export function UserListPage(): JSX.Element {
   const navigate = useNavigate();
@@ -26,6 +34,16 @@ export function UserListPage(): JSX.Element {
 
   const { data: users, isLoading, isError } = useUsers(searchQuery || undefined);
   const deactivate = useDeactivateUser();
+
+  const {
+    rows: sortedUsers,
+    sortKey,
+    sortDirection,
+    toggleSort,
+  } = useSortableRows<UserRow, UserSortKey>(users, {
+    initialKey: 'displayName',
+    getValue: userSortValue,
+  });
 
   function handleSearch(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -135,56 +153,60 @@ export function UserListPage(): JSX.Element {
       {/* ── User table ────────────────────────────────────────────────────── */}
       {!isLoading && !isError && users && (
         <>
-          {users.length === 0 ? (
+          {sortedUsers.length === 0 ? (
             <p className="usa-prose">
               {searchQuery ? `No users found matching "${searchQuery}".` : 'No active users found.'}
             </p>
           ) : (
-            <table
-              className="usa-table usa-table--striped usa-table--compact usa-table--scrollable"
-              aria-label="Active CMS users"
-            >
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Email</th>
-                  <th scope="col">Last login</th>
-                  <th scope="col"><span className="usa-sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.id}>
-                    <td>
-                      <button
-                        type="button"
-                        className="usa-button usa-button--unstyled"
-                        onClick={() => navigate(`/admin/users/${user.id}`)}
-                        aria-label={`View details for ${user.displayName}`}
-                      >
-                        {user.displayName}
-                      </button>
-                    </td>
-                    <td>{user.email}</td>
-                    <td>
-                      {user.lastLoginAt
-                        ? new Date(user.lastLoginAt).toLocaleDateString()
-                        : <span className="text-base">Never</span>}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="usa-button usa-button--unstyled text-error"
-                        onClick={() => handleDeactivateClick(user.id)}
-                        aria-label={`Deactivate ${user.displayName}`}
-                      >
-                        Deactivate
-                      </button>
-                    </td>
+            <div className="usa-table-container--scrollable" tabIndex={0}>
+              <table
+                className="usa-table usa-table--borderless width-full"
+                aria-label="Active CMS users"
+              >
+                <thead>
+                  <tr>
+                    <SortableHeader label="Name" field="displayName" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <SortableHeader label="Email" field="email" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <SortableHeader label="Last login" field="lastLoginAt" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+                    <th scope="col"><span className="usa-sr-only">Actions</span></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sortedUsers.map((user) => (
+                    <tr key={user.id}>
+                      <td>
+                        <button
+                          type="button"
+                          className="usa-button usa-button--unstyled"
+                          onClick={() => navigate(`/admin/users/${user.id}`)}
+                          aria-label={`View details for ${user.displayName}`}
+                        >
+                          {user.displayName}
+                        </button>
+                      </td>
+                      <td>{user.email}</td>
+                      <td>
+                        {user.lastLoginAt
+                          ? new Date(user.lastLoginAt).toLocaleDateString()
+                          : <span className="text-base">Never</span>}
+                      </td>
+                      <td>
+                        <RowActions>
+                          <button
+                            type="button"
+                            className="usa-button usa-button--unstyled text-error"
+                            onClick={() => handleDeactivateClick(user.id)}
+                            aria-label={`Deactivate ${user.displayName}`}
+                          >
+                            Deactivate
+                          </button>
+                        </RowActions>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}

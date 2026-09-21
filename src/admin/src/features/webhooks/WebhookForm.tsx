@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { WEBHOOK_EVENTS, type WebhookRegistrationRequest } from './types';
+import { RowActions } from '../../components/table';
 
 interface Props {
   onSubmit: (values: WebhookRegistrationRequest) => void;
@@ -76,14 +77,14 @@ export function WebhookForm({ onSubmit, onCancel, isSubmitting, submitError }: P
         ))}
       </fieldset>
 
-      <div className="margin-top-3 display-flex flex-gap-1">
+      <RowActions className="margin-top-3">
         <button type="submit" className="usa-button" disabled={isSubmitting}>
           {isSubmitting ? 'Registering…' : 'Register webhook'}
         </button>
         <button type="button" className="usa-button usa-button--outline" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </button>
-      </div>
+      </RowActions>
     </form>
   );
 }

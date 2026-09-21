@@ -18,6 +18,7 @@ import {
   useCreateAdGroupMapping,
   useDeleteAdGroupMapping,
 } from './useAdGroupMappings';
+import { RowActions } from '../../components/table';
 
 // ── Role options — mirrors the six CMS roles defined in CmsRoles.cs ───────────
 // Role Ids are the seed values from V012__rbac_roles_seed.sql
@@ -86,7 +87,7 @@ export function AdGroupMappingsSection(): JSX.Element {
           <div className="usa-form-group">
             <label className="usa-label" htmlFor="ad-group-name">
               AD Group Name{' '}
-              <abbr title="required" className="usa-required">
+              <abbr title="required" className="usa-hint--required">
                 *
               </abbr>
             </label>
@@ -116,7 +117,7 @@ export function AdGroupMappingsSection(): JSX.Element {
           <div className="usa-form-group">
             <label className="usa-label" htmlFor="cms-role-select">
               CMS Role{' '}
-              <abbr title="required" className="usa-required">
+              <abbr title="required" className="usa-hint--required">
                 *
               </abbr>
             </label>
@@ -159,37 +160,41 @@ export function AdGroupMappingsSection(): JSX.Element {
             {mappings.length === 0 ? (
               <p className="usa-prose">No mappings configured.</p>
             ) : (
-              <table className="usa-table usa-table--borderless width-full">
-                <caption className="usa-sr-only">AD group to CMS role mappings</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">AD Group</th>
-                    <th scope="col">CMS Role</th>
-                    <th scope="col">
-                      <span className="usa-sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mappings.map((row) => (
-                    <tr key={row.id}>
-                      <td>{row.adGroup}</td>
-                      <td>{row.roleName}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="usa-button usa-button--unstyled usa-button--danger"
-                          onClick={() => deleteMutation.mutate(row.id)}
-                          disabled={deleteMutation.isPending}
-                          aria-label={`Remove mapping: ${row.adGroup} → ${row.roleName}`}
-                        >
-                          Remove
-                        </button>
-                      </td>
+              <div className="usa-table-container--scrollable" tabIndex={0}>
+                <table className="usa-table usa-table--borderless width-full">
+                  <caption className="usa-sr-only">AD group to CMS role mappings</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">AD Group</th>
+                      <th scope="col">CMS Role</th>
+                      <th scope="col">
+                        <span className="usa-sr-only">Actions</span>
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {mappings.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.adGroup}</td>
+                        <td>{row.roleName}</td>
+                        <td>
+                          <RowActions>
+                            <button
+                              type="button"
+                              className="usa-button usa-button--unstyled text-error"
+                              onClick={() => deleteMutation.mutate(row.id)}
+                              disabled={deleteMutation.isPending}
+                              aria-label={`Remove mapping: ${row.adGroup} → ${row.roleName}`}
+                            >
+                              Remove
+                            </button>
+                          </RowActions>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </>
         )}

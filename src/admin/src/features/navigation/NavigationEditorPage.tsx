@@ -25,6 +25,7 @@ import { NavPreviewPanel } from './NavPreviewPanel';
 import { NavTreeItem } from './NavTreeItem';
 import type { NavTreeNode, UpsertItemRequest } from './types';
 import { buildTree, flattenForReorder, moveItem } from './treeUtils';
+import { RowActions } from '../../components/table';
 
 export function NavigationEditorPage(): JSX.Element {
   const { data: menus, isLoading: menusLoading } = useNavigationMenus();
@@ -196,7 +197,7 @@ export function NavigationEditorPage(): JSX.Element {
       {selectedHandle && (
         <>
           {/* ── Toolbar ────────────────────────────────────────────────── */}
-          <div className="display-flex flex-align-center gap-2 margin-bottom-2">
+          <RowActions className="flex-align-center margin-bottom-2">
             <button
               type="button"
               className="usa-button"
@@ -236,7 +237,7 @@ export function NavigationEditorPage(): JSX.Element {
                 </button>
               </>
             )}
-          </div>
+          </RowActions>
 
           {/* ── Reorder save error ─────────────────────────────────────── */}
           {bulkReorder.isError && (

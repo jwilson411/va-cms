@@ -46,7 +46,7 @@ export function SearchAnalyticsWidget(): JSX.Element {
         <p className="usa-prose font-body-xs">No search data in the last 30 days.</p>
       ) : (
         <table
-          className="usa-table usa-table--striped usa-table--compact width-full"
+          className="usa-table usa-table--borderless usa-table--compact width-full"
           aria-labelledby="top-queries-heading"
         >
           <thead>
@@ -76,7 +76,7 @@ export function SearchAnalyticsWidget(): JSX.Element {
         <p className="usa-prose font-body-xs">No zero-result queries in the last 30 days.</p>
       ) : (
         <table
-          className="usa-table usa-table--striped usa-table--compact width-full"
+          className="usa-table usa-table--borderless usa-table--compact width-full"
           aria-labelledby="zero-result-heading"
         >
           <thead>
