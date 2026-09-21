@@ -38,65 +38,65 @@ export function SearchAnalyticsWidget(): JSX.Element {
 
   return (
     <section aria-labelledby="search-analytics-heading">
-      <div className="grid-row grid-gap">
-        {/* Top Queries column */}
-        <div className="grid-col-12 tablet:grid-col-6">
-          <h3 className="font-heading-sm" id="top-queries-heading">
-            Top 10 Queries — Last 30 Days
-          </h3>
-          {data.topQueries.length === 0 ? (
-            <p className="usa-prose font-body-xs">No search data in the last 30 days.</p>
-          ) : (
-            <table className="usa-table usa-table--striped usa-table--compact" aria-labelledby="top-queries-heading">
-              <thead>
-                <tr>
-                  <th scope="col">Query</th>
-                  <th scope="col" aria-label="Search count">#</th>
-                  <th scope="col" aria-label="Zero-result count">Zero</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.topQueries.map((row) => (
-                  <tr key={row.query}>
-                    <td>{row.query}</td>
-                    <td>{row.searchCount.toLocaleString()}</td>
-                    <td>{row.zeroResultCount.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+      {/* Top Queries */}
+      <h3 className="font-heading-sm margin-top-0" id="top-queries-heading">
+        Top 10 Queries — Last 30 Days
+      </h3>
+      {data.topQueries.length === 0 ? (
+        <p className="usa-prose font-body-xs">No search data in the last 30 days.</p>
+      ) : (
+        <table
+          className="usa-table usa-table--striped usa-table--compact width-full"
+          aria-labelledby="top-queries-heading"
+        >
+          <thead>
+            <tr>
+              <th scope="col">Query</th>
+              <th scope="col" aria-label="Search count">#</th>
+              <th scope="col" aria-label="Zero-result count">Zero</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.topQueries.map((row) => (
+              <tr key={row.query}>
+                <td>{row.query}</td>
+                <td>{row.searchCount.toLocaleString()}</td>
+                <td>{row.zeroResultCount.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
-        {/* Zero-Result Queries column */}
-        <div className="grid-col-12 tablet:grid-col-6">
-          <h3 className="font-heading-sm" id="zero-result-heading">
-            Top 10 Zero-Result Queries — Last 30 Days
-          </h3>
-          {data.zeroResultQueries.length === 0 ? (
-            <p className="usa-prose font-body-xs">No zero-result queries in the last 30 days.</p>
-          ) : (
-            <table className="usa-table usa-table--striped usa-table--compact" aria-labelledby="zero-result-heading">
-              <thead>
-                <tr>
-                  <th scope="col">Query</th>
-                  <th scope="col" aria-label="Zero-result count">Zero</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.zeroResultQueries.map((row) => (
-                  <tr key={row.query}>
-                    <td>{row.query}</td>
-                    <td>{row.zeroResultCount.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+      {/* Zero-Result Queries */}
+      <h3 className="font-heading-sm margin-top-3" id="zero-result-heading">
+        Top 10 Zero-Result Queries — Last 30 Days
+      </h3>
+      {data.zeroResultQueries.length === 0 ? (
+        <p className="usa-prose font-body-xs">No zero-result queries in the last 30 days.</p>
+      ) : (
+        <table
+          className="usa-table usa-table--striped usa-table--compact width-full"
+          aria-labelledby="zero-result-heading"
+        >
+          <thead>
+            <tr>
+              <th scope="col">Query</th>
+              <th scope="col" aria-label="Zero-result count">Zero</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.zeroResultQueries.map((row) => (
+              <tr key={row.query}>
+                <td>{row.query}</td>
+                <td>{row.zeroResultCount.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
-      <p className="usa-prose font-body-2xs margin-top-1">
+      <p className="usa-prose font-body-2xs margin-top-2">
         <a href="/admin/search/analytics" className="usa-link">
           View full search analytics →
         </a>
