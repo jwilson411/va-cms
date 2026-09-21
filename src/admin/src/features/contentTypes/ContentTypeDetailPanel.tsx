@@ -1,5 +1,6 @@
 import { useContentTypeDetail } from './useContentTypes';
 import { FieldSchemaTable } from './FieldSchemaTable';
+import { Icon } from '../../components/Icon';
 
 interface ContentTypeDetailPanelProps {
   /** Machine name of the selected content type, e.g. "standard_page". */
@@ -53,41 +54,62 @@ export function ContentTypeDetailPanel({
         onClick={onBack}
         aria-label="Back to content type list"
       >
-        ← Back to content types
+        <Icon name="arrow_back" size={3} className="margin-right-1" />
+        Back to content types
       </button>
 
-      <h2 id="ct-detail-heading" className="usa-heading-lg">
+      <h1 id="ct-detail-heading" className="font-heading-xl margin-top-0">
         {data.displayName}
-      </h2>
+      </h1>
 
-      {data.description != null && (
-        <p className="usa-prose">{data.description}</p>
-      )}
+      {/* USWDS Summary Box: description + schema metadata at a glance. */}
+      <div
+        className="usa-summary-box margin-bottom-4"
+        role="region"
+        aria-labelledby="ct-summary-heading"
+      >
+        <div className="usa-summary-box__body">
+          <h2 id="ct-summary-heading" className="usa-summary-box__heading">
+            Overview
+          </h2>
+          <div className="usa-summary-box__text">
+            {data.description != null && (
+              <p className="margin-top-0">{data.description}</p>
+            )}
 
-      <dl className="usa-summary-box__list margin-bottom-3">
-        <div className="display-flex flex-gap-2 margin-bottom-1">
-          <dt className="font-body-xs text-bold">Machine name:</dt>
-          <dd>
-            <code>{data.name}</code>
-          </dd>
-        </div>
-        {data.templateId && (
-          <div className="display-flex flex-gap-2 margin-bottom-1">
-            <dt className="font-body-xs text-bold">Template:</dt>
-            <dd>
-              <code>{data.templateId}</code>
-            </dd>
+            <dl className="margin-0">
+              <dt className="font-body-2xs text-bold text-uppercase text-base-dark">
+                Machine name
+              </dt>
+              <dd className="margin-0 margin-bottom-1">
+                <code>{data.name}</code>
+              </dd>
+
+              {data.templateId && (
+                <>
+                  <dt className="font-body-2xs text-bold text-uppercase text-base-dark">
+                    Template
+                  </dt>
+                  <dd className="margin-0 margin-bottom-1">
+                    <code>{data.templateId}</code>
+                  </dd>
+                </>
+              )}
+
+              <dt className="font-body-2xs text-bold text-uppercase text-base-dark">
+                Workflow
+              </dt>
+              <dd className="margin-0">
+                {data.allowWorkflow ? 'Enabled' : 'Disabled'}
+              </dd>
+            </dl>
           </div>
-        )}
-        <div className="display-flex flex-gap-2">
-          <dt className="font-body-xs text-bold">Workflow:</dt>
-          <dd>{data.allowWorkflow ? 'Enabled' : 'Disabled'}</dd>
         </div>
-      </dl>
+      </div>
 
-      <h3 className="usa-heading">
+      <h2 className="font-heading-lg margin-bottom-2">
         Fields ({data.fields.length})
-      </h3>
+      </h2>
 
       {data.fields.length === 0 ? (
         <p className="usa-prose text-base">No fields defined for this type.</p>

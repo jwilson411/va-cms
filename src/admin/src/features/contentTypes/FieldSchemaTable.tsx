@@ -36,7 +36,7 @@ export function FieldSchemaTable({ fields }: FieldSchemaTableProps): JSX.Element
                 )}
               </td>
               <td>
-                <span className="usa-tag usa-tag--big">{field.type}</span>
+                <span className="usa-tag">{field.type}</span>
               </td>
               <td>
                 {field.required ? (

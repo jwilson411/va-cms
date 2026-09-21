@@ -22,52 +22,13 @@ import {
   type SearchAnalyticsSortDir,
 } from './useSearchAnalytics';
 import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
+import { AdminPagination, SortableHeader } from '../../components/table';
 
 const DAYS_OPTIONS = [
   { value: 7,  label: 'Last 7 days' },
   { value: 30, label: 'Last 30 days' },
   { value: 90, label: 'Last 90 days' },
 ];
-
-// ── Sub-component: sortable column header (mirrors ContentEntryListPage's SortHeader) ──
-
-interface SortHeaderProps {
-  label: string;
-  field: SearchAnalyticsSortBy;
-  currentSortBy: SearchAnalyticsSortBy;
-  currentSortDir: SearchAnalyticsSortDir;
-  onSort: (field: SearchAnalyticsSortBy) => void;
-}
-
-function SortHeader({
-  label,
-  field,
-  currentSortBy,
-  currentSortDir,
-  onSort,
-}: SortHeaderProps): JSX.Element {
-  const isActive = currentSortBy === field;
-  const indicator = isActive ? (currentSortDir === 'ASC' ? ' ▲' : ' ▼') : '';
-  return (
-    <th
-      scope="col"
-      className={`usa-table__header--sortable${isActive ? ' usa-table__header--sorted' : ''}`}
-      aria-sort={
-        isActive ? (currentSortDir === 'ASC' ? 'ascending' : 'descending') : 'none'
-      }
-    >
-      <button
-        type="button"
-        className="usa-table__header-button"
-        onClick={() => onSort(field)}
-        aria-label={`Sort by ${label}`}
-      >
-        {label}
-        {indicator}
-      </button>
-    </th>
-  );
-}
 
 export function SearchAnalyticsPage(): JSX.Element {
   // Rows per page: admin.searchAnalyticsPageSize (site setting, default 50)
@@ -198,71 +159,46 @@ export function SearchAnalyticsPage(): JSX.Element {
                 : 'No search activity in the selected time range.'}
             </p>
           ) : (
-            <table
-              className="usa-table usa-table--striped usa-table--compact width-full"
-              aria-label="Search analytics table"
-            >
-              <thead>
-                <tr>
-                  <SortHeader label="Query" field="Query" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
-                  <SortHeader label="Searches" field="SearchCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
-                  <SortHeader label="Zero Results" field="ZeroResultCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
-                  <SortHeader label="Avg Results" field="AvgResultCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
-                  <SortHeader label="Clicks" field="ClickCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
-                  <SortHeader label="CTR (%)" field="ClickThroughRate" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
-                  <SortHeader label="Last Searched" field="LastSearchedAt" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((row) => (
-                  <tr key={row.query}>
-                    <td>{row.query}</td>
-                    <td>{row.searchCount.toLocaleString()}</td>
-                    <td>{row.zeroResultCount.toLocaleString()}</td>
-                    <td>{row.avgResultCount.toFixed(1)}</td>
-                    <td>{row.clickCount.toLocaleString()}</td>
-                    <td>{row.clickThroughRate.toFixed(1)}</td>
-                    <td>{new Date(row.lastSearchedAt).toLocaleDateString()}</td>
+            <div className="usa-table-container--scrollable" tabIndex={0}>
+              <table
+                className="usa-table usa-table--borderless width-full"
+                aria-label="Search analytics table"
+              >
+                <thead>
+                  <tr>
+                    <SortableHeader label="Query" field="Query" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                    <SortableHeader label="Searches" field="SearchCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                    <SortableHeader label="Zero Results" field="ZeroResultCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                    <SortableHeader label="Avg Results" field="AvgResultCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                    <SortableHeader label="Clicks" field="ClickCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                    <SortableHeader label="CTR (%)" field="ClickThroughRate" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                    <SortableHeader label="Last Searched" field="LastSearchedAt" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.items.map((row) => (
+                    <tr key={row.query}>
+                      <td>{row.query}</td>
+                      <td>{row.searchCount.toLocaleString()}</td>
+                      <td>{row.zeroResultCount.toLocaleString()}</td>
+                      <td>{row.avgResultCount.toFixed(1)}</td>
+                      <td>{row.clickCount.toLocaleString()}</td>
+                      <td>{row.clickThroughRate.toFixed(1)}</td>
+                      <td>{new Date(row.lastSearchedAt).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {/* Pagination */}
-          {data.totalPages > 1 && (
-            <nav aria-label="Search analytics pagination" className="usa-pagination margin-top-2">
-              <ul className="usa-pagination__list">
-                <li className="usa-pagination__item usa-pagination__arrow">
-                  <button
-                    type="button"
-                    className="usa-pagination__link usa-pagination__previous-page"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={page === 1}
-                    aria-label="Previous page"
-                  >
-                    <span aria-hidden="true">‹</span> Previous
-                  </button>
-                </li>
-                <li className="usa-pagination__item usa-pagination__page-no">
-                  <span aria-current="page">
-                    Page {page} of {data.totalPages}
-                  </span>
-                </li>
-                <li className="usa-pagination__item usa-pagination__arrow">
-                  <button
-                    type="button"
-                    className="usa-pagination__link usa-pagination__next-page"
-                    onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))}
-                    disabled={page === data.totalPages}
-                    aria-label="Next page"
-                  >
-                    Next <span aria-hidden="true">›</span>
-                  </button>
-                </li>
-              </ul>
-            </nav>
-          )}
+          <AdminPagination
+            page={page}
+            totalPages={data.totalPages}
+            onPage={setPage}
+            ariaLabel="Search analytics pagination"
+          />
         </>
       )}
     </main>

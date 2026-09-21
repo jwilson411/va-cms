@@ -43,7 +43,7 @@ export function CustomFieldRenderer({
       <label className="usa-label" htmlFor={fallbackId}>
         {fieldDef.label}
         {fieldDef.required && (
-          <abbr title="required" className="usa-required">
+          <abbr title="required" className="usa-hint--required">
             {' '}
             *
           </abbr>

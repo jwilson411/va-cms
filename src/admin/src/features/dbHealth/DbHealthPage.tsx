@@ -48,7 +48,7 @@ function HealthTables({ data }: { data: DbHealthResponse }): JSX.Element {
         <p className="usa-hint margin-bottom-2">
           Indexes with more than 50 pages. Above 30 % should be rebuilt; 10–30 % can be reorganised.
         </p>
-        <table className="usa-table usa-table--striped usa-table--compact width-full">
+        <table className="usa-table usa-table--borderless usa-table--compact width-full">
           <caption>Index fragmentation by table and index</caption>
           <thead>
             <tr>
@@ -78,7 +78,7 @@ function HealthTables({ data }: { data: DbHealthResponse }): JSX.Element {
       {/* ── Table sizes ─────────────────────────────────────────────────────── */}
       <section aria-labelledby="heading-tablesizes" className="margin-bottom-5">
         <h2 id="heading-tablesizes">Table sizes</h2>
-        <table className="usa-table usa-table--striped usa-table--compact width-full">
+        <table className="usa-table usa-table--borderless usa-table--compact width-full">
           <caption>Row counts and storage usage per table</caption>
           <thead>
             <tr>
@@ -109,7 +109,7 @@ function HealthTables({ data }: { data: DbHealthResponse }): JSX.Element {
       <section aria-labelledby="heading-longqueries" className="margin-bottom-6">
         <h2 id="heading-longqueries">Long-running queries</h2>
         <p className="usa-hint margin-bottom-2">Queries running longer than 5 seconds at the time of collection.</p>
-        <table className="usa-table usa-table--striped usa-table--compact width-full">
+        <table className="usa-table usa-table--borderless usa-table--compact width-full">
           <caption>Queries running longer than 5 seconds</caption>
           <thead>
             <tr>

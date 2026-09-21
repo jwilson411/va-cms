@@ -2,6 +2,16 @@ import { useState } from 'react';
 import { useContentTypes } from '../features/contentTypes/useContentTypes';
 import { ContentTypeDetailPanel } from '../features/contentTypes/ContentTypeDetailPanel';
 import type { ContentTypeSummaryDto } from '../features/contentTypes/types';
+import { SortableHeader, useSortableRows } from '../components/table';
+
+type ContentTypeSortKey = 'displayName' | 'name' | 'fieldCount' | 'allowWorkflow';
+
+function contentTypeSortValue(
+  type: ContentTypeSummaryDto,
+  key: ContentTypeSortKey,
+): string | number | boolean {
+  return type[key];
+}
 
 /**
  * Admin content type browser page — /admin/content-types
@@ -27,7 +37,7 @@ export function ContentTypeBrowserPage(): JSX.Element {
 
   return (
     <main id="main-content" className="padding-top-3">
-      <h1 className="usa-heading-xl">Content Types</h1>
+      <h1 className="font-heading-xl">Content Types</h1>
       <p className="usa-prose">
         All content types registered in the CMS. Click a type to view its field schema.
       </p>
@@ -78,6 +88,16 @@ function ContentTypeListTable({
   types,
   onSelect,
 }: ContentTypeListTableProps): JSX.Element {
+  const {
+    rows: sortedTypes,
+    sortKey,
+    sortDirection,
+    toggleSort,
+  } = useSortableRows<ContentTypeSummaryDto, ContentTypeSortKey>(types, {
+    initialKey: 'displayName',
+    getValue: contentTypeSortValue,
+  });
+
   if (types.length === 0) {
     return (
       <p className="usa-prose text-base">
@@ -92,19 +112,28 @@ function ContentTypeListTable({
         <caption className="usa-sr-only">Registered content types</caption>
         <thead>
           <tr>
-            <th scope="col">Display Name</th>
-            <th scope="col">Machine Name</th>
-            <th scope="col">Fields</th>
-            <th scope="col">Workflow</th>
+            <SortableHeader label="Display Name" field="displayName" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+            <SortableHeader label="Machine Name" field="name" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+            <SortableHeader label="Fields" field="fieldCount" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
+            <SortableHeader label="Workflow" field="allowWorkflow" currentSortBy={sortKey} currentSortDir={sortDirection} onSort={toggleSort} />
             <th scope="col">
               <span className="usa-sr-only">Actions</span>
             </th>
           </tr>
         </thead>
         <tbody>
-          {types.map((type) => (
+          {sortedTypes.map((type) => (
             <tr key={type.name}>
-              <td>{type.displayName}</td>
+              <td>
+                <button
+                  type="button"
+                  className="usa-button usa-button--unstyled"
+                  onClick={() => onSelect(type.name)}
+                  aria-label={`Open ${type.displayName}`}
+                >
+                  {type.displayName}
+                </button>
+              </td>
               <td>
                 <code>{type.name}</code>
               </td>

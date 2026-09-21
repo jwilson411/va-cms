@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useContentEntries, useContentTypesForPicker, useDuplicateEntry } from './useContentEntries';
 import type {
   ContentEntryListFilters,
@@ -8,6 +8,7 @@ import type {
   ContentTypeSummaryForPicker,
 } from './types';
 import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
+import { AdminPagination, RowActions, SortableHeader } from '../../components/table';
 
 const STATUS_OPTIONS = ['Draft', 'InReview', 'Approved', 'Published'];
 
@@ -95,50 +96,6 @@ function ContentTypePickerModal({
         </button>
       </div>
     </div>
-  );
-}
-
-// ── Sub-component: Sort header cell ──────────────────────────────────────────
-
-interface SortHeaderProps {
-  label: string;
-  field: SortBy;
-  currentSortBy: SortBy;
-  currentSortDir: SortDir;
-  onSort: (field: SortBy) => void;
-}
-
-function SortHeader({
-  label,
-  field,
-  currentSortBy,
-  currentSortDir,
-  onSort,
-}: SortHeaderProps): JSX.Element {
-  const isActive = currentSortBy === field;
-  const indicator = isActive ? (currentSortDir === 'ASC' ? ' ▲' : ' ▼') : '';
-  return (
-    <th
-      scope="col"
-      className={`usa-table__header--sortable${isActive ? ' usa-table__header--sorted' : ''}`}
-      aria-sort={
-        isActive
-          ? currentSortDir === 'ASC'
-            ? 'ascending'
-            : 'descending'
-          : 'none'
-      }
-    >
-      <button
-        type="button"
-        className="usa-table__header-button"
-        onClick={() => onSort(field)}
-        aria-label={`Sort by ${label}`}
-      >
-        {label}
-        {indicator}
-      </button>
-    </th>
   );
 }
 
@@ -357,14 +314,14 @@ export function ContentEntryListPage(): JSX.Element {
               <p>No content entries found.</p>
             ) : (
               <div className="usa-table-container--scrollable" tabIndex={0}>
-                <table className="usa-table usa-table--borderless" style={{ width: '100%' }}>
+                <table className="usa-table usa-table--borderless width-full">
                   <caption className="usa-sr-only">
                     Content entries,{' '}
                     {data.totalRows} total, page {page} of {totalPages}
                   </caption>
                   <thead>
                     <tr>
-                      <SortHeader
+                      <SortableHeader
                         label="Title"
                         field="Title"
                         currentSortBy={sortBy}
@@ -373,14 +330,14 @@ export function ContentEntryListPage(): JSX.Element {
                       />
                       <th scope="col">Content Type</th>
                       <th scope="col">Author</th>
-                      <SortHeader
+                      <SortableHeader
                         label="Status"
                         field="Status"
                         currentSortBy={sortBy}
                         currentSortDir={sortDir}
                         onSort={handleSort}
                       />
-                      <SortHeader
+                      <SortableHeader
                         label="Last Modified"
                         field="UpdatedAt"
                         currentSortBy={sortBy}
@@ -393,7 +350,14 @@ export function ContentEntryListPage(): JSX.Element {
                   <tbody>
                     {data.items.map((row) => (
                       <tr key={row.id}>
-                        <td>{row.title}</td>
+                        <td>
+                          <Link
+                            className="usa-link"
+                            to={`/admin/content/${row.id}/edit`}
+                          >
+                            {row.title}
+                          </Link>
+                        </td>
                         <td>{row.contentTypeName}</td>
                         <td>{row.authorDisplayName}</td>
                         <td>
@@ -409,24 +373,25 @@ export function ContentEntryListPage(): JSX.Element {
                           })}
                         </td>
                         <td>
-                          <button
-                            type="button"
-                            className="usa-button usa-button--unstyled"
-                            aria-label={`Edit ${row.title}`}
-                            onClick={() => navigate(`/admin/content/${row.id}/edit`)}
-                          >
-                            Edit
-                          </button>
-                          {' '}
-                          <button
-                            type="button"
-                            className="usa-button usa-button--unstyled"
-                            aria-label={`Duplicate ${row.title}`}
-                            disabled={duplicateMutation.isPending}
-                            onClick={() => handleDuplicate(row.id, row.title)}
-                          >
-                            Duplicate
-                          </button>
+                          <RowActions>
+                            <button
+                              type="button"
+                              className="usa-button usa-button--unstyled"
+                              aria-label={`Edit ${row.title}`}
+                              onClick={() => navigate(`/admin/content/${row.id}/edit`)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="usa-button usa-button--unstyled"
+                              aria-label={`Duplicate ${row.title}`}
+                              disabled={duplicateMutation.isPending}
+                              onClick={() => handleDuplicate(row.id, row.title)}
+                            >
+                              Duplicate
+                            </button>
+                          </RowActions>
                         </td>
                       </tr>
                     ))}
@@ -436,68 +401,13 @@ export function ContentEntryListPage(): JSX.Element {
             )}
 
             {/* ── USWDS Pagination ─────────────────────────────────────── */}
-            {totalPages > 1 && (
-              <nav aria-label="Pagination" className="usa-pagination">
-                <ul className="usa-pagination__list">
-                  <li className="usa-pagination__item usa-pagination__arrow">
-                    <button
-                      type="button"
-                      className="usa-pagination__link usa-pagination__previous-page"
-                      aria-label="Previous page"
-                      disabled={page <= 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    >
-                      <span className="usa-pagination__link-text" aria-hidden="true">
-                        ‹ Previous
-                      </span>
-                    </button>
-                  </li>
-
-                  {/* Page number buttons: show up to 7 pages around current */}
-                  {buildPageNumbers(page, totalPages).map((p, i) =>
-                    p === '…' ? (
-                      <li
-                        key={`ellipsis-${i}`}
-                        className="usa-pagination__item usa-pagination__overflow"
-                        role="presentation"
-                        aria-hidden="true"
-                      >
-                        <span>…</span>
-                      </li>
-                    ) : (
-                      <li key={p} className="usa-pagination__item usa-pagination__page-no">
-                        <button
-                          type="button"
-                          className={`usa-pagination__button${p === page ? ' usa-current' : ''}`}
-                          aria-label={`Page ${p}`}
-                          aria-current={p === page ? 'page' : undefined}
-                          onClick={() => setPage(p as number)}
-                        >
-                          {p}
-                        </button>
-                      </li>
-                    ),
-                  )}
-
-                  <li className="usa-pagination__item usa-pagination__arrow">
-                    <button
-                      type="button"
-                      className="usa-pagination__link usa-pagination__next-page"
-                      aria-label="Next page"
-                      disabled={page >= totalPages}
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    >
-                      <span className="usa-pagination__link-text" aria-hidden="true">
-                        Next ›
-                      </span>
-                    </button>
-                  </li>
-                </ul>
-                <p className="usa-pagination__status" aria-live="polite">
-                  Page {page} of {totalPages} ({data.totalRows} entries)
-                </p>
-              </nav>
-            )}
+            <AdminPagination
+              page={page}
+              totalPages={totalPages}
+              onPage={setPage}
+              totalRows={data.totalRows}
+              itemLabel="entries"
+            />
           </>
         )}
       </div>
@@ -513,21 +423,4 @@ export function ContentEntryListPage(): JSX.Element {
       )}
     </main>
   );
-}
-
-// ── Pagination helper ─────────────────────────────────────────────────────────
-
-function buildPageNumbers(current: number, total: number): (number | '…')[] {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-  const pages: (number | '…')[] = [];
-  const DELTA = 2;
-  const left  = current - DELTA;
-  const right = current + DELTA;
-
-  pages.push(1);
-  if (left > 2)  pages.push('…');
-  for (let p = Math.max(2, left); p <= Math.min(total - 1, right); p++) pages.push(p);
-  if (right < total - 1) pages.push('…');
-  pages.push(total);
-  return pages;
 }

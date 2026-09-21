@@ -87,7 +87,7 @@ export function NavItemForm({
               {/* ── Label ─────────────────────────────────────────────── */}
               <div className="usa-form-group">
                 <label className="usa-label" htmlFor={`${formId}-label`}>
-                  Label <abbr title="required" className="usa-required">*</abbr>
+                  Label <abbr title="required" className="usa-hint--required">*</abbr>
                 </label>
                 {labelError && (
                   <span

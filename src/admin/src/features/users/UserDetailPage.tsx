@@ -26,6 +26,7 @@ import {
   useRevokeRole,
   type UserRoleDetail,
 } from './useUsers';
+import { RowActions } from '../../components/table';
 
 export function UserDetailPage(): JSX.Element {
   const { userId: userIdStr } = useParams<{ userId: string }>();
@@ -125,11 +126,11 @@ export function UserDetailPage(): JSX.Element {
           <h1>{user.displayName}</h1>
 
           <dl className="usa-list usa-list--unstyled margin-bottom-4">
-            <div className="display-flex flex-gap-1 margin-bottom-1">
+            <div className="va-meta-row margin-bottom-1">
               <dt className="text-bold">Email:</dt>
               <dd className="margin-0">{user.email}</dd>
             </div>
-            <div className="display-flex flex-gap-1 margin-bottom-1">
+            <div className="va-meta-row margin-bottom-1">
               <dt className="text-bold">Status:</dt>
               <dd className="margin-0">
                 <span className={user.isActive ? 'usa-tag bg-green-warm-50 text-green-warm-70' : 'usa-tag'}>
@@ -137,7 +138,7 @@ export function UserDetailPage(): JSX.Element {
                 </span>
               </dd>
             </div>
-            <div className="display-flex flex-gap-1">
+            <div className="va-meta-row">
               <dt className="text-bold">Last login:</dt>
               <dd className="margin-0">
                 {user.lastLoginAt
@@ -154,43 +155,47 @@ export function UserDetailPage(): JSX.Element {
             {user.roles.length === 0 ? (
               <p className="usa-prose text-base">No roles assigned yet.</p>
             ) : (
-              <table
-                className="usa-table usa-table--compact usa-table--striped usa-table--scrollable"
-                aria-label="Assigned roles"
-              >
-                <thead>
-                  <tr>
-                    <th scope="col">Role</th>
-                    <th scope="col">Section scope</th>
-                    <th scope="col"><span className="usa-sr-only">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {user.roles.map((r) => (
-                    <tr key={`${r.roleId}-${r.sectionId ?? 'global'}`}>
-                      <td>
-                        <strong>{r.roleDisplayName || r.roleName}</strong>
-                        <span className="font-body-xs display-block text-base">{r.roleName}</span>
-                      </td>
-                      <td>
-                        {r.sectionName
-                          ? <>{r.sectionName} <span className="text-base">({r.sectionSlugPrefix})</span></>
-                          : <span className="text-base">Global</span>}
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="usa-button usa-button--unstyled text-error"
-                          onClick={() => setConfirmRevoke(r)}
-                          aria-label={`Remove ${r.roleName} role${r.sectionName ? ` from section ${r.sectionName}` : ''}`}
-                        >
-                          Remove
-                        </button>
-                      </td>
+              <div className="usa-table-container--scrollable" tabIndex={0}>
+                <table
+                  className="usa-table usa-table--borderless usa-table--compact width-full"
+                  aria-label="Assigned roles"
+                >
+                  <thead>
+                    <tr>
+                      <th scope="col">Role</th>
+                      <th scope="col">Section scope</th>
+                      <th scope="col"><span className="usa-sr-only">Actions</span></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {user.roles.map((r) => (
+                      <tr key={`${r.roleId}-${r.sectionId ?? 'global'}`}>
+                        <td>
+                          <strong>{r.roleDisplayName || r.roleName}</strong>
+                          <span className="font-body-xs display-block text-base">{r.roleName}</span>
+                        </td>
+                        <td>
+                          {r.sectionName
+                            ? <>{r.sectionName} <span className="text-base">({r.sectionSlugPrefix})</span></>
+                            : <span className="text-base">Global</span>}
+                        </td>
+                        <td>
+                          <RowActions>
+                            <button
+                              type="button"
+                              className="usa-button usa-button--unstyled text-error"
+                              onClick={() => setConfirmRevoke(r)}
+                              aria-label={`Remove ${r.roleName} role${r.sectionName ? ` from section ${r.sectionName}` : ''}`}
+                            >
+                              Remove
+                            </button>
+                          </RowActions>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </section>
 
@@ -244,7 +249,7 @@ export function UserDetailPage(): JSX.Element {
                 {/* Role select */}
                 <div className="usa-form-group">
                   <label className="usa-label" htmlFor="assign-role-select">
-                    Role <abbr title="required" className="usa-required"> *</abbr>
+                    Role <abbr title="required" className="usa-hint--required"> *</abbr>
                   </label>
                   <select
                     id="assign-role-select"

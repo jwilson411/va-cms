@@ -61,51 +61,74 @@ export function MediaUploadForm({ onUploaded }: MediaUploadFormProps): JSX.Eleme
 
   return (
     <form
-      className="usa-form margin-bottom-3"
       aria-label="Upload media"
+      className="va-media-upload margin-bottom-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (file) mutation.mutate(file);
       }}
     >
-      <div className="display-flex flex-align-end flex-gap-2 flex-wrap">
-        <div className="usa-form-group margin-top-0">
-          <label className="usa-label margin-top-0" htmlFor="media-upload-file">
-            Upload a file
-          </label>
-          <span className="usa-hint" id="media-upload-hint">
-            Images, PDFs and documents up to 100 MB.
-          </span>
-          <input
-            id="media-upload-file"
-            ref={inputRef}
-            className="usa-file-input"
-            type="file"
-            aria-describedby="media-upload-hint"
-            disabled={mutation.isPending}
-            onChange={(e) => {
-              setMessage(null);
-              setFile(e.target.files?.[0] ?? null);
-            }}
-          />
+      <div className="usa-card maxw-tablet">
+        <div className="usa-card__container">
+          <div className="usa-card__body">
+            <label className="usa-label margin-top-0" htmlFor="media-upload-file">
+              Upload a file
+            </label>
+            <span className="usa-hint" id="media-upload-hint">
+              Images, PDFs and documents up to 100 MB.
+            </span>
+
+            {/* USWDS File input markup. The admin SPA does not run the USWDS JS,
+                so the chosen filename is echoed below for feedback. */}
+            <div className="usa-file-input">
+              <div className="usa-file-input__target">
+                <div className="usa-file-input__instructions" aria-hidden="true">
+                  Drag a file here or <span className="usa-file-input__choose">choose from folder</span>
+                </div>
+                <input
+                  id="media-upload-file"
+                  ref={inputRef}
+                  className="usa-file-input__input"
+                  type="file"
+                  aria-describedby="media-upload-hint"
+                  disabled={mutation.isPending}
+                  onChange={(e) => {
+                    setMessage(null);
+                    setFile(e.target.files?.[0] ?? null);
+                  }}
+                />
+                <div className="usa-file-input__box" />
+              </div>
+            </div>
+
+            {file && (
+              <p className="usa-hint margin-top-1" data-testid="media-upload-filename">
+                Selected: {file.name}
+              </p>
+            )}
+          </div>
+          <div className="usa-card__footer">
+            <button
+              type="submit"
+              className="usa-button"
+              disabled={!file || mutation.isPending}
+            >
+              {mutation.isPending ? 'Uploading…' : 'Upload'}
+            </button>
+          </div>
         </div>
-        <button
-          type="submit"
-          className="usa-button"
-          disabled={!file || mutation.isPending}
-        >
-          {mutation.isPending ? 'Uploading…' : 'Upload'}
-        </button>
       </div>
 
       {message && (
-        <p
-          className={message.kind === 'error' ? 'usa-error-message' : 'usa-hint text-green'}
+        <div
+          className={`usa-alert usa-alert--${message.kind === 'error' ? 'error' : 'success'} usa-alert--slim margin-top-2`}
           role={message.kind === 'error' ? 'alert' : 'status'}
           data-testid="media-upload-message"
         >
-          {message.text}
-        </p>
+          <div className="usa-alert__body">
+            <p className="usa-alert__text">{message.text}</p>
+          </div>
+        </div>
       )}
     </form>
   );

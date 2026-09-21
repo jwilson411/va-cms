@@ -98,7 +98,7 @@ export function GeoPointField({
       <legend className="usa-legend">
         {fieldDef.label}
         {fieldDef.required && (
-          <abbr title="required" className="usa-required">
+          <abbr title="required" className="usa-hint--required">
             {' '}
             *
           </abbr>

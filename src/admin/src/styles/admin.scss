@@ -159,6 +159,205 @@
   gap: 0.5rem;
 }
 
+/* ── Table row actions (components/table/RowActions.tsx) ──────────────────── */
+/* USWDS `.usa-button--unstyled` has no margin, so a row of actions collapses
+   into what looks like a single control. Give the group a real gap and let it
+   wrap on narrow screens. */
+
+.va-cms-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+}
+
+/* Destructive actions keep their red link colour but stay aligned with the
+   neutral actions beside them. */
+.va-cms-row-actions .usa-button {
+  margin: 0;
+}
+
+/* Compact label/value rows (e.g. a definition list rendered side by side).
+   USWDS has no flex-gap utility; see the toolbar note in the media section. */
+.va-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+}
+
+/* Navigation tree row actions (features/navigation/NavTreeItem.tsx). */
+.va-nav-tree-item__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ── Media library (features/media/MediaLibraryPage.tsx) ──────────────────── */
+/* USWDS Card surface on a button: the design system has no selectable-card
+   variant, so `.va-media-card` supplies the interactive states (hover, focus,
+   selected) over the standard `usa-card__*` layout. */
+
+.va-media-card {
+  appearance: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.va-media-card:hover {
+  border-color: color("primary");
+}
+
+.va-media-card:focus-visible {
+  outline: 0.25rem solid color($theme-focus-color);
+  outline-offset: 0.25rem;
+}
+
+.va-media-card--selected {
+  border-color: color("primary");
+}
+
+.va-media-card--selected .va-media-card__media {
+  background: color("primary-lighter");
+}
+
+.va-media-card__media {
+  align-items: center;
+  background: color("base-lightest");
+  display: flex;
+  height: 9rem;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.va-media-card__body {
+  padding: 0.75rem 1rem 1rem;
+}
+
+.va-media-card__name {
+  display: block;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Thumbnails (grid tiles and list rows) */
+
+.va-media-thumb {
+  align-items: center;
+  color: color("base-dark");
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  justify-content: center;
+}
+
+.va-media-thumb__ext {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+}
+
+.va-media-thumb__img {
+  display: block;
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: cover;
+}
+
+.va-media-list__thumb {
+  width: 4rem;
+}
+
+/* Upload drop zone: the admin SPA doesn't run the USWDS file-input JS, which is
+   what normally paints the keyboard focus ring. Show one via :focus-within. */
+.va-media-upload .usa-file-input__target:focus-within {
+  outline: 0.25rem solid color($theme-focus-color);
+  outline-offset: 0.25rem;
+}
+
+/* Toolbar: let the search field fill its grid column instead of hugging the
+   left edge. The USWDS search component is float-based, so switch it to flex
+   inside this toolbar only. */
+.va-media-toolbar .usa-search {
+  display: flex;
+  width: 100%;
+}
+
+.va-media-toolbar .usa-search [type="search"] {
+  flex: 1 1 auto;
+  float: none;
+  width: auto;
+}
+
+/* Detail panel */
+
+.va-media-detail {
+  align-self: flex-start;
+  background: color("white");
+  border: 1px solid color("base-lighter");
+  border-radius: 0.25rem;
+  margin-bottom: 1rem;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+@media all and (min-width: 64em) {
+  .va-media-detail {
+    position: sticky;
+    top: 1rem;
+  }
+}
+
+.va-media-detail__header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.va-media-detail__preview {
+  align-items: center;
+  background: color("base-lightest");
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+  min-height: 6rem;
+  padding: 0.75rem;
+}
+
+.va-media-detail__preview-img {
+  max-height: 12rem;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.va-media-detail__meta {
+  margin: 0 0 1rem;
+}
+
+.va-media-detail__meta dt {
+  font-weight: 700;
+}
+
+.va-media-detail__meta dd {
+  margin: 0 0 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.va-media-detail__usage li {
+  border-top: 1px solid color("base-lightest");
+  padding: 0.5rem 0;
+}
+
+.va-media-detail__usage li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
 /* ── Notification bell + panel (features/notifications/NotificationBell.tsx) ── */
 
 .va-cms-notifications {

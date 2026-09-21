@@ -130,7 +130,7 @@ export function NavTreeItem({
         )}
 
         {/* Actions */}
-        <div className="va-nav-tree-item__actions display-flex gap-1">
+        <div className="va-nav-tree-item__actions">
           <button
             type="button"
             className="usa-button usa-button--unstyled"

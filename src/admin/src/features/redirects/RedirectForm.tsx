@@ -70,7 +70,7 @@ export function RedirectForm({
       {/* From Path */}
       <div className="usa-form-group">
         <label className="usa-label" htmlFor={fromId}>
-          From Path <abbr title="required" className="usa-required"> *</abbr>
+          From Path <abbr title="required" className="usa-hint--required"> *</abbr>
         </label>
         {errors.fromPath && (
           <span id={errFromId} className="usa-error-message" role="alert">
@@ -93,7 +93,7 @@ export function RedirectForm({
       {/* To Path */}
       <div className="usa-form-group">
         <label className="usa-label" htmlFor={toId}>
-          To Path <abbr title="required" className="usa-required"> *</abbr>
+          To Path <abbr title="required" className="usa-hint--required"> *</abbr>
         </label>
         {errors.toPath && (
           <span id={errToId} className="usa-error-message" role="alert">
