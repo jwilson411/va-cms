@@ -17,7 +17,7 @@ import { AdGroupMappingsSection } from '../features/adminSettings/AdGroupMapping
 
 export function AdminSettingsPage(): JSX.Element {
   return (
-    <main id="main-content" className="grid-container">
+    <main id="main-content">
       <h1>Admin Settings</h1>
       <SiteSettingsSection />
       <AdGroupMappingsSection />

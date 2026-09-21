@@ -84,7 +84,7 @@ export function ContentEntryFormPage({
 
   if (isSchemaLoading) {
     return (
-      <main id="main-content" className="grid-container">
+      <main id="main-content">
         <div className="usa-section">
           <p>Loading form…</p>
         </div>
@@ -96,7 +96,7 @@ export function ContentEntryFormPage({
 
   if (schemaError) {
     return (
-      <main id="main-content" className="grid-container">
+      <main id="main-content">
         <div className="usa-section">
           <div className="usa-alert usa-alert--error" role="alert">
             <div className="usa-alert__body">
@@ -112,7 +112,7 @@ export function ContentEntryFormPage({
   // ── Form ───────────────────────────────────────────────────────────────────
 
   return (
-    <main id="main-content" className="grid-container">
+    <main id="main-content">
       <div className="usa-section">
 
         {/* ── Page heading ────────────────────────────────────────────── */}

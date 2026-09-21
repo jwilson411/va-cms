@@ -45,7 +45,7 @@ export function UserListPage(): JSX.Element {
   }
 
   return (
-    <main id="main-content" className="grid-container">
+    <main id="main-content">
       <h1>User Directory</h1>
       <p className="usa-prose">
         Manage CMS users, assign roles, and deactivate accounts.

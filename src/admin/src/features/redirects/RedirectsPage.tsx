@@ -71,7 +71,7 @@ export function RedirectsPage() {
   const totalPages = data ? Math.ceil(data.totalRows / data.pageSize) : 1;
 
   return (
-    <main id="main-content" className="grid-container padding-y-4">
+    <main id="main-content" className="padding-y-4">
       <div className="grid-row grid-gap">
         <div className="grid-col-12">
           {/* Page header */}

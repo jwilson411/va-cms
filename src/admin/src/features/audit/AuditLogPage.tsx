@@ -85,7 +85,7 @@ export function AuditLogPage(): JSX.Element {
   const exportUrl = buildExportUrl(applied);
 
   return (
-    <main id="main-content" className="grid-container">
+    <main id="main-content">
       <h1>Audit Log</h1>
       <p className="usa-prose">
         Immutable log of all system mutations. Filter by user, action, entity type, or date range.
@@ -95,7 +95,7 @@ export function AuditLogPage(): JSX.Element {
       {/* ── Filter form ─────────────────────────────────────────────────────── */}
       <form
         onSubmit={handleApply}
-        className="usa-form margin-bottom-4"
+        className="usa-form maxw-none margin-bottom-4"
         aria-label="Audit log filters"
         id="audit-filter-form"
       >

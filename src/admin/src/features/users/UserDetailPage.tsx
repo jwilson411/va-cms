@@ -46,7 +46,7 @@ export function UserDetailPage(): JSX.Element {
 
   if (!userId) {
     return (
-      <main id="main-content" className="grid-container">
+      <main id="main-content">
         <div className="usa-alert usa-alert--error" role="alert">
           <div className="usa-alert__body">
             <p className="usa-alert__text">Invalid user ID.</p>
@@ -92,7 +92,7 @@ export function UserDetailPage(): JSX.Element {
   }
 
   return (
-    <main id="main-content" className="grid-container">
+    <main id="main-content">
       {/* Back nav */}
       <nav aria-label="Breadcrumb" className="margin-bottom-2">
         <button
