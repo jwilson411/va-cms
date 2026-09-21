@@ -1,0 +1,10 @@
+<%@ Page language="C#" MasterPageFile="~masterurl/default.master" Inherits="Microsoft.SharePoint.WebPartPages.WebPartPage,Microsoft.SharePoint,Version=16.0.0.0,Culture=neutral,PublicKeyToken=71e9bce111e9429c" %>
+<%@ Register Tagprefix="WebPartPages" Namespace="Microsoft.SharePoint.WebPartPages" Assembly="Microsoft.SharePoint, Version=16.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c" %>
+<asp:Content ContentPlaceHolderId="PlaceHolderMain" runat="server">
+<table class="ms-core-tableNoSpace ms-webpartPage-root" width="100%">
+  <tr><td id="_invisibleIfEmpty" name="_invisibleIfEmpty" valign="top" width="100%">
+    <WebPartPages:WebPartZone runat="server" Title="loc:Header" ID="Header" FrameType="TitleBarOnly"><ZoneTemplate></ZoneTemplate></WebPartPages:WebPartZone>
+    <p>Static text under the zone.</p>
+  </td></tr>
+</table>
+</asp:Content>
