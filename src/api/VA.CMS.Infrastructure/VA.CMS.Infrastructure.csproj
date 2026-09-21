@@ -18,8 +18,10 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Markdig" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" VersionOverride="8.23.0" />
     <PackageReference Include="PetaPoco.Compiled" />
     <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" VersionOverride="8.23.0" />
   </ItemGroup>
 
 </Project>
