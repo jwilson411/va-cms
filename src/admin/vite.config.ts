@@ -1,12 +1,26 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import { ADMIN_SECURITY_HEADERS, buildAdminCsp } from './src/security/csp';
+import { ADMIN_CSP_DIRECTIVES, ADMIN_SECURITY_HEADERS, buildAdminCsp } from './src/security/csp';
 import { iisWebConfig } from './iis-web-config.plugin';
 
 // #162: the same headers IIS sends in production (public/web.config), so the CSP is
-// exercised during development instead of only after deployment.
-const securityHeaders = { ...ADMIN_SECURITY_HEADERS, 'Content-Security-Policy': buildAdminCsp() };
+// exercised via `vite preview` — which serves the real build, and the build has no
+// inline scripts (modulePreload.polyfill: false below), so script-src 'self' holds.
+const previewSecurityHeaders = { ...ADMIN_SECURITY_HEADERS, 'Content-Security-Policy': buildAdminCsp() };
+
+// `vite dev` cannot use that same policy: @vitejs/plugin-react always injects an inline
+// <script type="module"> (the React Fast Refresh preamble) into every served page, which
+// script-src 'self' with no nonce/hash blocks outright — the SPA never renders, in any
+// CSP-enforcing browser. So the dev server gets a relaxed script-src; every other
+// directive — and the headers `preview`/IIS production actually send — is unchanged.
+const devSecurityHeaders = {
+  ...ADMIN_SECURITY_HEADERS,
+  'Content-Security-Policy': buildAdminCsp({
+    ...ADMIN_CSP_DIRECTIVES,
+    'script-src': ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+  }),
+};
 
 export default defineConfig({
   plugins: [react(), iisWebConfig()],
@@ -26,9 +40,9 @@ export default defineConfig({
       },
     },
   },
-  preview: { headers: securityHeaders },
+  preview: { headers: previewSecurityHeaders },
   server: {
-    headers: securityHeaders,
+    headers: devSecurityHeaders,
     proxy: {
       // VITE_API_PROXY lets a second checkout/worktree point at an API on another port.
       '/api': process.env.VITE_API_PROXY ?? 'http://localhost:5100',

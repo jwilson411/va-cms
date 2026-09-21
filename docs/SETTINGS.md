@@ -86,6 +86,7 @@ Defaults are the values that were previously hard-coded.
 | `site.agencyHref` | https://www.va.gov | Footer, identifier |
 | `site.agencyLogoSrc` | *(blank)* | Footer/identifier logo when set |
 | `site.bannerLang` | en | Government banner language (`en`/`es`) |
+| `site.homepageSlug` | *(blank)* | Standard Page slug rendered at `/`; blank or unpublished falls back to the built-in placeholder home page |
 
 ### Analytics (Public)
 | Key | Default | Used by |

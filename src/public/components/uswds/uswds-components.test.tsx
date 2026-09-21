@@ -240,6 +240,34 @@ describe('UswdsHeader', () => {
     expect(screen.getByLabelText(/Search/i)).toBeTruthy();
   });
 
+  it('puts usa-search and role=search on the <form> (USWDS 3 flex row)', () => {
+    const { container } = render(<UswdsHeader siteTitle="VA CMS" navigation={navItems} />);
+    // The flex rule is `.usa-search[role="search"]`; if the class and role sit on a
+    // wrapper div instead, the input and submit button stack on two lines.
+    const form = container.querySelector('form.usa-search.usa-search--small[role="search"]');
+    expect(form).not.toBeNull();
+    expect(form!.querySelector('input[type="search"]')).not.toBeNull();
+    expect(form!.querySelector('button[type="submit"]')).not.toBeNull();
+  });
+
+  it('wraps search in .usa-nav__secondary (canonical extended-header markup)', () => {
+    const { container } = render(<UswdsHeader siteTitle="VA CMS" navigation={navItems} />);
+    // .usa-nav__secondary is what the framework CSS absolutely-positions into the
+    // header row alongside the primary nav; a bare form sibling of usa-nav__primary
+    // stacks as a full-width block and adds vertical whitespace above the nav.
+    const secondary = container.querySelector('.usa-nav__secondary');
+    expect(secondary).not.toBeNull();
+    expect(secondary!.querySelector('form.usa-search')).not.toBeNull();
+    expect(secondary!.nextElementSibling).toBe(container.querySelector('.usa-nav__primary'));
+  });
+
+  it('omits the search wrapper entirely when showSearch is false', () => {
+    const { container } = render(
+      <UswdsHeader siteTitle="VA CMS" navigation={navItems} showSearch={false} />,
+    );
+    expect(container.querySelector('.usa-nav__secondary')).toBeNull();
+  });
+
   it('passes axe-core with zero critical violations', async () => {
     const { container } = render(
       <UswdsHeader siteTitle="VA CMS" navigation={navItems} />,

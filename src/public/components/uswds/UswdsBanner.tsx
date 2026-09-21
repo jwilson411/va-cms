@@ -46,7 +46,7 @@ export function UswdsBanner({ lang = 'en' }: UswdsBannerProps): React.ReactEleme
               <img
                 aria-hidden="true"
                 className="usa-banner__header-flag"
-                src="/assets/img/us_flag_small.png"
+                src="/uswds/img/us_flag_small.png"
                 alt=""
               />
             </div>
@@ -75,7 +75,7 @@ export function UswdsBanner({ lang = 'en' }: UswdsBannerProps): React.ReactEleme
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 className="usa-banner__icon usa-media-block__img"
-                src="/assets/img/icon-dot-gov.svg"
+                src="/uswds/img/icon-dot-gov.svg"
                 role="img"
                 alt=""
                 aria-hidden="true"
@@ -98,7 +98,7 @@ export function UswdsBanner({ lang = 'en' }: UswdsBannerProps): React.ReactEleme
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 className="usa-banner__icon usa-media-block__img"
-                src="/assets/img/icon-https.svg"
+                src="/uswds/img/icon-https.svg"
                 role="img"
                 alt=""
                 aria-hidden="true"

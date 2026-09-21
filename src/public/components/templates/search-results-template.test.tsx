@@ -144,15 +144,22 @@ describe('SearchResultsTemplate — heading and search form', () => {
     expect(h1.textContent).toContain('veteran');
   });
 
-  it('renders a search form with role=search', () => {
+  // The header also carries a form[role="search"]; the page-level one is the
+  // usa-search--big form that owns #search-page-field.
+  it('renders a page-level search form with role=search and USWDS markup', () => {
     const { container } = render(<SearchResultsTemplate {...emptyProps} />);
-    const form = container.querySelector('form[role="search"]');
+    const form = container.querySelector('#search-page-field')!.closest('form');
     expect(form).not.toBeNull();
+    expect(form!.getAttribute('role')).toBe('search');
+    // USWDS 3 puts usa-search on the <form> itself — that is the flex row that
+    // keeps the input and button on one line.
+    expect(form!.classList.contains('usa-search')).toBe(true);
+    expect(form!.classList.contains('usa-search--big')).toBe(true);
   });
 
   it('search form has accessible aria-label', () => {
     const { container } = render(<SearchResultsTemplate {...emptyProps} />);
-    const form = container.querySelector('form[role="search"]');
+    const form = container.querySelector('#search-page-field')!.closest('form');
     expect(form!.getAttribute('aria-label')).toBe('Site search');
   });
 
@@ -267,6 +274,53 @@ describe('SearchResultsTemplate — pagination', () => {
       <SearchResultsTemplate {...withResultsProps} totalPages={3} />,
     );
     expect(container.querySelector('nav.usa-pagination')).not.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Settings-driven behaviour (#149)
+// ---------------------------------------------------------------------------
+
+describe('SearchResultsTemplate — pageSize', () => {
+  it('uses pageSize from the site setting for the "Showing x–y" count', () => {
+    const { container } = render(
+      <SearchResultsTemplate {...withResultsProps} currentPage={2} totalPages={2} totalItems={30} pageSize={25} />,
+    );
+    expect(container.querySelector('[role="status"]')!.textContent).toContain('Showing 26–30 of 30');
+  });
+
+  it('defaults pageSize to the DEFAULT_SITE_SETTINGS value (10)', () => {
+    const { container } = render(
+      <SearchResultsTemplate {...withResultsProps} currentPage={2} totalPages={2} totalItems={30} />,
+    );
+    expect(container.querySelector('[role="status"]')!.textContent).toContain('Showing 11–20 of 30');
+  });
+});
+
+describe('SearchResultsTemplate — searchEnabled=false', () => {
+  it('keeps the mandatory chrome and main landmark', () => {
+    const { container } = render(<SearchResultsTemplate {...emptyProps} searchEnabled={false} />);
+    expect(container.querySelector('.usa-banner')).not.toBeNull();
+    expect(container.querySelector('.usa-header')).not.toBeNull();
+    expect(container.querySelector('main#main-content')).not.toBeNull();
+    expect(container.querySelector('.usa-footer')).not.toBeNull();
+    expect(container.querySelector('.usa-identifier')).not.toBeNull();
+  });
+
+  it('renders an unavailable notice instead of the search form', () => {
+    const { container } = render(<SearchResultsTemplate {...withResultsProps} searchEnabled={false} />);
+    expect(screen.getByText('Search is currently unavailable')).toBeTruthy();
+    expect(container.querySelector('#search-page-field')).toBeNull();
+    expect(container.querySelector('.usa-search--big')).toBeNull();
+    expect(container.querySelector('.usa-card-group')).toBeNull();
+  });
+
+  it('passes axe-core: zero critical or serious violations', async () => {
+    const { container } = render(<SearchResultsTemplate {...emptyProps} searchEnabled={false} />);
+    const results = await axe(container, {
+      runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'best-practice'] },
+    });
+    expect(results.violations.filter((v) => v.impact === 'critical' || v.impact === 'serious')).toHaveLength(0);
   });
 });
 

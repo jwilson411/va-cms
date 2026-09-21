@@ -1,24 +1,20 @@
 /**
  * app/layout.tsx — Root layout for VA CMS public site.
  *
- * Issue #47 — BRD FR-NAV-01:
- *   USWDS Header primary navigation is driven by the CMS-managed menu.
- *   fetchPrimaryNav() is called at render time with ISR tagging so the
- *   cache invalidates when an admin saves the navigation menu.
- *
  * Issue #149 (epic #141):
- *   Site title, metadata and DAP analytics codes come from the CMS site settings
+ *   Site metadata and DAP analytics codes come from the CMS site settings
  *   (GET /api/v1/settings/public, ISR tag cms-site-settings) — an admin change is live
  *   on the next render, no build required.
  *
- * Mobile hamburger menu works at 320px+ via UswdsHeader's built-in USWDS
- * responsive behaviour (usa-header--extended + usa-menu-btn).
+ * The layout deliberately renders NO page chrome. Every route renders one of the
+ * components/templates/*Template components, and each template owns the full USWDS
+ * chrome (Banner → Header with CMS-managed nav (#47) → <main #main-content> → Footer →
+ * Identifier). Rendering a header or <main> here as well would double them on every
+ * page and nest <main> inside <main>.
  */
 
 import type { Metadata } from 'next';
 import '@/styles/uswds-theme.scss';
-import { UswdsHeader } from '@/components/uswds/UswdsHeader';
-import { fetchPrimaryNav } from '@/lib/cms/navigation';
 import { fetchSiteSettings } from '@/lib/cms/settings';
 import { headers } from 'next/headers';
 import { DapScript } from '@/components/analytics/DapScript';
@@ -32,17 +28,17 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 /**
- * RootLayout fetches the primary nav and site settings from the CMS API at
- * render time. This is an async Server Component — it runs on the server during
- * ISR and the results are cached and tagged for on-demand revalidation.
+ * RootLayout fetches the site settings from the CMS API at render time (for the
+ * DAP script). This is an async Server Component — it runs on the server during
+ * ISR and the result is cached and tagged for on-demand revalidation.
  */
 export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }): Promise<React.ReactElement> {
-  // Both fall back to safe defaults on error so the page still renders.
-  const [navigation, site, requestHeaders] = await Promise.all([fetchPrimaryNav(), fetchSiteSettings(), headers()]);
+  // Settings fall back to safe defaults on error so the page still renders.
+  const [site, requestHeaders] = await Promise.all([fetchSiteSettings(), headers()]);
   // Per-request CSP nonce from proxy.ts (#162); undefined in tests / when the proxy did not run.
   const nonce = requestHeaders.get('x-nonce') ?? undefined;
 
@@ -59,14 +55,7 @@ export default async function RootLayout({
           nonce={nonce}
         />
       </head>
-      <body>
-        <UswdsHeader
-          siteTitle={site.siteTitle}
-          navigation={navigation}
-          showSearch={site.publicSearchEnabled}
-        />
-        <main id="main-content">{children}</main>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

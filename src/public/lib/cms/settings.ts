@@ -33,6 +33,8 @@ export interface SiteSettings {
   agencyLogoSrc: string;
   /** Government banner language. */
   bannerLang: 'en' | 'es';
+  /** site.homepageSlug — Standard Page slug rendered at "/"; blank falls back to the placeholder home page. */
+  homepageSlug: string;
   /** DAP analytics. */
   dapEnabled: boolean;
   dapAgency: string;
@@ -59,6 +61,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   agencyHref: 'https://www.va.gov',
   agencyLogoSrc: '',
   bannerLang: 'en',
+  homepageSlug: '',
   dapEnabled: false,
   dapAgency: '',
   dapSubagency: '',
@@ -98,6 +101,7 @@ export function mapSiteSettings(raw: RawSiteSettings): SiteSettings {
     agencyHref: str(raw, 'site.agencyHref', d.agencyHref),
     agencyLogoSrc: str(raw, 'site.agencyLogoSrc', d.agencyLogoSrc),
     bannerLang: lang === 'es' ? 'es' : 'en',
+    homepageSlug: str(raw, 'site.homepageSlug', d.homepageSlug),
     dapEnabled: bool(raw, 'analytics.dapEnabled', d.dapEnabled),
     dapAgency: str(raw, 'analytics.dapAgency', d.dapAgency),
     dapSubagency: str(raw, 'analytics.dapSubagency', d.dapSubagency),

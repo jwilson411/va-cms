@@ -42,6 +42,20 @@ Palette sources:
   $theme-show-compile-warnings: false,
   $theme-show-notifications: false,
 
+  // ── Layout width ────────────────────────────────────────────────────────
+  // USWDS caps `.grid-container` and each piece of page chrome at "desktop"
+  // (64rem / 1024px), which is too narrow for the CMS page layouts. Use the
+  // "widescreen" token (87.5rem / 1400px) — the same width the admin shell
+  // already uses via `.grid-container-widescreen` — and raise the chrome caps
+  // with it so banner, header, footer and identifier stay aligned with content.
+  $theme-grid-container-max-width: "widescreen",
+  $theme-banner-max-width: "widescreen",
+  $theme-header-max-width: "widescreen",
+  $theme-footer-max-width: "widescreen",
+  $theme-identifier-max-width: "widescreen",
+  $theme-site-alert-max-width: "widescreen",
+  $theme-in-page-nav-main-content-max-width: "widescreen",
+
   // ── Typography: Public Sans for every role ──────────────────────────────
   // USWDS defaults to Source Sans Pro for sans and Merriweather for headings;
   // VA uses Public Sans. Pointing every role at "sans" means USWDS emits

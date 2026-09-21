@@ -81,9 +81,15 @@ export function UswdsHeader({
             <span className="usa-sr-only">Close</span>
           </button>
 
+          {/* USWDS 3 canonical extended-header markup: search lives in .usa-nav__secondary,
+              which the framework CSS absolutely-positions into the top-right corner of the
+              nav bar (next to the logo row) instead of stacking as a block above the primary
+              nav — that's what was producing the extra whitespace. usa-search + role=search
+              still sit on the <form> itself, which is the flex row that keeps the input and
+              submit button on one line. */}
           {showSearch && (
-          <div className="usa-search usa-search--small" role="search">
-            <form action={searchAction} method="get">
+          <div className="usa-nav__secondary">
+            <form className="usa-search usa-search--small" role="search" action={searchAction} method="get">
               <label className="usa-sr-only" htmlFor="extended-search-field-small">
                 Search
               </label>

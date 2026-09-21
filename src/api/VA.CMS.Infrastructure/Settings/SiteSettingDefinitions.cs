@@ -42,6 +42,7 @@ public static class SiteSettingKeys
     public const string SiteAgencyHref      = "site.agencyHref";
     public const string SiteAgencyLogoSrc   = "site.agencyLogoSrc";
     public const string SiteBannerLang      = "site.bannerLang";
+    public const string SiteHomepageSlug    = "site.homepageSlug";
 
     // Analytics (Public)
     public const string AnalyticsDapEnabled   = "analytics.dapEnabled";
@@ -246,6 +247,9 @@ public static class SiteSettingDefinitions
           "Optional agency logo image URL for the footer and identifier. Blank hides the logo.", 70),
         S(SiteSettingKeys.SiteBannerLang, "en", SiteSettingCategories.Site, SiteSettingScope.Public,
           "Language of the official government banner: en or es.", 80),
+        S(SiteSettingKeys.SiteHomepageSlug, "", SiteSettingCategories.Site, SiteSettingScope.Public,
+          "Standard Page slug (as in /pages/{slug}) rendered at the public site's homepage (/). " +
+          "Blank, or a slug with no published Standard Page, falls back to the built-in placeholder home page.", 90),
 
         // ── Analytics ───────────────────────────────────────────────────────
         B(SiteSettingKeys.AnalyticsDapEnabled, false, SiteSettingCategories.Analytics, SiteSettingScope.Public,
