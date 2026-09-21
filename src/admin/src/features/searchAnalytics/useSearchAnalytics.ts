@@ -45,12 +45,28 @@ export interface SearchAnalyticsPage {
   items: SearchAnalyticsRow[];
 }
 
+export type SearchAnalyticsSortBy =
+  | 'Query'
+  | 'SearchCount'
+  | 'ZeroResultCount'
+  | 'AvgResultCount'
+  | 'ClickCount'
+  | 'ClickThroughRate'
+  | 'LastSearchedAt';
+export type SearchAnalyticsSortDir = 'ASC' | 'DESC';
+
 // ── Query keys ────────────────────────────────────────────────────────────────
 
 export const searchAnalyticsKeys = {
   summary: () => ['search-analytics', 'summary'] as const,
-  full: (daysBack: number, page: number, pageSize: number) =>
-    ['search-analytics', 'full', daysBack, page, pageSize] as const,
+  full: (
+    daysBack: number,
+    page: number,
+    pageSize: number,
+    sortBy: SearchAnalyticsSortBy,
+    sortDir: SearchAnalyticsSortDir,
+    q: string,
+  ) => ['search-analytics', 'full', daysBack, page, pageSize, sortBy, sortDir, q] as const,
 };
 
 // ── useSearchAnalyticsSummary ─────────────────────────────────────────────────
@@ -74,16 +90,22 @@ export function useSearchAnalyticsFull(
   daysBack: number = 30,
   page: number = 1,
   pageSize: number = 50,
+  sortBy: SearchAnalyticsSortBy = 'SearchCount',
+  sortDir: SearchAnalyticsSortDir = 'DESC',
+  q: string = '',
 ) {
   const { authFetch } = useAuth();
   return useQuery<SearchAnalyticsPage>({
-    queryKey: searchAnalyticsKeys.full(daysBack, page, pageSize),
+    queryKey: searchAnalyticsKeys.full(daysBack, page, pageSize, sortBy, sortDir, q),
     queryFn: async () => {
       const params = new URLSearchParams({
         daysBack: String(daysBack),
         page: String(page),
         pageSize: String(pageSize),
+        sortBy,
+        sortDir,
       });
+      if (q) params.set('q', q);
       const res = await authFetch(`/api/v1/admin/search/analytics?${params.toString()}`);
       if (!res.ok) throw new Error(`Search analytics fetch failed: ${res.status}`);
       return res.json() as Promise<SearchAnalyticsPage>;

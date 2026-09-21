@@ -22,10 +22,13 @@ public interface ISearchAnalyticsRepository
 
     /// <summary>
     /// Returns a paginated full analytics table (queries + CTR) over the last <paramref name="daysBack"/> days.
+    /// Sortable by <paramref name="sortBy"/> (falls back to SearchCount if not recognized) and
+    /// optionally filtered to queries containing <paramref name="queryFilter"/>.
     /// Calls usp_Search_GetAnalyticsFull.
     /// </summary>
     Task<(IReadOnlyList<SearchAnalyticsRow> Items, int TotalRows)> GetFullAnalyticsAsync(
-        int daysBack = 30, int page = 1, int pageSize = 50);
+        int daysBack = 30, int page = 1, int pageSize = 50,
+        string sortBy = "SearchCount", string sortDir = "DESC", string? queryFilter = null);
 
     /// <summary>
     /// Records a user click on a search result for CTR tracking.

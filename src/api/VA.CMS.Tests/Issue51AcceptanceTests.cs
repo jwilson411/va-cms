@@ -226,6 +226,94 @@ public class Issue51AcceptanceTests(DatabaseFixture fixture)
         Assert.NotNull(type.GetProperty("ClickCount"));
     }
 
+    // ── AC4: server-side sorting and filtering (V050) ──────────────────────────
+
+    [Fact]
+    public async Task GetFull_SortByQueryAscThenDesc_ReversesOrder()
+    {
+        var tag = SearchTestText.Unique("sort");
+        var queryA = $"aaa-{tag}";
+        var queryZ = $"zzz-{tag}";
+        await InsertQueryLogAsync(queryA, resultCount: 1);
+        await InsertQueryLogAsync(queryZ, resultCount: 1);
+
+        var repo = Repo();
+        var (asc, _)  = await repo.GetFullAnalyticsAsync(daysBack: 30, page: 1, pageSize: 500, sortBy: "Query", sortDir: "ASC");
+        var (desc, _) = await repo.GetFullAnalyticsAsync(daysBack: 30, page: 1, pageSize: 500, sortBy: "Query", sortDir: "DESC");
+
+        var ascIndexA  = asc.ToList().FindIndex(r => r.Query == queryA);
+        var ascIndexZ  = asc.ToList().FindIndex(r => r.Query == queryZ);
+        var descIndexA = desc.ToList().FindIndex(r => r.Query == queryA);
+        var descIndexZ = desc.ToList().FindIndex(r => r.Query == queryZ);
+
+        Assert.True(ascIndexA < ascIndexZ, "ASC by Query should put 'aaa-...' before 'zzz-...'");
+        Assert.True(descIndexZ < descIndexA, "DESC by Query should put 'zzz-...' before 'aaa-...'");
+    }
+
+    [Fact]
+    public async Task GetFull_SortByZeroResultCount_OrdersByZeroResultCount()
+    {
+        var tag = SearchTestText.Unique("sort-zero");
+        var lowQuery  = $"low-{tag}";
+        var highQuery = $"high-{tag}";
+        await InsertQueryLogAsync(lowQuery, resultCount: 5);   // 0 zero-results
+        await InsertQueryLogAsync(highQuery, resultCount: 0);
+        await InsertQueryLogAsync(highQuery, resultCount: 0);  // 2 zero-results
+
+        var repo = Repo();
+        var (items, _) = await repo.GetFullAnalyticsAsync(
+            daysBack: 30, page: 1, pageSize: 500, sortBy: "ZeroResultCount", sortDir: "DESC");
+
+        var list = items.ToList();
+        var highIndex = list.FindIndex(r => r.Query == highQuery);
+        var lowIndex  = list.FindIndex(r => r.Query == lowQuery);
+        Assert.True(highIndex < lowIndex, "DESC by ZeroResultCount should rank the higher count first");
+    }
+
+    [Fact]
+    public async Task GetFull_UnrecognizedSortBy_FallsBackWithoutError()
+    {
+        var repo = Repo();
+        var (items, totalRows) = await repo.GetFullAnalyticsAsync(
+            daysBack: 30, page: 1, pageSize: 10, sortBy: "'; DROP TABLE SearchQueryLog; --", sortDir: "DESC");
+
+        Assert.NotNull(items);
+        Assert.True(totalRows >= 0);
+    }
+
+    [Fact]
+    public async Task GetFull_QueryFilter_MatchesOnlySubstring()
+    {
+        var tag = SearchTestText.Unique("filter");
+        var matching    = $"matching-{tag}";
+        var nonMatching = SearchTestText.Unique("other");
+        await InsertQueryLogAsync(matching, resultCount: 1);
+        await InsertQueryLogAsync(nonMatching, resultCount: 1);
+
+        var repo = Repo();
+        var (items, totalRows) = await repo.GetFullAnalyticsAsync(
+            daysBack: 30, page: 1, pageSize: 500, queryFilter: tag);
+
+        var list = items.ToList();
+        Assert.Contains(list, r => r.Query == matching);
+        Assert.DoesNotContain(list, r => r.Query == nonMatching);
+        Assert.True(totalRows >= 1);
+    }
+
+    [Fact]
+    public async Task GetFull_Controller_PassesSortAndFilterThrough()
+    {
+        var tag = SearchTestText.Unique("ctrl-filter");
+        var matching = $"ctrl-match-{tag}";
+        await InsertQueryLogAsync(matching, resultCount: 1);
+
+        var result   = await Controller().GetFull(daysBack: 30, page: 1, pageSize: 500, sortBy: "Query", sortDir: "ASC", q: tag);
+        var ok       = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<SearchAnalyticsPageDto>(ok.Value);
+
+        Assert.Contains(response.Items, r => r.Query == matching);
+    }
+
     // ── AC3: click-through tracking ───────────────────────────────────────────
 
     [Fact]

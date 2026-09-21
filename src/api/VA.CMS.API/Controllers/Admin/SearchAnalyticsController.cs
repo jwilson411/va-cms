@@ -94,21 +94,29 @@ public class SearchAnalyticsController : ControllerBase
     /// <summary>
     /// GET /api/v1/admin/search/analytics
     /// Full paginated analytics table with CTR, used by /admin/search/analytics page.
+    /// Sortable by query/searchCount/zeroResultCount/avgResultCount/clickCount/
+    /// clickThroughRate/lastSearchedAt (unrecognized values fall back to SearchCount DESC
+    /// in the stored procedure); optionally filtered to queries containing <paramref name="q"/>.
     /// Requires SiteAdmin or SystemAdmin (#175).
     /// </summary>
     [HttpGet("api/v1/admin/search/analytics")]
     [Authorize(Policy = CmsRoles.Policies.CanManageSite)]
     [ProducesResponseType(typeof(SearchAnalyticsPageDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetFull(
-        [FromQuery] int daysBack  = 30,
-        [FromQuery] int page      = 1,
-        [FromQuery] int pageSize  = 50)
+        [FromQuery] int     daysBack = 30,
+        [FromQuery] int     page     = 1,
+        [FromQuery] int     pageSize = 50,
+        [FromQuery] string  sortBy   = "SearchCount",
+        [FromQuery] string  sortDir  = "DESC",
+        [FromQuery] string? q        = null)
     {
         pageSize = _settings.ClampPageSize(pageSize);
         page     = Math.Max(1, page);
         daysBack = Math.Clamp(daysBack, 1, 365);
+        if (q is { Length: > 200 })
+            q = q[..200];
 
-        var (items, totalRows) = await _analytics.GetFullAnalyticsAsync(daysBack, page, pageSize);
+        var (items, totalRows) = await _analytics.GetFullAnalyticsAsync(daysBack, page, pageSize, sortBy, sortDir, q);
 
         return Ok(new SearchAnalyticsPageDto
         {

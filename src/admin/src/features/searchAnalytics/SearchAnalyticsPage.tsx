@@ -15,8 +15,12 @@
  *   - USWDS 3.x components exclusively.
  */
 
-import React, { useState } from 'react';
-import { useSearchAnalyticsFull } from './useSearchAnalytics';
+import React, { useCallback, useState } from 'react';
+import {
+  useSearchAnalyticsFull,
+  type SearchAnalyticsSortBy,
+  type SearchAnalyticsSortDir,
+} from './useSearchAnalytics';
 import { clientSettingKeys, useClientSettings } from '../siteSettings/useClientSettings';
 
 const DAYS_OPTIONS = [
@@ -25,46 +29,135 @@ const DAYS_OPTIONS = [
   { value: 90, label: 'Last 90 days' },
 ];
 
+// ── Sub-component: sortable column header (mirrors ContentEntryListPage's SortHeader) ──
+
+interface SortHeaderProps {
+  label: string;
+  field: SearchAnalyticsSortBy;
+  currentSortBy: SearchAnalyticsSortBy;
+  currentSortDir: SearchAnalyticsSortDir;
+  onSort: (field: SearchAnalyticsSortBy) => void;
+}
+
+function SortHeader({
+  label,
+  field,
+  currentSortBy,
+  currentSortDir,
+  onSort,
+}: SortHeaderProps): JSX.Element {
+  const isActive = currentSortBy === field;
+  const indicator = isActive ? (currentSortDir === 'ASC' ? ' ▲' : ' ▼') : '';
+  return (
+    <th
+      scope="col"
+      className={`usa-table__header--sortable${isActive ? ' usa-table__header--sorted' : ''}`}
+      aria-sort={
+        isActive ? (currentSortDir === 'ASC' ? 'ascending' : 'descending') : 'none'
+      }
+    >
+      <button
+        type="button"
+        className="usa-table__header-button"
+        onClick={() => onSort(field)}
+        aria-label={`Sort by ${label}`}
+      >
+        {label}
+        {indicator}
+      </button>
+    </th>
+  );
+}
 
 export function SearchAnalyticsPage(): JSX.Element {
   // Rows per page: admin.searchAnalyticsPageSize (site setting, default 50)
   const clientSettings = useClientSettings();
   const PAGE_SIZE = Math.max(1, clientSettings.getInt(clientSettingKeys.adminSearchAnalyticsPageSize));
   const [daysBack, setDaysBack] = useState<number>(30);
+  const [queryFilter, setQueryFilter] = useState<string>('');
+  const [sortBy, setSortBy] = useState<SearchAnalyticsSortBy>('SearchCount');
+  const [sortDir, setSortDir] = useState<SearchAnalyticsSortDir>('DESC');
   const [page, setPage] = useState<number>(1);
 
-  const { data, isLoading, isError } = useSearchAnalyticsFull(daysBack, page, PAGE_SIZE);
+  const { data, isLoading, isError } = useSearchAnalyticsFull(
+    daysBack, page, PAGE_SIZE, sortBy, sortDir, queryFilter,
+  );
 
   function handleDaysChange(e: React.ChangeEvent<HTMLSelectElement>) {
     setDaysBack(Number(e.target.value));
     setPage(1); // reset to first page on filter change
   }
 
+  function handleQueryFilterChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setQueryFilter(e.target.value);
+    setPage(1);
+  }
+
+  // Toggle direction if already sorted on this field, else sort DESC on the new field.
+  const handleSort = useCallback((field: SearchAnalyticsSortBy) => {
+    if (sortBy === field) {
+      setSortDir((d) => (d === 'ASC' ? 'DESC' : 'ASC'));
+    } else {
+      setSortBy(field);
+      setSortDir('DESC');
+    }
+    setPage(1);
+  }, [sortBy]);
+
   return (
-    <main id="main-content" className="grid-container">
+    <main id="main-content">
       <h1>Search Analytics</h1>
       <p className="usa-prose">
         Query volume, zero-result rate, and click-through rate for all searches.
       </p>
 
       {/* Filter controls */}
-      <div className="usa-form-group">
-        <label className="usa-label" htmlFor="days-back-select">
-          Date range
-        </label>
-        <select
-          id="days-back-select"
-          className="usa-select"
-          value={daysBack}
-          onChange={handleDaysChange}
-          aria-label="Select date range for analytics"
-        >
-          {DAYS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+      <div className="display-flex flex-wrap flex-align-end" style={{ gap: '1rem' }}>
+        <div className="usa-form-group margin-top-0">
+          <label className="usa-label" htmlFor="days-back-select">
+            Date range
+          </label>
+          <select
+            id="days-back-select"
+            className="usa-select"
+            value={daysBack}
+            onChange={handleDaysChange}
+            aria-label="Select date range for analytics"
+          >
+            {DAYS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="usa-label" htmlFor="query-filter-input">
+            Filter by query text
+          </label>
+          <form
+            className="usa-search usa-search--small"
+            role="search"
+            onSubmit={(e) => e.preventDefault()}
+          >
+            <input
+              id="query-filter-input"
+              className="usa-input"
+              type="search"
+              value={queryFilter}
+              onChange={handleQueryFilterChange}
+              placeholder="e.g. benefits"
+            />
+            <button type="submit" className="usa-button">
+              <img
+                src="/uswds/img/usa-icons-bg/search--white.svg"
+                className="usa-search__submit-icon"
+                alt="Search"
+              />
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* Loading state */}
@@ -88,30 +181,36 @@ export function SearchAnalyticsPage(): JSX.Element {
       {/* Analytics table */}
       {!isLoading && !isError && data && (
         <>
-          <p className="usa-prose font-body-xs">
-            Showing{' '}
-            <strong>
-              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, data.totalRows)}
-            </strong>{' '}
-            of <strong>{data.totalRows.toLocaleString()}</strong> queries
-          </p>
+          {data.totalRows > 0 && (
+            <p className="usa-prose font-body-xs">
+              Showing{' '}
+              <strong>
+                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, data.totalRows)}
+              </strong>{' '}
+              of <strong>{data.totalRows.toLocaleString()}</strong> queries
+            </p>
+          )}
 
           {data.items.length === 0 ? (
-            <p className="usa-prose">No search activity in the selected time range.</p>
+            <p className="usa-prose">
+              {queryFilter
+                ? 'No queries match that filter in the selected time range.'
+                : 'No search activity in the selected time range.'}
+            </p>
           ) : (
             <table
-              className="usa-table usa-table--striped usa-table--compact usa-table--scrollable"
+              className="usa-table usa-table--striped usa-table--compact width-full"
               aria-label="Search analytics table"
             >
               <thead>
                 <tr>
-                  <th scope="col">Query</th>
-                  <th scope="col">Searches</th>
-                  <th scope="col">Zero Results</th>
-                  <th scope="col">Avg Results</th>
-                  <th scope="col">Clicks</th>
-                  <th scope="col">CTR (%)</th>
-                  <th scope="col">Last Searched</th>
+                  <SortHeader label="Query" field="Query" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                  <SortHeader label="Searches" field="SearchCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                  <SortHeader label="Zero Results" field="ZeroResultCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                  <SortHeader label="Avg Results" field="AvgResultCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                  <SortHeader label="Clicks" field="ClickCount" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                  <SortHeader label="CTR (%)" field="ClickThroughRate" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
+                  <SortHeader label="Last Searched" field="LastSearchedAt" currentSortBy={sortBy} currentSortDir={sortDir} onSort={handleSort} />
                 </tr>
               </thead>
               <tbody>

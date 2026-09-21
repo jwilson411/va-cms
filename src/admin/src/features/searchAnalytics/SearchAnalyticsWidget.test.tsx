@@ -234,4 +234,61 @@ describe('SearchAnalyticsPage', () => {
     // After click, hook is called again — just verify button was present
     expect(nextBtn).toBeInTheDocument();
   });
+
+  // ── Sorting and filtering (V050) ──────────────────────────────────────────
+
+  it('defaults to sorting by SearchCount DESC', () => {
+    mockUseFull.mockReturnValue({
+      data: buildFullPage(3),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof hooks.useSearchAnalyticsFull>);
+
+    render(<SearchAnalyticsPage />);
+    expect(mockUseFull).toHaveBeenLastCalledWith(30, 1, 50, 'SearchCount', 'DESC', '');
+
+    const searchesHeader = screen.getByRole('button', { name: /sort by searches/i }).closest('th');
+    expect(searchesHeader).toHaveAttribute('aria-sort', 'descending');
+  });
+
+  it('clicking a column header sorts by that column, and clicking again reverses direction', async () => {
+    mockUseFull.mockReturnValue({
+      data: buildFullPage(3),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof hooks.useSearchAnalyticsFull>);
+
+    render(<SearchAnalyticsPage />);
+
+    await userEvent.click(screen.getByRole('button', { name: /sort by query/i }));
+    expect(mockUseFull).toHaveBeenLastCalledWith(30, 1, 50, 'Query', 'DESC', '');
+
+    await userEvent.click(screen.getByRole('button', { name: /sort by query/i }));
+    expect(mockUseFull).toHaveBeenLastCalledWith(30, 1, 50, 'Query', 'ASC', '');
+  });
+
+  it('typing in the query filter re-fetches with q set and resets to page 1', async () => {
+    mockUseFull.mockReturnValue({
+      data: buildFullPage(3),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof hooks.useSearchAnalyticsFull>);
+
+    render(<SearchAnalyticsPage />);
+    await userEvent.type(screen.getByLabelText(/filter by query text/i), 'benefits');
+
+    expect(mockUseFull).toHaveBeenLastCalledWith(30, 1, 50, 'SearchCount', 'DESC', 'benefits');
+  });
+
+  it('shows a filter-aware empty state when a query filter matches nothing', () => {
+    mockUseFull.mockReturnValue({
+      data: { ...buildFullPage(0), items: [], totalRows: 0, totalPages: 0 },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof hooks.useSearchAnalyticsFull>);
+
+    render(<SearchAnalyticsPage />);
+    // No filter typed yet — generic empty state.
+    expect(screen.getByText(/no search activity/i)).toBeInTheDocument();
+  });
 });
