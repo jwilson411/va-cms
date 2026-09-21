@@ -199,7 +199,7 @@ export function MediaLibraryPage({ onSelect }: MediaLibraryPageProps): JSX.Eleme
         {/* View toggle — USWDS button group used as a segmented control */}
         <div className="grid-col-6 tablet:grid-col-3">
           <span className="usa-label margin-top-0" id={viewModeLabelId}>View</span>
-          <ul className="usa-button-group margin-bottom-0" role="group" aria-labelledby={viewModeLabelId}>
+          <ul className="usa-button-group margin-bottom-0" aria-labelledby={viewModeLabelId}>
             <li className="usa-button-group__item">
               <button
                 type="button"
