@@ -11,20 +11,24 @@
  *
  * This is a Next.js 14 App Router Server Component. It:
  *   1. Reads searchParams from the URL (q, type, from, to, tag, page)
- *   2. Fetches results from the CMS search API (no-store, server-side)
- *   3. Renders result cards, filter sidebar, and pagination
+ *   2. Fetches results from the CMS search API (no-store, server-side),
+ *      the CMS-managed primary navigation and the site settings
+ *   3. Renders SearchResultsTemplate, which owns the full USWDS chrome
+ *      (the root layout renders none) plus result cards, filter sidebar
+ *      and pagination
  *
- * When q is absent, renders the search form with empty state.
+ * When q is absent, the template renders the search form with empty state.
+ * When the features.publicSearch setting is off, it renders an
+ * "unavailable" notice instead of the search UI.
  * Errors in the API call are handled gracefully (empty result set shown).
  */
 
 import React from 'react';
 import type { Metadata } from 'next';
 import { fetchSearchResults, totalPages } from '@/lib/cms/search';
+import { fetchPrimaryNav } from '@/lib/cms/navigation';
 import { fetchSiteSettings } from '@/lib/cms/settings';
-import { SearchResultCard } from '@/components/search/SearchResultCard';
-import { SearchFilters } from '@/components/search/SearchFilters';
-import { SearchPagination } from '@/components/search/SearchPagination';
+import { SearchResultsTemplate } from '@/components/templates/SearchResultsTemplate';
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = await fetchSiteSettings();
@@ -63,27 +67,24 @@ export default async function SearchPage({
   const pageParam = searchParams.page ? Math.max(1, parseInt(searchParams.page, 10)) : 1;
 
   // Page size and the on/off switch are site settings (issue #149, epic #141).
-  const site = await fetchSiteSettings();
+  const [site, navigation] = await Promise.all([fetchSiteSettings(), fetchPrimaryNav()]);
   const PAGE_SIZE = site.searchPageSize;
 
   if (!site.publicSearchEnabled) {
     return (
-      <div className="grid-container">
-        <div className="grid-row margin-top-4 margin-bottom-2">
-          <div className="tablet:grid-col-12">
-            <h1 className="usa-heading">Search</h1>
-            <div className="usa-alert usa-alert--info" role="status" id="main-search-results">
-              <div className="usa-alert__body">
-                <h2 className="usa-alert__heading">Search is currently unavailable</h2>
-                <p className="usa-alert__text">
-                  Site search has been turned off by an administrator.{' '}
-                  <a href="/" className="usa-link">Browse the site</a> to find what you need.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SearchResultsTemplate
+        searchEnabled={false}
+        query=""
+        items={[]}
+        totalItems={0}
+        currentPage={1}
+        totalPages={1}
+        buildPageHref={() => '/search'}
+        contentTypes={[]}
+        tags={[]}
+        navigation={navigation}
+        site={site}
+      />
     );
   }
 
@@ -113,130 +114,22 @@ export default async function SearchPage({
   }
 
   return (
-    <div className="grid-container">
-      {/* Skip link target */}
-      <a className="usa-skipnav" href="#main-search-results">
-        Skip to search results
-      </a>
-
-      {/* Page heading */}
-      <div className="grid-row margin-top-4 margin-bottom-2">
-        <div className="tablet:grid-col-12">
-          <h1 className="usa-heading">
-            {query ? `Search results for "${query}"` : 'Search'}
-          </h1>
-        </div>
-      </div>
-
-      {/* Search bar — allows refining/starting a new search from this page */}
-      <div className="grid-row margin-bottom-3">
-        <div className="tablet:grid-col-8">
-          <form
-            action="/search"
-            method="get"
-            role="search"
-            aria-label="Site search"
-          >
-            <div className="usa-search usa-search--big">
-              <label className="usa-sr-only" htmlFor="search-page-field">
-                Search
-              </label>
-              <input
-                className="usa-input"
-                id="search-page-field"
-                type="search"
-                name="q"
-                defaultValue={query}
-                aria-label="Search the site"
-                autoComplete="off"
-              />
-              <button className="usa-button" type="submit">
-                <span className="usa-search__submit-text">Search</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-
-      {/* Main content area: filter sidebar + results */}
-      {query && response ? (
-        <div className="grid-row grid-gap" id="main-search-results">
-          {/* Filter sidebar */}
-          <aside className="tablet:grid-col-3 usa-prose" aria-label="Filter search results">
-            <SearchFilters
-              query={query}
-              contentTypes={[]}
-              tags={[]}
-              selectedType={searchParams.type}
-              selectedFrom={searchParams.from}
-              selectedTo={searchParams.to}
-              selectedTag={searchParams.tag}
-            />
-          </aside>
-
-          {/* Results column */}
-          <main className="tablet:grid-col-9" id="search-results-list">
-            {/* Results count */}
-            <p className="usa-prose" role="status" aria-live="polite">
-              {response.totalItems === 0 ? (
-                <>No results found for <strong>&ldquo;{query}&rdquo;</strong>.</>
-              ) : (
-                <>
-                  Showing {(pageParam - 1) * PAGE_SIZE + 1}–
-                  {Math.min(pageParam * PAGE_SIZE, response.totalItems)} of{' '}
-                  <strong>{response.totalItems.toLocaleString()}</strong> results for{' '}
-                  <strong>&ldquo;{query}&rdquo;</strong>
-                </>
-              )}
-            </p>
-
-            {/* Result cards */}
-            {response.items.length > 0 ? (
-              <ul className="usa-card-group" aria-label="Search results">
-                {response.items.map((item) => (
-                  <li key={item.id} className="usa-card__container">
-                    <SearchResultCard result={item} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              response.totalItems === 0 && (
-                <div className="usa-alert usa-alert--info usa-alert--slim margin-top-3">
-                  <div className="usa-alert__body">
-                    <p className="usa-alert__text">
-                      Try different keywords, or{' '}
-                      <a href="/" className="usa-link">
-                        browse the site
-                      </a>{' '}
-                      to find what you&rsquo;re looking for.
-                    </p>
-                  </div>
-                </div>
-              )
-            )}
-
-            {/* Pagination */}
-            {numPages > 1 && (
-              <div className="margin-top-4">
-                <SearchPagination
-                  currentPage={pageParam}
-                  totalPages={numPages}
-                  buildPageHref={buildPageHref}
-                />
-              </div>
-            )}
-          </main>
-        </div>
-      ) : !query ? (
-        /* Empty state: no query */
-        <div className="grid-row" id="main-search-results">
-          <div className="tablet:grid-col-12">
-            <p className="usa-prose">
-              Enter a search term above to find {site.agencyShortName} content.
-            </p>
-          </div>
-        </div>
-      ) : null}
-    </div>
+    <SearchResultsTemplate
+      query={query}
+      items={response?.items ?? []}
+      totalItems={response?.totalItems ?? 0}
+      currentPage={pageParam}
+      totalPages={numPages}
+      pageSize={PAGE_SIZE}
+      buildPageHref={buildPageHref}
+      contentTypes={[]}
+      tags={[]}
+      navigation={navigation}
+      site={site}
+      selectedType={searchParams.type}
+      selectedFrom={searchParams.from}
+      selectedTo={searchParams.to}
+      selectedTag={searchParams.tag}
+    />
   );
 }

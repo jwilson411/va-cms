@@ -5,11 +5,11 @@
  * Epic #14 — Section 508 & Accessibility Hardening
  *
  * Wraps the search results UI in the mandatory USWDS page chrome
- * (Banner, Header, Footer, Identifier) to form a complete, testable
- * page template. The Next.js page at app/search/page.tsx renders its
- * output inside this layout via the root layout.tsx, but this
- * component exists to allow component-level axe-core accessibility
- * testing without running a live Next.js server.
+ * (Banner, Header, Footer, Identifier) to form a complete page template.
+ * The Next.js page at app/search/page.tsx fetches results, navigation and
+ * site settings and renders this template; the root layout renders no
+ * chrome. Being a plain component also allows component-level axe-core
+ * accessibility testing without running a live Next.js server.
  *
  * This is a Server Component (no 'use client' directive).
  *
@@ -53,14 +53,19 @@ export interface SearchResultsTemplateProps {
   navigation: NavItem[];
   /** Site chrome (titles, agency, banner language) from CMS settings; code defaults when omitted. */
   site?: SiteChrome;
+  /** Results per page (search.publicPageSize site setting, #149); drives the "Showing x–y" count. */
+  pageSize?: number;
+  /**
+   * features.publicSearch site setting. When false the page keeps its chrome but
+   * replaces the search UI with a "search is unavailable" notice.
+   */
+  searchEnabled?: boolean;
   /** Currently active filter values (for pre-filling the filter form) */
   selectedType?: string;
   selectedFrom?: string;
   selectedTo?: string;
   selectedTag?: string;
 }
-
-const PAGE_SIZE = 10;
 
 /**
  * Full-page Search Results layout.
@@ -70,6 +75,8 @@ const PAGE_SIZE = 10;
  *   <UswdsHeader />             — primary nav (mandatory)
  *   <main #main-content>
  *     <grid-container>
+ *       [search disabled:]
+ *         <h1> + usa-alert      — "Search is currently unavailable"
  *       <h1>                    — "Search results for…" or "Search"
  *       <form role=search>      — refine/start search
  *       [query present:]
@@ -93,13 +100,15 @@ export function SearchResultsTemplate({
   tags,
   navigation,
   site = DEFAULT_SITE_SETTINGS,
+  pageSize = DEFAULT_SITE_SETTINGS.searchPageSize,
+  searchEnabled = true,
   selectedType,
   selectedFrom,
   selectedTo,
   selectedTag,
 }: SearchResultsTemplateProps): React.ReactElement {
-  const startItem = (currentPage - 1) * PAGE_SIZE + 1;
-  const endItem = Math.min(currentPage * PAGE_SIZE, totalItems);
+  const startItem = (currentPage - 1) * pageSize + 1;
+  const endItem = Math.min(currentPage * pageSize, totalItems);
 
   return (
     <>
@@ -114,26 +123,40 @@ export function SearchResultsTemplate({
       />
 
       <main id="main-content" tabIndex={-1}>
-        <div className="grid-container">
-          {/* Skip link target for keyboard users */}
-          <a className="usa-skipnav" href="#search-results-section">
-            Skip to search results
-          </a>
+        {!searchEnabled ? (
+          <div className="grid-container">
+            <h1 className="usa-heading margin-top-4">Search</h1>
+            <div className="usa-alert usa-alert--info" role="status" id="search-results-section">
+              <div className="usa-alert__body">
+                <h2 className="usa-alert__heading">Search is currently unavailable</h2>
+                <p className="usa-alert__text">
+                  Site search has been turned off by an administrator.{' '}
+                  <a href="/" className="usa-link">Browse the site</a> to find what you need.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid-container">
+            {/* Skip link target for keyboard users */}
+            <a className="usa-skipnav" href="#search-results-section">
+              Skip to search results
+            </a>
 
-          {/* Page heading */}
-          <h1 className="usa-heading margin-top-4">
-            {query ? `Search results for "${query}"` : 'Search'}
-          </h1>
+            {/* Page heading */}
+            <h1 className="usa-heading margin-top-4">
+              {query ? `Search results for "${query}"` : 'Search'}
+            </h1>
 
-          {/* Search bar — allows refining/starting a search from this page */}
-          <form
-            action="/search"
-            method="get"
-            role="search"
-            aria-label="Site search"
-            className="margin-bottom-3"
-          >
-            <div className="usa-search usa-search--big">
+            {/* Search bar — allows refining/starting a search from this page */}
+            {/* USWDS 3 markup: usa-search + role=search on the <form> itself (the flex row). */}
+            <form
+              action="/search"
+              method="get"
+              role="search"
+              aria-label="Site search"
+              className="usa-search usa-search--big margin-bottom-3"
+            >
               <label className="usa-sr-only" htmlFor="search-page-field">
                 Search
               </label>
@@ -149,100 +172,100 @@ export function SearchResultsTemplate({
               <button className="usa-button" type="submit">
                 <span className="usa-search__submit-text">Search</span>
               </button>
-            </div>
-          </form>
+            </form>
 
-          {query ? (
-            /* Two-column layout: filter sidebar + results */
-            <div className="grid-row grid-gap" id="search-results-section">
-              {/* Filter sidebar */}
-              <aside
-                className="tablet:grid-col-3"
-                aria-label="Filter search results"
-              >
-                <SearchFilters
-                  query={query}
-                  contentTypes={contentTypes}
-                  tags={tags}
-                  selectedType={selectedType}
-                  selectedFrom={selectedFrom}
-                  selectedTo={selectedTo}
-                  selectedTag={selectedTag}
-                />
-              </aside>
-
-              {/* Results column */}
-              <section
-                className="tablet:grid-col-9"
-                aria-label="Search results"
-                id="search-results-list"
-              >
-                {/* Result count — live region */}
-                <p
-                  className="usa-prose"
-                  role="status"
-                  aria-live="polite"
-                  aria-atomic="true"
+            {query ? (
+              /* Two-column layout: filter sidebar + results */
+              <div className="grid-row grid-gap" id="search-results-section">
+                {/* Filter sidebar */}
+                <aside
+                  className="tablet:grid-col-3"
+                  aria-label="Filter search results"
                 >
-                  {totalItems === 0 ? (
-                    <>
-                      No results found for <strong>&ldquo;{query}&rdquo;</strong>.
-                    </>
+                  <SearchFilters
+                    query={query}
+                    contentTypes={contentTypes}
+                    tags={tags}
+                    selectedType={selectedType}
+                    selectedFrom={selectedFrom}
+                    selectedTo={selectedTo}
+                    selectedTag={selectedTag}
+                  />
+                </aside>
+
+                {/* Results column */}
+                <section
+                  className="tablet:grid-col-9"
+                  aria-label="Search results"
+                  id="search-results-list"
+                >
+                  {/* Result count — live region */}
+                  <p
+                    className="usa-prose"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    {totalItems === 0 ? (
+                      <>
+                        No results found for <strong>&ldquo;{query}&rdquo;</strong>.
+                      </>
                   ) : (
-                    <>
-                      Showing {startItem}–{endItem} of{' '}
-                      <strong>{totalItems.toLocaleString()}</strong> results for{' '}
-                      <strong>&ldquo;{query}&rdquo;</strong>
-                    </>
-                  )}
-                </p>
+                      <>
+                        Showing {startItem}–{endItem} of{' '}
+                        <strong>{totalItems.toLocaleString()}</strong> results for{' '}
+                        <strong>&ldquo;{query}&rdquo;</strong>
+                      </>
+                    )}
+                  </p>
 
-                {/* Result cards */}
-                {items.length > 0 ? (
-                  <ul className="usa-card-group" aria-label="Search results">
-                    {items.map((item) => (
-                      <li key={item.id} className="usa-card__container">
-                        <SearchResultCard result={item} />
-                      </li>
-                    ))}
-                  </ul>
+                  {/* Result cards */}
+                  {items.length > 0 ? (
+                    <ul className="usa-card-group" aria-label="Search results">
+                      {items.map((item) => (
+                        <li key={item.id} className="usa-card__container">
+                          <SearchResultCard result={item} />
+                        </li>
+                      ))}
+                    </ul>
                 ) : (
-                  <div className="usa-alert usa-alert--info usa-alert--slim margin-top-3">
-                    <div className="usa-alert__body">
-                      <p className="usa-alert__text">
-                        Try different keywords, or{' '}
-                        <a href="/" className="usa-link">
-                          browse the site
-                        </a>{' '}
-                        to find what you&rsquo;re looking for.
-                      </p>
+                    <div className="usa-alert usa-alert--info usa-alert--slim margin-top-3">
+                      <div className="usa-alert__body">
+                        <p className="usa-alert__text">
+                          Try different keywords, or{' '}
+                          <a href="/" className="usa-link">
+                            browse the site
+                          </a>{' '}
+                          to find what you&rsquo;re looking for.
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="margin-top-4">
-                    <SearchPagination
-                      currentPage={currentPage}
-                      totalPages={totalPages}
-                      buildPageHref={buildPageHref}
-                    />
-                  </div>
-                )}
-              </section>
-            </div>
-          ) : (
-            /* Empty state: no query entered */
-            <div className="grid-row" id="search-results-section">
-              <div className="tablet:grid-col-12">
-                <p className="usa-prose">
-                  Enter a search term above to find VA content.
-                </p>
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <div className="margin-top-4">
+                      <SearchPagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        buildPageHref={buildPageHref}
+                      />
+                    </div>
+                  )}
+                </section>
               </div>
-            </div>
-          )}
-        </div>
+            ) : (
+              /* Empty state: no query entered */
+              <div className="grid-row" id="search-results-section">
+                <div className="tablet:grid-col-12">
+                  <p className="usa-prose">
+                    Enter a search term above to find {site.agencyShortName} content.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       {/* Mandatory: USWDS big footer */}
