@@ -19,8 +19,10 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Markdig" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" />
     <PackageReference Include="PetaPoco.Compiled" />
     <PackageReference Include="SixLabors.ImageSharp" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
   </ItemGroup>
 
 </Project>
